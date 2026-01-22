@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  bot:
+    container_name: discord-music-bot-instance
+    # Usa a mesma imagem do serviço 'web'
+    build:
+      context: .
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    # O comando para iniciar o bot e a API web.
+    command: ["python3", "bot.py"]
+    # Reiniciar o contêiner automaticamente se ele parar,
+    # exceto quando for parado manualmente (ex: docker stop).
+    # Isso garante que se o servidor cair, o bot tentará subir novamente.
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env # O token será lido daqui, preenchido pela UI
+    volumes:
+      # Mapeia o arquivo .env do host para o contêiner.
+      # ESSENCIAL para persistir o token. Este arquivo é controlado pelo contêiner.
+      - ./token.json:/app/token.json
+      # Mapeia a pasta de playlists para persistência.
+      - ./playlist:/app/playlist
+      # Mapeia o arquivo de rádios para persistência.
+      - ./radios.json:/app/radios.json

@@ -1,0 +1,20 @@
+{
+    "kiis": {
+        "name": "KIIS-FM 102.7",
+        "location": "Los Angeles, CA",
+        "url": "https://stream.revma.ihrhls.com/zc185",
+        "description": "Los Angeles #1 Hit Music Station"
+    },
+    "mixfm": {
+        "name": "Mix FM Brasil",
+        "location": "Brasil",
+        "url": "https://streaming.livecenter.com.br/mixfm",
+        "description": "Mix FM Brasil - A melhor programação"
+    },
+    "bbc_radio": {
+        "name": "BBC Radio",
+        "url": "https://bbc.co.uk/radio1",
+        "location": "Desconhecido",
+        "description": "Rádio personalizada"
+    }
+}

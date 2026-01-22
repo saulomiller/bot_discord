@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Bot Controller</title>
+    <link rel="stylesheet" href="static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="background-glow"></div>
+
+    <div class="container">
+        
+        <header class="app-header">
+            <h1>🎵 Controller</h1>
+            <div class="status-pill" id="status-indicator">
+                <span class="dot"></span>
+                <span id="status-text">Desconectado</span>
+            </div>
+        </header>
+
+        <main class="bento-grid">
+
+            <div class="card card-hero">
+                <div class="album-wrapper">
+                    <img id="album-art-img" src="https://i.imgur.com/eF90msA.png" alt="Album Art">
+                </div>
+                <div class="track-details">
+                    <h2 id="song-title">Nenhuma música</h2>
+                    <p id="song-artist">Aguardando comando...</p>
+                    
+                    <div class="media-controls">
+                        <button id="pause-resume-btn" class="btn-circle" title="Play/Pause">
+                            <i class="fa-solid fa-play"></i> </button>
+                        <button id="skip-btn" class="btn-circle secondary" title="Pular">
+                            <i class="fa-solid fa-forward"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card card-input">
+                <h3>Adicionar à Fila</h3>
+                <div class="input-group">
+                    <input type="text" id="music-input" placeholder="Cole o link ou nome..." autocomplete="off">
+                    <button id="play-btn"><i class="fa-solid fa-plus"></i></button>
+                </div>
+            </div>
+
+            <div class="card card-queue">
+                <div class="card-header">
+                    <h3><i class="fa-solid fa-list-ol"></i> Fila</h3>
+                    <span class="badge">Próximas</span>
+                </div>
+                <ul id="queue-list" class="custom-scrollbar">
+                    <li class="queue-empty">A fila está vazia.</li>
+                </ul>
+            </div>
+
+            <div class="card card-settings">
+                <details>
+                    <summary>⚙️ Ajustes e Token</summary>
+                    <div class="settings-content">
+                        <div class="setting-group">
+                            <label>Token Discord</label>
+                            <input type="password" id="token-input" placeholder="Cole o token...">
+                            <button id="save-token-btn" class="btn-small">Salvar</button>
+                        </div>
+                        <div class="setting-group">
+                            <label>Upload Playlist</label>
+                            <div class="file-input-wrapper">
+                                <input type="file" id="playlist-upload" accept=".txt">
+                                <button id="upload-playlist-btn" class="btn-small">Enviar .txt</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+
+        </main>
+    </div>
+
+    <script src="static/script.js"></script>
+</body>
+</html>

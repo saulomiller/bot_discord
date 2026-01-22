@@ -1,0 +1,12 @@
+# Playlist de exemplo
+# Cada linha deve conter um link do YouTube ou um nome de música para busca
+# Linhas vazias e linhas que começam com # são ignoradas
+
+# Exemplo com links do YouTube:
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+https://www.youtube.com/watch?v=L_jWHffIx5E
+
+# Exemplo com nomes de músicas (serão buscados no YouTube):
+Metallica - Enter Sandman
+Queen - Bohemian Rhapsody
+AC/DC - Back In Black 

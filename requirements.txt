@@ -1,0 +1,11 @@
+discord.py
+yt-dlp
+python-dotenv
+aiofiles
+cachetools
+psutil
+fastapi
+uvicorn
+PyNaCl
+ffmpeg-python
+

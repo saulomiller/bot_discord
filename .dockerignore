@@ -1,0 +1,7 @@
+*.pyc
+.env
+.git
+.gitignore
+cache/
+temp/
+downloads/
