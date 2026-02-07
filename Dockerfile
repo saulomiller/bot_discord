@@ -10,7 +10,9 @@ RUN apt-get update && \
         python3-pip \
         ffmpeg \
         gosu \
-        curl && \
+        curl \
+        nodejs \
+        npm && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

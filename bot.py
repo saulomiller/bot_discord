@@ -59,10 +59,19 @@ def prompt_token_terminal():
     print("- Clique em 'Copy Token'")
     print("="*60)
     
-    choice = input("\nEscolha uma opção (1/2/3): ").strip()
+    try:
+        choice = input("\nEscolha uma opção (1/2/3): ").strip()
+    except (EOFError, OSError):
+        logging.warning("\n⚠️ Ambiente não interativo detectado (Docker/Systemd).")
+        logging.info("⏳ Pulando configuração de token via terminal.")
+        return None
     
     if choice == "1":
-        token = input("\nCole o token do Discord: ").strip()
+        try:
+            token = input("\nCole o token do Discord: ").strip()
+        except (EOFError, OSError):
+            return None
+            
         if len(token) > 50:
             save_token_to_json(token)
             logging.info("✅ Token salvo com sucesso!")
