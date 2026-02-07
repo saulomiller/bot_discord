@@ -529,14 +529,13 @@ def setup_bot():
                 await ctx.send(embed=discord.Embed(title="Sucesso", description=f"Adicionadas {len(searches)} músicas à fila.", color=discord.Color.green()))
             else:
                 song = await player.add_to_queue(search, ctx.author)
-                embed = discord.Embed(
-                    title="Adicionada à Fila",
-                    description=f"**{song['title']}**",
-                    color=discord.Color.green()
+                # Confirmação EFÊMERA e COMPACTA
+                position = len(list(player.queue))
+                embed = EmbedBuilder.create_success_embed(
+                    "Adicionada à fila",
+                    f"**{song['title']}** • Posição #{position}"
                 )
-                if song.get('thumbnail'):
-                    embed.set_thumbnail(url=song['thumbnail'])
-                await ctx.send(embed=embed)
+                await ctx.send(embed=embed, delete_after=5)
             
             # Iniciar reprodução se ocioso
             if not player.voice_client.is_playing() and not player.is_paused:
@@ -572,14 +571,13 @@ def setup_bot():
                 await interaction.followup.send(embed=discord.Embed(title="Sucesso", description=f"Adicionadas {len(searches)} músicas à fila.", color=discord.Color.green()))
             else:
                 song = await player.add_to_queue(search, interaction.user)
-                embed = discord.Embed(
-                    title="Adicionada à Fila",
-                    description=f"**{song['title']}**",
-                    color=discord.Color.green()
+                # Confirmação EFÊMERA e COMPACTA
+                position = len(list(player.queue))
+                embed = EmbedBuilder.create_success_embed(
+                    "Adicionada à fila",
+                    f"**{song['title']}** • Posição #{position}"
                 )
-                if song.get('thumbnail'):
-                    embed.set_thumbnail(url=song['thumbnail'])
-                await interaction.followup.send(embed=embed)
+                await interaction.followup.send(embed=embed, ephemeral=True)
             
             # Start playback if idle
             if not player.voice_client.is_playing() and not player.is_paused:
