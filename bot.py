@@ -189,6 +189,130 @@ def load_radios():
 # Dicionário de rádios disponíveis
 RADIOS = load_radios()
 
+# --- Classe Utilitária para Embeds ---
+class EmbedBuilder:
+    """Classe para criar embeds padronizados e compactos"""
+    
+    # Cores padronizadas
+    COLOR_SUCCESS = discord.Color.from_rgb(87, 242, 135)   # Verde
+    COLOR_ERROR = discord.Color.from_rgb(255, 107, 107)    # Vermelho
+    COLOR_INFO = discord.Color.from_rgb(116, 185, 255)     # Azul
+    COLOR_WARNING = discord.Color.from_rgb(255, 195, 113)  # Laranja
+    COLOR_MUSIC = discord.Color.from_rgb(147, 112, 219)    # Roxo
+    COLOR_RADIO = discord.Color.from_rgb(255, 154, 162)    # Rosa
+    
+    @staticmethod
+    def create_now_playing_embed(song_info, queue_length=0):
+        """Criar embed compacto para música tocando"""
+        title = song_info.get('title', 'Desconhecido')
+        channel = song_info.get('channel', 'Desconhecido')
+        duration = song_info.get('duration_formatted', '?:??')
+        author = song_info.get('author', 'Desconhecido')
+        
+        # Criar descrição compacta
+        description = f"🎵 **{title}** • {duration}\n"
+        description += f"🎤 {channel}"
+        
+        if hasattr(author, 'mention'):
+            description += f" • 👤 {author.mention}"
+        
+        if queue_length > 0:
+            description += f"\n📋 {queue_length} na fila"
+        
+        embed = discord.Embed(
+            description=description,
+            color=EmbedBuilder.COLOR_MUSIC
+        )
+        
+        return embed
+    
+    @staticmethod
+    def create_success_embed(title, description=""):
+        """Criar embed de sucesso (para mensagens efêmeras)"""
+        embed = discord.Embed(
+            title=f"✅ {title}",
+            description=description,
+            color=EmbedBuilder.COLOR_SUCCESS
+        )
+        return embed
+    
+    @staticmethod
+    def create_error_embed(title, description="", suggestion=""):
+        """Criar embed de erro (para mensagens efêmeras)"""
+        full_desc = description
+        if suggestion:
+            full_desc += f"\n\n💡 **Sugestão:** {suggestion}"
+        
+        embed = discord.Embed(
+            title=f"❌ {title}",
+            description=full_desc,
+            color=EmbedBuilder.COLOR_ERROR
+        )
+        return embed
+    
+    @staticmethod
+    def create_info_embed(title, description=""):
+        """Criar embed informativo"""
+        embed = discord.Embed(
+            title=f"ℹ️ {title}",
+            description=description,
+            color=EmbedBuilder.COLOR_INFO
+        )
+        return embed
+    
+    @staticmethod
+    def create_queue_embed(current_song, queue_list):
+        """Criar embed compacto para fila (efêmero)"""
+        total_songs = len(queue_list)
+        
+        # Calcular duração total estimada
+        total_duration = sum(song.get('duration', 0) for song in queue_list)
+        total_minutes = int(total_duration / 60)
+        
+        description = f"📋 **Fila** ({total_songs} músicas • ~{total_minutes}min)\n\n"
+        
+        if current_song:
+            description += f"🎵 **Tocando:** {current_song.get('title', 'Desconhecido')}\n\n"
+        
+        # Mostrar apenas as primeiras 10 músicas
+        display_limit = min(10, total_songs)
+        for i, song in enumerate(queue_list[:display_limit], 1):
+            title = song.get('title', 'Desconhecido')
+            duration = song.get('duration_formatted', '?:??')
+            # Usar emojis numéricos
+            number_emoji = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'][i-1] if i <= 10 else f"{i}."
+            description += f"{number_emoji} {title} • {duration}\n"
+        
+        if total_songs > display_limit:
+            remaining = total_songs - display_limit
+            description += f"\n... e mais {remaining} música{'s' if remaining > 1 else ''}"
+        
+        embed = discord.Embed(
+            description=description,
+            color=EmbedBuilder.COLOR_INFO
+        )
+        
+        return embed
+    
+    @staticmethod
+    def create_radio_embed(radio_info):
+        """Criar embed compacto para rádio"""
+        name = radio_info.get('name', 'Desconhecido')
+        location = radio_info.get('location', 'Desconhecido')
+        description = radio_info.get('description', '')
+        
+        embed_desc = f"📻 **{name}** ao vivo\n"
+        if description:
+            embed_desc += f"{description}\n\n"
+        embed_desc += f"📍 {location} • 🎧 Conectado"
+        
+        embed = discord.Embed(
+            description=embed_desc,
+            color=EmbedBuilder.COLOR_RADIO
+        )
+        
+        return embed
+
 # Função para carregar playlists de forma assíncrona
 async def load_playlist_async(playlist_name):
     # Verificar se já está no cache
@@ -564,19 +688,15 @@ def setup_bot():
     async def fila(ctx: commands.Context):
         player = get_player(ctx.guild.id)
         if not player.queue and not player.current_song:
-             await ctx.send("A fila está vazia.")
-             return
+            embed = EmbedBuilder.create_error_embed(
+                "Fila vazia",
+                "Não há músicas na fila no momento."
+            )
+            await ctx.send(embed=embed, delete_after=5)
+            return
              
-        embed = discord.Embed(title="Fila de Reprodução", color=discord.Color.blue())
-        if player.current_song:
-            embed.add_field(name="Tocando Agora", value=player.current_song['title'], inline=False)
-            
-        if player.queue:
-            queue_list = "\n".join([f"{i+1}. {s['title']}" for i, s in enumerate(list(player.queue)[:10])])
-            if len(player.queue) > 10:
-                queue_list += f"\n... e mais {len(player.queue)-10}"
-            embed.add_field(name="Próximas", value=queue_list, inline=False)
-            
+        # Usar novo embed compacto
+        embed = EmbedBuilder.create_queue_embed(player.current_song, list(player.queue))
         await ctx.send(embed=embed)
 
 
@@ -695,122 +815,30 @@ def setup_bot():
     @bot.tree.command(name="fila", description="Mostra a fila de músicas")
     # @bot.tree.command(name="fila", description="Mostra a fila de músicas")
     async def fila_slash_legacy(interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
+        await interaction.response.defer(ephemeral=True)  # EFÊMERA - só quem pediu vê
+        
         if not song_queue and not current_song:
-            await interaction.followup.send(embed=discord.Embed(
-                title="Fila de Reprodução",
-                description="A fila está vazia.",
-                color=discord.Color.blue()))
+            embed = EmbedBuilder.create_error_embed(
+                "Fila vazia",
+                "Não há músicas na fila no momento."
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        # Criar um embed mais detalhado para a fila
-        embed = discord.Embed(
-            title="📋 Fila de Reprodução",
-            color=discord.Color.from_rgb(114, 137, 218)  # Cor do Discord
-        )
-        
-        # Função para truncar texto longo
-        def truncate_text(text, max_length=50):
-            return text[:max_length] + "..." if len(text) > max_length else text
-        
-        # Adicionar informações sobre a música atual
-        if current_song:
-            try:
-                # Extrair todas as informações da música atual
-                if len(current_song) >= 6:  # Formato novo com duração e canal
-                    current_title, _, current_thumbnail, current_user, current_duration, current_channel = current_song
-                else:  # Compatibilidade com formato antigo
-                    current_title, _, current_thumbnail, current_user = current_song
-                    current_duration = "Desconhecida"
-                    current_channel = "Desconhecido"
-                
-                # Truncar título longo
-                current_title = truncate_text(current_title, 70)
-                current_channel = truncate_text(current_channel, 30)
-                
-                user_mention = current_user.mention if hasattr(current_user, 'mention') else "Desconhecido"
-                
-                embed.add_field(
-                    name="🎵 Tocando Agora",
-                    value=f"**{current_title}**\n"
-                          f"▸ ⏱️ **Duração:** {current_duration}\n"
-                          f"▸ 🎤 **Canal:** {current_channel}\n"
-                          f"▸ 👤 **Adicionado por:** {user_mention}",
-                    inline=False
-                )
-                
-                # Adicionar separador visual
-                embed.add_field(
-                    name="⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯",
-                    value="",
-                    inline=False
-                )
-                
-                # Adicionar thumbnail da música atual
-                if current_thumbnail:
-                    embed.set_thumbnail(url=current_thumbnail)
-            except Exception as e:
-                logging.error(f"Erro ao criar campo de música atual: {e}")
-                # Continuar com a exibição da fila mesmo se houver erro na música atual
-        
-        # Adicionar as próximas músicas da fila
-        if song_queue:
-            # Limitar o número total de músicas para evitar estourar o limite
-            display_count = min(8, len(song_queue))
-            
-            queue_text = ""
-            total_length = 0
-            
-            for i, song_info in enumerate(song_queue[:display_count], 1):
-                try:
-                    # Verificar o formato da música na fila
-                    if len(song_info) >= 6:  # Formato novo
-                        title, _, _, user, duration, channel = song_info
-                    else:  # Formato antigo
-                        title, _, _, user = song_info
-                        duration = "?"
-                        channel = "?"
-                    
-                    # Truncar títulos longos para economizar espaço
-                    title = truncate_text(title, 70)
-                    
-                    display_name = user.display_name if hasattr(user, 'display_name') else "Desconhecido"
-                    display_name = truncate_text(display_name, 15)
-                    
-                    # Criar linha para esta música e verificar se adicionar não ultrapassará o limite
-                    line = f"**{i}.** {title}\n   ▸ ⏱️ **Duração:** {duration} | 👤 **Por:** {display_name}\n"
-                    
-                    # Verificar se adicionar esta linha excederá o limite do Discord
-                    if total_length + len(line) > 900:  # Margem de segurança abaixo de 1024
-                        queue_text += f"\n... e mais {len(song_queue) - i + 1} música(s)"
-                        break
-                        
-                    queue_text += line
-                    total_length += len(line)
-                except Exception as e:
-                    logging.error(f"Erro ao processar música {i} da fila: {e}")
-                    # Continuar com as próximas músicas
-            
-            if len(song_queue) > display_count and total_length < 900:
-                queue_text += f"\n... e mais {len(song_queue) - display_count} música(s)"
-                
-            embed.add_field(
-                name="📑 Próximas Músicas",
-                value=queue_text or "Nenhuma música na fila",
-                inline=False
-            )
-        
-        # Adicionar informações de rodapé
-        embed.set_footer(text=f"Total na fila: {len(song_queue)} música(s)")
-        
-        await interaction.followup.send(embed=embed)
+        # Usar novo embed compacto
+        embed = EmbedBuilder.create_queue_embed(current_song, song_queue)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Comando de texto
     @bot.command()
     async def volume(ctx: commands.Context, vol: float):
         player = get_player(ctx.guild.id)
         player.set_volume(vol)
-        await ctx.send(f"Volume ajustado para {int(player.volume * 100)}%")
+        embed = EmbedBuilder.create_success_embed(
+            "Volume ajustado",
+            f"Volume definido para {int(player.volume * 100)}%"
+        )
+        await ctx.send(embed=embed, delete_after=5)
 
     # Comando slash
     @bot.tree.command(name="volume", description="Ajusta o volume (0.0 a 1.0)")
@@ -818,7 +846,11 @@ def setup_bot():
     async def volume_slash(interaction: discord.Interaction, vol: float):
         player = get_player(interaction.guild_id)
         player.set_volume(vol)
-        await interaction.response.send_message(f"Volume ajustado para {int(player.volume * 100)}%")
+        embed = EmbedBuilder.create_success_embed(
+            "Volume ajustado",
+            f"Volume definido para {int(player.volume * 100)}%"
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 
@@ -1444,26 +1476,18 @@ def setup_bot():
                 after=lambda e: logging.error(f'Erro na reprodução da rádio: {e}') if e else None
             )
 
-            # Criar embed informativo
-            embed = discord.Embed(
-                title="📻 Rádio Iniciada",
-                description=f"**{radio['name']}**\n{radio['description']}",
-                color=discord.Color.green()
-            )
-            embed.add_field(name="Localização", value=radio['location'])
-            
+
+            # Criar embed COMPACTO
+            embed = EmbedBuilder.create_radio_embed(radio)
             await interaction.followup.send(embed=embed)
             
         except Exception as e:
             logging.error(f"Erro ao tocar rádio: {e}")
-            await interaction.followup.send(
-                embed=discord.Embed(
-                    title="Erro",
-                    description=f"Erro ao tocar a rádio: {str(e)}",
-                    color=discord.Color.red()
-                ),
-                ephemeral=True
+            embed = EmbedBuilder.create_error_embed(
+                "Erro ao tocar rádio",
+                f"Não foi possível iniciar a transmissão: {str(e)}"
             )
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
     @bot.tree.command(name="addradio", description="Adiciona uma nova rádio personalizada")
     @app_commands.describe(
@@ -1755,38 +1779,14 @@ async def play_next_legacy(ctx: commands.Context | discord.Interaction):
         'options': f'-vn -af "aresample=48000,atempo=1.0,volume={current_volume}" -bufsize 10M'
     }
 
-    # Criar um embed melhorado para "Tocando Agora"
-    embed = discord.Embed(
-        title="🎵 Tocando Agora",
-        description=f"**{title_display}**",
-        color=discord.Color.from_rgb(57, 255, 20)  # Verde vibrante
-    )
-    
-    # Adicionar campos com informações extras
-    embed.add_field(name="Canal", value=channel_display, inline=True)
-    embed.add_field(name="Duração", value=duration, inline=True)
-    
-    try:
-        # Garantir que author tem mention
-        author_mention = author.mention if hasattr(author, 'mention') else "Desconhecido"
-        embed.add_field(name="Adicionado por", value=author_mention, inline=False)
-    except Exception as e:
-        logging.error(f"Erro ao adicionar autor ao embed: {e}")
-        embed.add_field(name="Adicionado por", value="Desconhecido", inline=False)
-    
-    # Configurar o rodapé
-    if len(song_queue) > 0:
-        embed.set_footer(text=f"Próximas: {len(song_queue)} música(s) na fila")
-    
-    # Adicionar imagem de capa, se disponível
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-        # Adicionar uma imagem grande na parte inferior para um visual mais rico
-        if thumbnail.startswith("https://i.ytimg.com/"):
-            # Para miniaturas do YouTube, podemos tentar obter uma versão maior
-            embed.set_image(url=thumbnail.replace("hqdefault", "maxresdefault"))
-        else:
-            embed.set_image(url=thumbnail)
+    # Criar um embed COMPACTO para "Tocando Agora"
+    song_info = {
+        'title': title,
+        'channel': channel,
+        'duration_formatted': duration,
+        'author': author
+    }
+    embed = EmbedBuilder.create_now_playing_embed(song_info, len(song_queue))
     
     # Configurar reprodução
     try:
@@ -1873,6 +1873,19 @@ class PlaylistRequest(BaseModel):
 
 class VolumeRequest(BaseModel):
     level: float
+
+class RadioRequest(BaseModel):
+    name: str
+    url: str
+    location: str = "Desconhecido"
+    description: str = "Rádio personalizada"
+
+class RadioRemoveRequest(BaseModel):
+    radio_id: str
+
+class RadioPlayRequest(BaseModel):
+    radio_id: str
+
 
 @app.get("/api/status")
 async def get_status():
@@ -2223,6 +2236,140 @@ async def get_playlists():
     except Exception as e:
         logging.error(f"Erro ao listar playlists: {e}")
         raise HTTPException(status_code=500, detail="Erro ao listar playlists.")
+
+
+# ========================== ENDPOINTS DE RÁDIO ==========================
+
+@app.get("/api/radios")
+async def get_radios():
+    """Retorna a lista de todas as rádios disponíveis"""
+    try:
+        return {"radios": RADIOS}
+    except Exception as e:
+        logging.error(f"Erro ao listar rádios: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao listar rádios.")
+
+@app.post("/api/radios/add")
+async def add_radio(request: RadioRequest):
+    """Adiciona uma nova rádio"""
+    try:
+        # Validar URL
+        if not request.url.startswith(('http://', 'https://')):
+            raise HTTPException(status_code=400, detail="URL inválida. A URL deve começar com http:// ou https://")
+        
+        # Criar ID único
+        radio_id = request.name.lower().replace(" ", "_")
+        
+        # Verificar se já existe
+        if radio_id in RADIOS:
+            raise HTTPException(status_code=400, detail=f"Uma rádio com o nome '{request.name}' já existe.")
+        
+        # Adicionar nova rádio
+        RADIOS[radio_id] = {
+            "name": request.name,
+            "location": request.location,
+            "url": request.url,
+            "description": request.description
+        }
+        
+        # Salvar no arquivo
+        radios_file = RADIOS_FILE if os.path.exists(DATA_DIR) else "radios.json"
+        with open(radios_file, "w", encoding="utf-8") as f:
+            json.dump(RADIOS, f, ensure_ascii=False, indent=4)
+        
+        logging.info(f"Rádio '{request.name}' adicionada via API")
+        
+        return {
+            "status": "success",
+            "message": f"Rádio '{request.name}' adicionada com sucesso!",
+            "radio_id": radio_id,
+            "radios": RADIOS
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Erro ao adicionar rádio: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao adicionar rádio: {str(e)}")
+
+@app.post("/api/radios/remove")
+async def remove_radio(request: RadioRemoveRequest):
+    """Remove uma rádio existente"""
+    try:
+        if request.radio_id not in RADIOS:
+            raise HTTPException(status_code=404, detail=f"Rádio '{request.radio_id}' não encontrada.")
+        
+        # Remover rádio
+        radio_name = RADIOS[request.radio_id]["name"]
+        del RADIOS[request.radio_id]
+        
+        # Salvar no arquivo
+        radios_file = RADIOS_FILE if os.path.exists(DATA_DIR) else "radios.json"
+        with open(radios_file, "w", encoding="utf-8") as f:
+            json.dump(RADIOS, f, ensure_ascii=False, indent=4)
+        
+        logging.info(f"Rádio '{radio_name}' removida via API")
+        
+        return {
+            "status": "success",
+            "message": f"Rádio '{radio_name}' removida com sucesso!",
+            "radios": RADIOS
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Erro ao remover rádio: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao remover rádio: {str(e)}")
+
+@app.post("/api/radios/play")
+async def play_radio(request: RadioPlayRequest):
+    """Toca uma rádio específica"""
+    try:
+        if request.radio_id not in RADIOS:
+            raise HTTPException(status_code=404, detail=f"Rádio '{request.radio_id}' não encontrada.")
+        
+        if not bot.voice_clients:
+            raise HTTPException(status_code=400, detail="Bot não está conectado a nenhum canal de voz. Use o Discord para conectar primeiro.")
+        
+        radio = RADIOS[request.radio_id]
+        vc = bot.voice_clients[0]  # Usar primeiro cliente de voz disponível
+        
+        # Usar o caminho do FFmpeg se fornecido
+        executable = FFMPEG_PATH if FFMPEG_PATH and os.path.exists(FFMPEG_PATH) else 'ffmpeg'
+        
+        # Configurar opções do FFmpeg para streaming
+        ffmpeg_options = {
+            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+            'options': f'-vn -af "aresample=48000,atempo=1.0,volume={current_volume}" -bufsize 10M'
+        }
+        
+        # Parar reprodução atual
+        if vc.is_playing():
+            vc.stop()
+        
+        # Limpar fila
+        global song_queue, current_song
+        song_queue.clear()
+        current_song = None
+        
+        # Iniciar reprodução da rádio
+        vc.play(
+            discord.FFmpegPCMAudio(radio['url'], executable=executable, **ffmpeg_options),
+            after=lambda e: logging.error(f'Erro na reprodução da rádio: {e}') if e else None
+        )
+        
+        logging.info(f"Rádio '{radio['name']}' iniciada via API")
+        
+        return {
+            "status": "success",
+            "message": f"Tocando {radio['name']}",
+            "radio": radio
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Erro ao tocar rádio: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao tocar rádio: {str(e)}")
+
 
 
 # ========================== INICIALIZAÇÃO ==========================

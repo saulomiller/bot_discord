@@ -68,5 +68,23 @@ export const API = {
             reader.readAsText(file);
         });
     },
-    getPlaylists: () => apiFetch(`${CONFIG.API_BASE}/playlists`)
+    getPlaylists: () => apiFetch(`${CONFIG.API_BASE}/playlists`),
+
+    // Radio Management
+    getRadios: () => apiFetch(`${CONFIG.API_BASE}/radios`),
+    addRadio: (radioData) => apiFetch(`${CONFIG.API_BASE}/radios/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(radioData)
+    }),
+    removeRadio: (radioId) => apiFetch(`${CONFIG.API_BASE}/radios/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ radio_id: radioId })
+    }),
+    playRadio: (radioId) => apiFetch(`${CONFIG.API_BASE}/radios/play`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ radio_id: radioId })
+    })
 };

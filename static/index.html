@@ -127,9 +127,57 @@
                 </div>
             </div>
 
+            <!-- Cartão de Rádios -->
+            <div class="card card-radios">
+                <div class="card-header">
+                    <h3><i class="fa-solid fa-radio"></i> Rádios</h3>
+                    <button id="add-radio-btn" class="btn-small">
+                        <i class="fa-solid fa-plus"></i> Adicionar
+                    </button>
+                </div>
+
+                <ul id="radios-list" class="simple-list custom-scrollbar">
+                    <!-- Itens preenchidos via JS -->
+                </ul>
+            </div>
 
 
         </main>
+    </div>
+
+    <!-- Modal para adicionar rádio -->
+    <div id="radio-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-radio"></i> Adicionar Nova Rádio</h3>
+                <button id="cancel-radio-btn" class="icon-btn">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <form id="radio-form">
+                <div class="form-group">
+                    <label for="radio-name">Nome da Rádio *</label>
+                    <input type="text" id="radio-name" placeholder="Ex: Mix FM Brasil" required>
+                </div>
+                <div class="form-group">
+                    <label for="radio-url">URL do Stream *</label>
+                    <input type="url" id="radio-url" placeholder="https://..." required>
+                </div>
+                <div class="form-group">
+                    <label for="radio-location">Localização</label>
+                    <input type="text" id="radio-location" placeholder="Ex: São Paulo, Brasil">
+                </div>
+                <div class="form-group">
+                    <label for="radio-description">Descrição</label>
+                    <textarea id="radio-description" placeholder="Descrição da rádio..." rows="3"></textarea>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn-small">
+                        <i class="fa-solid fa-save"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <div id="toast-container"></div>

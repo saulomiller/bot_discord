@@ -1,12 +1,14 @@
 import { API } from './api.js';
 import { UI } from './ui.js';
 import { AudioReactiveBackground } from './visualizer.js';
+import { RadioManager } from './radios.js';
 import { CONFIG } from './config.js';
 
 // Estado
 let isPaused = false;
 let isDraggingVolume = false;
 let liquidBg; // Inicializar depois
+let radioManager; // Gerenciador de rádios
 
 // --- Inicialização ---
 
@@ -266,4 +268,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }).catch(err => {
         console.warn('Erro ao carregar playlists:', err);
     });
+
+    // Inicializar gerenciador de rádios
+    try {
+        radioManager = new RadioManager(API, UI);
+        radioManager.init();
+        console.log('RadioManager initialized');
+    } catch (e) {
+        console.error('RadioManager init failed:', e);
+    }
 });
