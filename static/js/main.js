@@ -109,17 +109,19 @@ function setupEventListeners() {
     };
 
     // Volume
-    volumeSlider.onmousedown = () => isDraggingVolume = true;
-    volumeSlider.onmouseup = async () => {
-        isDraggingVolume = false;
-        const vol = parseFloat(volumeSlider.value);
-        try {
-            await API.setVolume(vol);
-            UI.showToast(`Volume: ${Math.round(vol * 100)}%`, 'info');
-        } catch (e) {
-            UI.showToast('Erro ao ajustar volume', 'error');
-        }
-    };
+    if (volumeSlider) {
+        volumeSlider.onmousedown = () => isDraggingVolume = true;
+        volumeSlider.onmouseup = async () => {
+            isDraggingVolume = false;
+            const vol = parseFloat(volumeSlider.value);
+            try {
+                await API.setVolume(vol);
+                UI.showToast(`Volume: ${Math.round(vol * 100)}%`, 'info');
+            } catch (e) {
+                UI.showToast('Erro ao ajustar volume', 'error');
+            }
+        };
+    }
 
     // Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
@@ -131,14 +133,18 @@ function setupEventListeners() {
             case 'Space': prevent(); pauseResumeBtn.click(); break;
             case 'ArrowRight': prevent(); skipBtn.click(); break;
             case 'ArrowUp':
-                prevent();
-                volumeSlider.value = Math.min(1, parseFloat(volumeSlider.value) + 0.05);
-                volumeSlider.dispatchEvent(new Event('mouseup'));
+                if (volumeSlider) {
+                    prevent();
+                    volumeSlider.value = Math.min(1, parseFloat(volumeSlider.value) + 0.05);
+                    volumeSlider.dispatchEvent(new Event('mouseup'));
+                }
                 break;
             case 'ArrowDown':
-                prevent();
-                volumeSlider.value = Math.max(0, parseFloat(volumeSlider.value) - 0.05);
-                volumeSlider.dispatchEvent(new Event('mouseup'));
+                if (volumeSlider) {
+                    prevent();
+                    volumeSlider.value = Math.max(0, parseFloat(volumeSlider.value) - 0.05);
+                    volumeSlider.dispatchEvent(new Event('mouseup'));
+                }
                 break;
         }
     });

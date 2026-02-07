@@ -61,6 +61,7 @@ export const UI = {
             player.title.textContent = data.current_song.title;
             player.artist.textContent = data.current_song.channel || '—';
             if (data.current_song.thumbnail) player.art.src = data.current_song.thumbnail;
+            else player.art.src = '/static/disc.png';
 
             if (!isPaused) player.hero.classList.add('playing');
             else player.hero.classList.remove('playing');

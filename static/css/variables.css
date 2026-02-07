@@ -1,0 +1,16 @@
+:root {
+    --bg-color: #000000;
+    --card-bg: #1c1c1e;
+    /* Cor padrão dos widgets iOS dark */
+    --card-border: rgba(255, 255, 255, 0.1);
+    --accent-color: #0a84ff;
+    /* Azul iOS */
+    --accent-hover: #0077ed;
+    --text-primary: #ffffff;
+    --text-secondary: #8e8e93;
+    --success: #30d158;
+    --danger: #ff453a;
+    --radius: 24px;
+    /* Bordas bem arredondadas */
+    --font-stack: "SF Pro Display", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}

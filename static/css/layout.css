@@ -1,0 +1,111 @@
+/* --- Sidebar --- */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: -320px;
+    /* Hidden by default */
+    width: 300px;
+    height: 100%;
+    background: rgba(28, 28, 30, 0.95);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--card-border);
+    z-index: 2000;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    box-shadow: 5px 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.sidebar.open {
+    left: 0;
+}
+
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-header h3 {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+.overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.container {
+    width: 100%;
+    max-width: 1100px;
+}
+
+/* --- Header --- */
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding: 0 10px;
+    position: relative;
+    /* Ensure header stacking context if needed */
+}
+
+/* Adjust header content since button is now fixed */
+.app-header h1 {
+    margin-left: 0;
+    /* Reset margins if any */
+}
+
+h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+/* --- Bento Grid Layout --- */
+.bento-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+/* Layout Desktop: 2 colunas principais */
+@media (min-width: 768px) {
+    .bento-grid {
+        grid-template-columns: 1.5fr 1fr;
+        /* Esquerda maior, Direita menor */
+        grid-template-rows: auto auto;
+    }
+
+    /* Hero ocupa a esquerda inteira */
+    .card-hero {
+        grid-row: span 2;
+    }
+}
+
+/* Responsividade Mobile */
+@media (max-width: 767px) {
+    .app-header {
+        justify-content: center;
+        flex-direction: column;
+    }
+}
