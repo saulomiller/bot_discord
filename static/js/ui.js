@@ -12,7 +12,7 @@ export const UI = {
             title: document.getElementById('song-title'),
             artist: document.getElementById('song-artist'),
             art: document.getElementById('album-art-img'),
-            // Removidoocument.querySelector('.card-hero'),
+            hero: document.querySelector('.card-hero'),
             playBtn: document.getElementById('pause-resume-btn'),
             volumeSlider: document.getElementById('volume-slider')
         },

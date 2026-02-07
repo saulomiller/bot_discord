@@ -1,14 +1,21 @@
 export class AudioReactiveBackground {
     constructor() {
-        this.canvas = document.getElementById('liquid-canvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.bars = [];
-        this.isPlaying = false;
-        this.currentVolume = 0.5;
+        try {
+            this.canvas = document.getElementById('liquid-canvas');
+            if (!this.canvas) throw new Error('Canvas element not found');
 
-        this.resizeCanvas();
-        window.addEventListener('resize', () => this.resizeCanvas());
-        this.animate();
+            this.ctx = this.canvas.getContext('2d');
+            this.bars = [];
+            this.isPlaying = false;
+            this.currentVolume = 0.5;
+
+            this.resizeCanvas();
+            window.addEventListener('resize', () => this.resizeCanvas());
+            this.animate();
+            console.log('AudioReactiveBackground initialized');
+        } catch (e) {
+            console.error('AudioReactiveBackground error:', e);
+        }
     }
 
     resizeCanvas() {
