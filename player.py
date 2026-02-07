@@ -69,7 +69,12 @@ class MusicPlayer:
                 if search.startswith(('http://', 'https://')):
                     info = ydl.extract_info(search, download=False)
                     entries = [info]
+                elif search.startswith(('scsearch:', 'ytsearch:')):
+                    # Permite pesquisas explícitas (Ex: "scsearch: musica")
+                    info = ydl.extract_info(search, download=False)
+                    entries = info.get('entries', [])
                 else:
+                    # Padrão: YouTube Search
                     info = ydl.extract_info(f"ytsearch:{search}", download=False)
                     entries = info.get('entries', [])
                 

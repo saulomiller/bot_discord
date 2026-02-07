@@ -155,10 +155,125 @@ const tokenInput = document.getElementById('token-input');
 const uploadPlaylistBtn = document.getElementById('upload-playlist-btn');
 const playlistUpload = document.getElementById('playlist-upload');
 const playlistHistoryList = document.getElementById('playlist-history-list');
-const playlistHistoryContainer = document.getElementById('playlist-history-container');
 
 let isPaused = false;
 let isDraggingVolume = false; // Evitar "pulos" enquanto arrasta
+
+// --- UX Improvements ---
+const clearSearchBtn = document.getElementById('clear-search-btn');
+const dropZone = document.getElementById('drop-zone');
+
+// --- Sidebar Logic ---
+const sidebar = document.getElementById('settings-sidebar');
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const closeSidebarBtn = document.getElementById('close-sidebar');
+const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+function toggleSidebar() {
+  const isOpen = sidebar.classList.contains('open');
+  if (isOpen) {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('active');
+  } else {
+    sidebar.classList.add('open');
+    sidebarOverlay.classList.add('active');
+  }
+}
+
+if (sidebarToggle) sidebarToggle.addEventListener('click', toggleSidebar);
+if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', toggleSidebar);
+if (sidebarOverlay) sidebarOverlay.addEventListener('click', toggleSidebar);
+
+// Keyboard Shortcuts
+document.addEventListener('keydown', (e) => {
+  // Ignore if typing in input
+  if (e.target.tagName === 'INPUT') return;
+
+  switch (e.code) {
+    case 'Space':
+      e.preventDefault();
+      pauseResumeBtn.click();
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      skipBtn.click();
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      volumeSlider.value = Math.min(1, parseFloat(volumeSlider.value) + 0.05);
+      volumeSlider.dispatchEvent(new Event('mouseup')); // Trigger change
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      volumeSlider.value = Math.max(0, parseFloat(volumeSlider.value) - 0.05);
+      volumeSlider.dispatchEvent(new Event('mouseup')); // Trigger change
+      break;
+  }
+});
+
+// Search Input Improvements
+musicInput.addEventListener('input', () => {
+  clearSearchBtn.style.display = musicInput.value ? 'block' : 'none';
+});
+
+clearSearchBtn.addEventListener('click', () => {
+  musicInput.value = '';
+  clearSearchBtn.style.display = 'none';
+  musicInput.focus();
+});
+
+// Drag & Drop
+dropZone.addEventListener('click', () => playlistUpload.click());
+
+playlistUpload.addEventListener('change', () => {
+  if (playlistUpload.files.length) {
+    handleFiles(playlistUpload.files);
+  }
+});
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+  dropZone.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+['dragenter', 'dragover'].forEach(eventName => {
+  dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+  dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+});
+
+dropZone.addEventListener('drop', (e) => {
+  const dt = e.dataTransfer;
+  const files = dt.files;
+  handleFiles(files);
+});
+
+function handleFiles(files) {
+  if (files.length > 0) {
+    const file = files[0];
+    if (file.name.endsWith('.txt')) {
+      // Manually set files property of input (workaround for some browsers)
+      // or just store it in a variable to be used by upload button
+      // For simplicity, we'll try to set the input files if possible, or just hold the reference.
+      // Modern browsers allow setting input.files using DataTransfer
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      playlistUpload.files = dataTransfer.files;
+
+      dropZone.classList.add('has-file');
+      dropZone.querySelector('p').textContent = file.name;
+      dropZone.querySelector('i').className = 'fa-solid fa-file-lines';
+    } else {
+      showToast('Apenas arquivos .txt são permitidos!', 'error');
+    }
+  }
+}
 
 // --- Toast Notifications ---
 function showToast(message, type = 'info') {
@@ -231,20 +346,60 @@ function savePlaylistToHistory(name, content) {
 }
 
 function renderPlaylistHistory(history) {
+  // Nota: playlistHistoryContainer não é mais usado da mesma forma, 
+  // agora a lista está sempre visível no card-playlist se houver itens?
+  // Vamos assumir que playlistHistoryList agora está dentro de .card-playlist
+  // Se a lista estiver vazia, podemos mostrar uma mensagem ou esconder.
+
+  playlistHistoryList.innerHTML = '';
+
   if (!history.length) {
-    playlistHistoryContainer.style.display = 'none';
+    playlistHistoryList.innerHTML = '<li style="justify-content:center; color:var(--text-secondary);">Nenhuma playlist salva.</li>';
     return;
   }
-  playlistHistoryContainer.style.display = 'block';
-  playlistHistoryList.innerHTML = '';
 
   history.forEach((item, index) => {
     const li = document.createElement('li');
-    li.innerHTML = `<span>${item.name}</span> <i class="fa-solid fa-play"></i>`;
-    li.title = "Clique para reenviar esta playlist";
-    li.onclick = () => resendPlaylist(item);
+
+    li.innerHTML = `
+        <span class="playlist-name" title="${item.name}">${item.name}</span>
+        <div class="playlist-actions">
+            <button class="play-btn" title="Tocar"><i class="fa-solid fa-play"></i></button>
+            <button class="delete-btn" title="Excluir"><i class="fa-solid fa-trash"></i></button>
+        </div>
+    `;
+
+    // Event Listeners
+    const playBtn = li.querySelector('.play-btn');
+    const deleteBtn = li.querySelector('.delete-btn');
+
+    playBtn.onclick = (e) => {
+      e.stopPropagation();
+      resendPlaylist(item);
+    };
+
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation();
+      deletePlaylist(index);
+    };
+
     playlistHistoryList.appendChild(li);
   });
+}
+
+function deletePlaylist(index) {
+  if (!confirm('Excluir esta playlist do histórico?')) return;
+
+  try {
+    let history = JSON.parse(localStorage.getItem('playlist_history') || '[]');
+    history.splice(index, 1);
+    localStorage.setItem('playlist_history', JSON.stringify(history));
+    renderPlaylistHistory(history);
+    showToast('Playlist removida.', 'success');
+  } catch (e) {
+    console.error(e);
+    showToast('Erro ao excluir playlist.', 'error');
+  }
 }
 
 async function resendPlaylist(item) {
@@ -297,8 +452,7 @@ async function updateStatus() {
     } else {
       songTitle.textContent = 'Nenhuma música';
       songArtist.textContent = 'Aguardando comando...';
-      // Reset image only if needed to avoid flickering? 
-      // albumArt.src = 'https://i.imgur.com/eF90msA.png'; 
+      albumArt.src = '/static/disc.png';
       cardHero.classList.remove('playing');
     }
 
@@ -491,7 +645,14 @@ uploadPlaylistBtn.addEventListener('click', async () => {
     }
 
     showToast('Playlist importada com sucesso!', 'success');
+    showToast('Playlist importada com sucesso!', 'success');
     playlistUpload.value = ''; // Reset input
+
+    // Reset drop zone
+    dropZone.classList.remove('has-file');
+    dropZone.querySelector('p').textContent = 'Arraste um arquivo .txt ou clique';
+    dropZone.querySelector('i').className = 'fa-solid fa-cloud-arrow-up';
+
     await updateStatus();
   } catch (err) {
     showToast(err.message || 'Erro ao enviar playlist.', 'error');

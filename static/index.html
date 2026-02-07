@@ -18,6 +18,7 @@
     <div class="container">
 
         <header class="app-header">
+            <button id="sidebar-toggle" class="icon-btn" title="Menu"><i class="fa-solid fa-bars"></i></button>
             <h1>🎵 Controller</h1>
             <div class="status-pill" id="status-indicator">
                 <span class="dot"></span>
@@ -25,11 +26,45 @@
             </div>
         </header>
 
+        <!-- Sidebar -->
+        <aside id="settings-sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>Ajustes</h3>
+                <button id="close-sidebar" class="icon-btn"><i class="fa-solid fa-times"></i></button>
+            </div>
+
+            <div class="sidebar-content">
+                <div class="setting-group">
+                    <label>Token Discord</label>
+                    <input type="password" id="token-input" placeholder="Cole o token...">
+                    <button id="save-token-btn" class="btn-small">Salvar Token</button>
+                </div>
+
+                <div class="setting-group">
+                    <label>Controle do Bot</label>
+                    <div class="bot-control-buttons">
+                        <button id="init-token-btn" class="btn-small" title="Inicializar">
+                            <i class="fa-solid fa-power-off"></i> Iniciar
+                        </button>
+                        <button id="restart-bot-btn" class="btn-small" title="Reiniciar">
+                            <i class="fa-solid fa-rotate-right"></i> Reiniciar
+                        </button>
+                        <button id="shutdown-bot-btn" class="btn-small danger" title="Desligar">
+                            <i class="fa-solid fa-stop"></i> Desligar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Overlay for mobile sidebar -->
+        <div id="sidebar-overlay" class="overlay"></div>
+
         <main class="bento-grid">
 
             <div class="card card-hero">
                 <div class="album-wrapper">
-                    <img id="album-art-img" src="https://i.imgur.com/eF90msA.png" alt="Album Art">
+                    <img id="album-art-img" src="/static/disc.png" alt="Album Art">
                     <!-- Audio Visualizer Overlay -->
                     <div class="audio-visualizer" id="visualizer">
                         <div class="bar"></div>
@@ -67,6 +102,8 @@
                 <h3>Adicionar à Fila</h3>
                 <div class="input-group">
                     <input type="text" id="music-input" placeholder="Cole o link ou nome..." autocomplete="off">
+                    <button id="clear-search-btn" class="icon-btn" title="Limpar" style="display: none;"><i
+                            class="fa-solid fa-times"></i></button>
                     <button id="play-btn"><i class="fa-solid fa-plus"></i></button>
                 </div>
             </div>
@@ -81,47 +118,30 @@
                 </ul>
             </div>
 
-            <div class="card card-settings">
-                <details>
-                    <summary>⚙️ Ajustes e Playlist</summary>
-                    <div class="settings-content">
-                        <div class="setting-group">
-                            <label>Upload Playlist (.txt)</label>
-                            <div class="file-input-wrapper">
-                                <input type="file" id="playlist-upload" accept=".txt">
-                                <button id="upload-playlist-btn" class="btn-small">Enviar</button>
-                            </div>
-                        </div>
+            <!-- Playlist Card (Moved from Settings) -->
+            <div class="card card-playlist">
+                <div class="card-header">
+                    <h3><i class="fa-solid fa-list-check"></i> Playlists Salvas</h3>
+                </div>
 
-                        <!-- Playlist History -->
-                        <div class="setting-group" id="playlist-history-container" style="display:none;">
-                            <label>Histórico de Playlists</label>
-                            <ul id="playlist-history-list" class="simple-list"></ul>
-                        </div>
-
-                        <div class="setting-group">
-                            <label>Token Discord</label>
-                            <input type="password" id="token-input" placeholder="Cole o token...">
-                            <button id="save-token-btn" class="btn-small">Salvar Token</button>
-                        </div>
-
-                        <div class="setting-group">
-                            <label>Controle do Bot</label>
-                            <div class="bot-control-buttons">
-                                <button id="init-token-btn" class="btn-small" title="Inicializar com novo token">
-                                    <i class="fa-solid fa-power-off"></i> Inicializar
-                                </button>
-                                <button id="restart-bot-btn" class="btn-small" title="Reiniciar o bot">
-                                    <i class="fa-solid fa-rotate-right"></i> Reiniciar
-                                </button>
-                                <button id="shutdown-bot-btn" class="btn-small danger" title="Desligar o bot">
-                                    <i class="fa-solid fa-stop"></i> Desligar
-                                </button>
-                            </div>
-                        </div>
+                <div class="setting-group">
+                    <label>Upload Nova Playlist (.txt)</label>
+                    <div class="file-drop-zone" id="drop-zone">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <p>Arraste arquivo .txt</p>
+                        <input type="file" id="playlist-upload" accept=".txt" hidden>
                     </div>
-                </details>
+                </div>
+
+                <div class="playlist-history-section">
+                    <label>Minhas Playlists</label>
+                    <ul id="playlist-history-list" class="simple-list">
+                        <!-- Items populated by JS -->
+                    </ul>
+                </div>
             </div>
+
+
 
         </main>
     </div>

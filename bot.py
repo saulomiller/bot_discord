@@ -425,8 +425,8 @@ def setup_bot():
 
 
     # Comando slash
-    @bot.tree.command(name="play", description="Toca uma ou várias músicas (separadas por ;)")
-    @app_commands.describe(search="Nome ou URL da música")
+    @bot.tree.command(name="play", description="Toca músicas do YouTube ou SoundCloud (use ; para múltiplas)")
+    @app_commands.describe(search="Nome, URL ou 'scsearch: termo' para SoundCloud")
     async def play_slash(interaction: discord.Interaction, search: str):
         await interaction.response.defer()
         
