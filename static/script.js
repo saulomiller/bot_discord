@@ -1,5 +1,7 @@
 // static/script.js
 // Integração frontend <-> FastAPI do bot.py
+// dividir o js em arquivos menores
+
 
 // ========== VISUALIZADOR DE ÁUDIO REATIVO ==========
 class AudioReactiveBackground {
