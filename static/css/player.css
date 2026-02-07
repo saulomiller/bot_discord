@@ -1,4 +1,4 @@
-/* --- Hero Card (Player) --- */
+/* --- Cartão Hero (Player) --- */
 .card-hero {
     align-items: center;
     justify-content: center;
@@ -14,15 +14,15 @@
     position: relative;
 }
 
-/* --- Vinyl Record Styles --- */
+/* --- Estilos do Disco de Vinil --- */
 .album-wrapper {
     position: relative;
     border-radius: 50%;
-    /* Ensure container is round */
+    /* Garante que o container seja redondo */
     overflow: hidden;
-    /* Clip image to circle */
+    /* Corta a imagem em círculo */
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    /* Shadow on the whole disc */
+    /* Sombra em todo o disco */
 }
 
 #album-art-img {
@@ -30,28 +30,28 @@
     height: 100%;
     object-fit: cover;
     display: block;
-    /* Transition for smooth spin start/stop if desired, 
-       but infinite animation usually needs play-state */
+    /* Transição para início/parada suave do giro se desejado, 
+       mas animação infinita geralmente precisa de play-state */
 }
 
-/* Vinyl center hole */
-/* Note: The new HTML has .vinyl-hole as a sibling to img inside wrapper */
+/* Furo central do vinil */
+/* Nota: O novo HTML tem .vinyl-hole como irmão da img dentro do wrapper */
 .vinyl-hole {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: 15%;
-    /* Adjust size as needed */
+    /* Ajuste o tamanho conforme necessário */
     height: 15%;
     background-color: #1c1c1e;
-    /* Match card bg or specific color */
+    /* Combina com o fundo do cartão ou cor específica */
     border-radius: 50%;
     z-index: 10;
     box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.8);
 }
 
-/* Apply spin ONLY when playing */
+/* Aplica giro APENAS quando tocando */
 .playing .album-wrapper img {
     animation: spinRecord 4s linear infinite;
 }
@@ -62,7 +62,7 @@
     display: -webkit-box;
     -webkit-line-clamp: 2;
     line-clamp: 2;
-    /* Compatibility fix */
+    /* Correção de compatibilidade */
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -83,7 +83,7 @@
     justify-content: center;
 }
 
-/* --- Queue Card --- */
+/* --- Cartão da Fila --- */
 .card-queue {
     min-height: 300px;
     max-height: 400px;
@@ -145,7 +145,7 @@
     margin-top: 40px;
 }
 
-/* --- Audio Visualizer --- */
+/* --- Visualizador de Áudio --- */
 .audio-visualizer {
     position: absolute;
     bottom: 0;

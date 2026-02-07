@@ -38,7 +38,7 @@
     }
 }
 
-/* Spin Animation */
+/* Animação de Giro */
 @keyframes spinRecord {
     from {
         transform: rotate(0deg);
@@ -61,12 +61,12 @@
     }
 }
 
-/* --- Toast Notifications --- */
+/* --- Notificações Toast --- */
 #toast-container {
     position: fixed;
     bottom: 24px;
     right: 24px;
-    /* Default desktop */
+    /* Padrão desktop */
     z-index: 1000;
     display: flex;
     flex-direction: column;

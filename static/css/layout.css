@@ -3,7 +3,7 @@
     position: fixed;
     top: 0;
     left: -320px;
-    /* Hidden by default */
+    /* Oculto por padrão */
     width: 300px;
     height: 100%;
     background: rgba(28, 28, 30, 0.95);
@@ -66,13 +66,13 @@
     margin-bottom: 24px;
     padding: 0 10px;
     position: relative;
-    /* Ensure header stacking context if needed */
+    /* Garante contexto de empilhamento do cabeçalho se necessário */
 }
 
-/* Adjust header content since button is now fixed */
+/* Ajusta conteúdo do cabeçalho já que o botão agora é fixo */
 .app-header h1 {
     margin-left: 0;
-    /* Reset margins if any */
+    /* Reseta margens se houver */
 }
 
 h1 {

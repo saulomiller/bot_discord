@@ -395,7 +395,7 @@ def setup_bot():
         player = get_player(ctx.guild.id)
         
         try:
-            # Check for multiple songs
+            # Verificar múltiplas músicas
             searches = [s.strip() for s in search.split(';') if s.strip()]
             
             if len(searches) > 1:
@@ -414,7 +414,7 @@ def setup_bot():
                     embed.set_thumbnail(url=song['thumbnail'])
                 await ctx.send(embed=embed)
             
-            # Start playback if idle
+            # Iniciar reprodução se ocioso
             if not player.voice_client.is_playing() and not player.is_paused:
                 await player.play_next()
 

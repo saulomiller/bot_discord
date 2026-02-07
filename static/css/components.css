@@ -1,4 +1,4 @@
-/* --- Card Style (Widget) --- */
+/* --- Estilo do Cartão (Widget) --- */
 .card {
     background: var(--card-bg);
     border-radius: var(--radius);
@@ -36,9 +36,9 @@
     top: 20px;
     left: 20px;
     z-index: 2100;
-    /* Above sidebar (2000) and everything else */
+    /* Acima da barra lateral (2000) e todo o resto */
     background: rgba(0, 0, 0, 0.2);
-    /* Very subtle background */
+    /* Fundo muito sutil */
     backdrop-filter: blur(5px);
     width: 40px;
     height: 40px;
@@ -90,14 +90,14 @@
     transform: scale(0.95);
 }
 
-/* --- Input Card --- */
+/* --- Cartão de Input --- */
 .card-input h3 {
     margin-bottom: 12px;
     font-size: 16px;
     font-weight: 600;
 }
 
-/* --- Search Improvements --- */
+/* --- Melhorias na Busca --- */
 .input-group {
     display: flex;
     background: rgba(0, 0, 0, 0.2);
@@ -165,7 +165,7 @@
     letter-spacing: 1px;
 }
 
-/* --- Settings Card --- */
+/* --- Cartão de Configurações --- */
 details summary {
     list-style: none;
     cursor: pointer;
@@ -210,7 +210,7 @@ details[open] summary {
     border-color: var(--accent-color);
 }
 
-/* --- Drag & Drop Zone --- */
+/* --- Área de Arrastar e Soltar --- */
 .file-drop-zone {
     border: 2px dashed rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.02);

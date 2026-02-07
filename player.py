@@ -74,7 +74,7 @@ class MusicPlayer:
                     info = ydl.extract_info(search, download=False)
                     entries = info.get('entries', [])
                 else:
-                    # Padrão: YouTube Search
+                    # Padrão: Pesquisa do YouTube
                     info = ydl.extract_info(f"ytsearch:{search}", download=False)
                     entries = info.get('entries', [])
                 
@@ -105,15 +105,15 @@ class MusicPlayer:
             return
 
         if self.is_shuffling and len(self.queue) > 0:
-            # Shuffle logic: pick random but keep queue intact? Or shuffle queue?
-            # Original implementation popped random index.
-            pass # Simplification for now: regular pop
+            # Lógica de embaralhamento: escolher aleatório mas manter fila intacta? Ou embaralhar fila?
+            # Implementação original removia índice aleatório.
+            pass # Simplificação por enquanto: remoção regular
 
         if not self.queue:
             self.current_song = None
             return
 
-        # Simple pop for now, complex shuffle logic can be added later
+        # Remoção simples por enquanto, lógica de embaralhamento complexa pode ser adicionada depois
         self.current_song = self.queue.popleft()
 
         source_url = self.current_song['url']
@@ -127,11 +127,11 @@ class MusicPlayer:
             if err:
                 logging.error(f"Erro no player: {err}")
             
-            # Loop logic
+            # Lógica de Loop
             if self.is_looping and self.current_song:
                 self.queue.appendleft(self.current_song)
             
-            # Schedule next song
+            # Agendar próxima música
             future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
             try:
                 future.result()
@@ -139,7 +139,7 @@ class MusicPlayer:
                 pass
 
         try:
-            # Check executable path logic (env var or default)
+            # Lógica de verificação do caminho do executável (env var ou padrão)
             executable = 'ffmpeg' 
             self.voice_client.play(
                 discord.FFmpegPCMAudio(source_url, executable=executable, **ffmpeg_options),
@@ -148,7 +148,7 @@ class MusicPlayer:
             self.is_paused = False
         except Exception as e:
             logging.error(f"Erro ao iniciar playback: {e}")
-            await self.play_next() # Try next
+            await self.play_next() # Tentar próxima
 
     def stop(self):
         self.queue.clear()
@@ -158,7 +158,7 @@ class MusicPlayer:
 
     def skip(self):
         if self.voice_client and self.voice_client.is_playing():
-            self.voice_client.stop() # 'after' callback will trigger play_next
+            self.voice_client.stop() # callback 'after' acionará play_next
 
     def pause(self):
         if self.voice_client and self.voice_client.is_playing():

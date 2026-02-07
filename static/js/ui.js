@@ -12,7 +12,7 @@ export const UI = {
             title: document.getElementById('song-title'),
             artist: document.getElementById('song-artist'),
             art: document.getElementById('album-art-img'),
-            hero: document.querySelector('.card-hero'),
+            // Removidoocument.querySelector('.card-hero'),
             playBtn: document.getElementById('pause-resume-btn'),
             volumeSlider: document.getElementById('volume-slider')
         },
@@ -56,7 +56,7 @@ export const UI = {
         statusInfo.text.textContent = ready ? `Conectado` : 'Desconectado';
         statusInfo.dot.style.background = ready ? '#30d158' : '#ff453a';
 
-        // Song Info
+        // Informações da Música
         if (data.current_song && data.current_song.title) {
             player.title.textContent = data.current_song.title;
             player.artist.textContent = data.current_song.channel || '—';
@@ -72,7 +72,7 @@ export const UI = {
             player.hero.classList.remove('playing');
         }
 
-        // Queue
+        // Fila
         queue.innerHTML = '';
         if (data.queue && data.queue.length) {
             data.queue.forEach((q, idx) => {
@@ -88,7 +88,7 @@ export const UI = {
             queue.innerHTML = '<li class="queue-item queue-empty">A fila está vazia.</li>';
         }
 
-        // Play Button Icon
+        // Ícone do Botão Play
         player.playBtn.innerHTML = isPaused
             ? '<i class="fa-solid fa-play"></i>'
             : '<i class="fa-solid fa-pause"></i>';

@@ -3,12 +3,12 @@ import { UI } from './ui.js';
 import { AudioReactiveBackground } from './visualizer.js';
 import { CONFIG } from './config.js';
 
-// State
+// Estado
 let isPaused = false;
 let isDraggingVolume = false;
 const liquidBg = new AudioReactiveBackground();
 
-// --- Initialization ---
+// --- Inicialização ---
 
 async function updateStatusLoop() {
     try {
@@ -27,10 +27,10 @@ async function updateStatusLoop() {
     }
 }
 
-// --- Event Listeners setup ---
+// --- Configuração de Event Listeners ---
 
 function setupEventListeners() {
-    // Sidebar
+    // Barra Lateral
     const sidebarToggle = document.getElementById('sidebar-toggle');
     const closeSidebarBtn = document.getElementById('close-sidebar');
     const sidebarOverlay = document.getElementById('sidebar-overlay');
@@ -39,7 +39,7 @@ function setupEventListeners() {
     if (closeSidebarBtn) closeSidebarBtn.onclick = () => UI.toggleSidebar();
     if (sidebarOverlay) sidebarOverlay.onclick = () => UI.toggleSidebar();
 
-    // Player Controls
+    // Controles do Player
     const playBtn = document.getElementById('play-btn');
     const musicInput = document.getElementById('music-input');
     const pauseResumeBtn = document.getElementById('pause-resume-btn');
@@ -47,7 +47,7 @@ function setupEventListeners() {
     const volumeSlider = document.getElementById('volume-slider');
     const clearSearchBtn = document.getElementById('clear-search-btn');
 
-    // Search Input Logic
+    // Lógica de Busca
     musicInput.oninput = () => {
         clearSearchBtn.style.display = musicInput.value ? 'block' : 'none';
     };
@@ -123,7 +123,7 @@ function setupEventListeners() {
         };
     }
 
-    // Keyboard Shortcuts
+    // Atalhos de Teclado
     document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT') return;
 
@@ -150,7 +150,7 @@ function setupEventListeners() {
     });
 }
 
-// Start
+// Início
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     updateStatusLoop();
