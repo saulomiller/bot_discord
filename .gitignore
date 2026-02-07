@@ -16,3 +16,4 @@ __pycache__/
 
 # Arquivos de configuração da GUI (se não for mais usada)
 bot_config.json
+token.json

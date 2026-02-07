@@ -15,6 +15,8 @@ from functools import lru_cache
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 import uvicorn
+from player import MusicPlayer
+import socket
 
 # Configuração do logging
 logging.getLogger("uvicorn.error").propagate = False
@@ -40,6 +42,41 @@ def save_token_to_json(token: str):
     with open(TOKEN_FILE, "w") as f:
         json.dump({"DISCORD_TOKEN": token}, f)
 
+def prompt_token_terminal():
+    """Solicita token via input no terminal."""
+    print("\n" + "="*60)
+    print("🎵 DISCORD MUSIC BOT - CONFIGURAÇÃO DE TOKEN")
+    print("="*60)
+    print("\nNenhum token válido encontrado no sistema.")
+    print("\nOpções:")
+    print("1. Inserir token agora (via terminal)")
+    print("2. Usar interface web (http://localhost:8000)")
+    print("3. Pular por enquanto (API apenas)")
+    print("\nInstruções para obter o token:")
+    print("- Acesse: https://discord.com/developers/applications")
+    print("- Clique em 'New Application'")
+    print("- Vá para 'Bot' e clique em 'Add Bot'")
+    print("- Clique em 'Copy Token'")
+    print("="*60)
+    
+    choice = input("\nEscolha uma opção (1/2/3): ").strip()
+    
+    if choice == "1":
+        token = input("\nCole o token do Discord: ").strip()
+        if len(token) > 50:
+            save_token_to_json(token)
+            logging.info("✅ Token salvo com sucesso!")
+            return token
+        else:
+            logging.error("❌ Token inválido (muito curto)")
+            return None
+    elif choice == "2":
+        logging.info("\n✅ Acesse: http://localhost:8000 para configurar o token")
+        return None
+    else:
+        logging.info("\n⏳ Pulando configuração de token. Apenas API rodando.")
+        return None
+
 
 # Carrega variáveis do arquivo .env (se existir) para o ambiente
 load_dotenv()
@@ -58,29 +95,31 @@ app = FastAPI(
 # Inicializar o bot
 bot = commands.Bot(command_prefix='/', intents=intents)
 
-# Fila de músicas e estado
-song_queue = []
-current_volume = 0.5
+# Gerenciador de players (Multi-Guild)
+players = {} # Dict[guild_id, MusicPlayer]
+
+def get_player(guild_id) -> MusicPlayer:
+    if guild_id not in players:
+        players[guild_id] = MusicPlayer(guild_id, bot)
+    return players[guild_id]
+
+# Variáveis globais para compatibilidade com código legacy
 current_song = None
+song_queue = []
+playlist_processing_task = None
+playlist_cancel_flag = False
+current_volume = 0.5
 is_looping = False
 is_shuffling = False
 is_paused = False
 
-# Cache para informações de músicas
-music_info_cache = TTLCache(maxsize=100, ttl=3600)  # Cache por 1 hora
-playlist_cache = {}  # Cache para playlists
-
-# Variáveis para monitoramento de recursos
+# Caches e variáveis globais
+playlist_cache = {}
+music_info_cache = TTLCache(maxsize=100, ttl=3600)
 last_resource_check = 0
-resource_check_interval = 60  # Verificar a cada 60 segundos
-
-# Variáveis globais para monitoramento de recursos
+resource_check_interval = 60
 cpu_usage = 0
 memory_usage = 0
-
-# Variáveis de controle para processamento de playlist
-playlist_processing_task = None
-playlist_cancel_flag = False
 
 # Diretório para armazenar playlists
 PLAYLIST_DIR = "playlist"
@@ -169,6 +208,8 @@ async def check_system_resources():
         logging.error(f"Erro ao verificar recursos do sistema: {e}")
         return None, None
 
+
+
 # Função para configurar eventos e comandos
 def setup_bot():
     @bot.event
@@ -256,15 +297,13 @@ def setup_bot():
             voice_client = guild.voice_client
             if voice_client and voice_client.is_connected():
                 try:
+                    # Limpar o player desta guild
+                    if guild.id in players:
+                        players[guild.id].stop()
                     await voice_client.disconnect(force=True)
                     count += 1
                 except Exception as e:
                     logging.error(f"Erro ao desconectar de {guild.name}: {e}")
-        
-        # Limpar a fila e parar reprodução
-        song_queue.clear()
-        global current_song
-        current_song = None
         
         if count > 0:
             await ctx.send(embed=discord.Embed(
@@ -287,16 +326,14 @@ def setup_bot():
             voice_client = guild.voice_client
             if voice_client and voice_client.is_connected():
                 try:
+                    # Limpar o player desta guild
+                    if guild.id in players:
+                        players[guild.id].stop()
                     await voice_client.disconnect(force=True)
                     count += 1
                     logging.info(f"Desconectado de {guild.name} via comando sair_todos")
                 except Exception as e:
                     logging.error(f"Erro ao desconectar de {guild.name}: {e}")
-        
-        # Limpar a fila e parar reprodução
-        song_queue.clear()
-        global current_song
-        current_song = None
         
         if count > 0:
             await interaction.followup.send(embed=discord.Embed(
@@ -313,324 +350,128 @@ def setup_bot():
     @bot.command()
     async def play(ctx: commands.Context, *, search: str):
         vc = await ensure_voice(ctx)
-        if not vc:
-            return
-            
-        # Verificar se há múltiplas músicas separadas por ;
-        searches = [s.strip() for s in search.split(';') if s.strip()]
-        if len(searches) > 1:
-            total_added = 0
-            failed_tracks = []
-            
-            # Enviar uma mensagem inicial
-            await ctx.send(embed=discord.Embed(
-                title="Processando Múltiplas Músicas",
-                description=f"Adicionando {len(searches)} músicas à fila...",
-                color=discord.Color.blue()))
-                
-            # Processar cada música individualmente com tratamento de exceções para cada uma
-            for i, individual_search in enumerate(searches):
-                try:
-                    # Usar timeout para evitar que uma música bloqueie todo o processo
-                    title, url, thumbnail, duration, channel = await asyncio.wait_for(
-                        extract_info(individual_search), 
-                        timeout=20
-                    )
-                    song_queue.append((title, url, thumbnail, ctx.author, duration, channel))
-                    total_added += 1
-                    
-                    # Mostrar progresso a cada 3 músicas ou na última
-                    if (i + 1) % 3 == 0 or i == len(searches) - 1:
-                        await ctx.send(embed=discord.Embed(
-                            title="Progresso",
-                            description=f"Adicionadas {total_added}/{len(searches)} músicas à fila",
-                            color=discord.Color.blue()))
-                    
-                except asyncio.TimeoutError:
-                    logging.error(f"Timeout ao processar '{individual_search}'")
-                    failed_tracks.append(f"{individual_search} (timeout)")
-                except Exception as e:
-                    logging.error(f"Erro no yt_dlp para '{individual_search}': {e}")
-                    failed_tracks.append(individual_search)
-            
-            # Enviar mensagem de conclusão
-            embed = discord.Embed(
-                title="Músicas Adicionadas",
-                description=f"**{total_added}** músicas foram adicionadas à fila por {ctx.author.mention}.",
-                color=discord.Color.green()
-            ).set_footer(text=f"Fila: {len(song_queue)} música(s)")
-            
-            # Adicionar informações sobre músicas que falharam
-            if failed_tracks:
-                embed.add_field(
-                    name="⚠️ Algumas músicas não puderam ser adicionadas:",
-                    value="\n".join(f"- {track}" for track in failed_tracks[:5]) + 
-                          (f"\n... e mais {len(failed_tracks) - 5} falhas." if len(failed_tracks) > 5 else ""),
-                    inline=False
-                )
-                
-            await ctx.send(embed=embed)
-            
-            # Iniciar reprodução se não estiver tocando ainda
-            if not vc.is_playing():
-                await play_next(ctx)
-                
-            return
+        if not vc: return
         
-        # Processar uma única música (comportamento original)
+        player = get_player(ctx.guild.id)
+        
         try:
-            title, url, thumbnail, duration, channel = await extract_info(search)
-        except Exception as e:
-            logging.error(f"Erro no yt_dlp: {e}")
-            await ctx.send(embed=discord.Embed(
-                title="Erro",
-                description=f"Não consegui buscar essa música.\nErro: {str(e)[:100]}...",
-                color=discord.Color.red()))
-            return
-
-        # Adiciona na fila
-        song_queue.append((title, url, thumbnail, ctx.author, duration, channel))
-        
-        # Criar um embed melhorado
-        embed = discord.Embed(
-            title="Música Adicionada à Fila",
-            description=f"**{title}**",
-            color=discord.Color.from_rgb(114, 137, 218)  # Cor do Discord
-        )
-        embed.add_field(name="Canal", value=channel, inline=True)
-        embed.add_field(name="Duração", value=duration, inline=True)
-        embed.add_field(name="Posição na Fila", value=f"#{len(song_queue)}", inline=True)
-        embed.add_field(name="Adicionado por", value=ctx.author.mention, inline=False)
-        embed.set_footer(text=f"Fila: {len(song_queue)} música(s)")
-        
-        if thumbnail:
-            embed.set_thumbnail(url=thumbnail)
+            # Check for multiple songs
+            searches = [s.strip() for s in search.split(';') if s.strip()]
             
-        await ctx.send(embed=embed)
+            if len(searches) > 1:
+                await ctx.send(embed=discord.Embed(title="Adicionando...", description=f"Adicionando {len(searches)} músicas...", color=discord.Color.blue()))
+                for s in searches:
+                    await player.add_to_queue(s, ctx.author)
+                await ctx.send(embed=discord.Embed(title="Sucesso", description=f"Adicionadas {len(searches)} músicas à fila.", color=discord.Color.green()))
+            else:
+                song = await player.add_to_queue(search, ctx.author)
+                embed = discord.Embed(
+                    title="Adicionada à Fila",
+                    description=f"**{song['title']}**",
+                    color=discord.Color.green()
+                )
+                if song.get('thumbnail'):
+                    embed.set_thumbnail(url=song['thumbnail'])
+                await ctx.send(embed=embed)
+            
+            # Start playback if idle
+            if not player.voice_client.is_playing() and not player.is_paused:
+                await player.play_next()
 
-        if not vc.is_playing():
-            await play_next(ctx)
+        except Exception as e:
+            logging.error(f"Erro no play: {e}")
+            await ctx.send(f"Erro ao buscar música: {e}")
+
+
 
     # Comando slash
     @bot.tree.command(name="play", description="Toca uma ou várias músicas (separadas por ;)")
-    @app_commands.describe(search="Nome ou URL da música para tocar (use ; para separar múltiplas músicas)")
+    @app_commands.describe(search="Nome ou URL da música")
     async def play_slash(interaction: discord.Interaction, search: str):
-        # Adiar a resposta para evitar timeout de interação
-        await interaction.response.defer(ephemeral=False)
+        await interaction.response.defer()
         
+        vc = await ensure_voice(interaction)
+        if not vc:
+            await interaction.followup.send("Você precisa estar em um canal de voz!", ephemeral=True)
+            return
+
+        player = get_player(interaction.guild_id)
+
         try:
-            vc = await ensure_voice(interaction)
-        except VoiceConnectionError as e:
-            await interaction.followup.send(embed=discord.Embed(
-                title="Erro",
-                description=str(e),
-                color=discord.Color.red()))
-            return
-        if not vc: # Verificação adicional para segurança
-            return
-
-        # Usar um contexto slash personalizado para compartilhar o código com o comando de texto
-        class SlashContext:
-            def __init__(self, interaction):
-                self.interaction = interaction
-                self.guild = interaction.guild
-                self.author = interaction.user
-
-            async def send(self, **kwargs):
-                await interaction.followup.send(**kwargs)
-
-        ctx = SlashContext(interaction)
-        
-        # Verificar se há múltiplas músicas separadas por ;
-        searches = [s.strip() for s in search.split(';') if s.strip()]
-        if len(searches) > 1:
-            total_added = 0
-            failed_tracks = []
+            # Check for multiple songs
+            searches = [s.strip() for s in search.split(';') if s.strip()]
             
-            # Enviar uma mensagem inicial
-            await interaction.followup.send(embed=discord.Embed(
-                title="Processando Múltiplas Músicas",
-                description=f"Adicionando {len(searches)} músicas à fila...",
-                color=discord.Color.blue()))
-                
-            # Processar cada música individualmente com tratamento de exceções para cada uma
-            for i, individual_search in enumerate(searches):
-                try:
-                    # Usar timeout para evitar que uma música bloqueie todo o processo
-                    title, url, thumbnail, duration, channel = await asyncio.wait_for(
-                        extract_info(individual_search), 
-                        timeout=20
-                    )
-                    song_queue.append((title, url, thumbnail, ctx.author, duration, channel))
-                    total_added += 1
-                    
-                    # Mostrar progresso a cada 3 músicas ou na última
-                    if (i + 1) % 3 == 0 or i == len(searches) - 1:
-                        await interaction.followup.send(embed=discord.Embed(
-                            title="Progresso",
-                            description=f"Adicionadas {total_added}/{len(searches)} músicas à fila",
-                            color=discord.Color.blue()))
-                    
-                except asyncio.TimeoutError:
-                    logging.error(f"Timeout ao processar '{individual_search}'")
-                    failed_tracks.append(f"{individual_search} (timeout)")
-                except Exception as e:
-                    logging.error(f"Erro no yt_dlp para '{individual_search}': {e}")
-                    failed_tracks.append(individual_search)
-            
-            # Enviar mensagem de conclusão
-            embed = discord.Embed(
-                title="Músicas Adicionadas",
-                description=f"**{total_added}** músicas foram adicionadas à fila por {ctx.author.mention}.",
-                color=discord.Color.green()
-            ).set_footer(text=f"Fila: {len(song_queue)} música(s)")
-            
-            # Adicionar informações sobre músicas que falharam
-            if failed_tracks:
-                embed.add_field(
-                    name="⚠️ Algumas músicas não puderam ser adicionadas:",
-                    value="\n".join(f"- {track}" for track in failed_tracks[:5]) + 
-                          (f"\n... e mais {len(failed_tracks) - 5} falhas." if len(failed_tracks) > 5 else ""),
-                    inline=False
+            if len(searches) > 1:
+                await interaction.followup.send(embed=discord.Embed(title="Adicionando...", description=f"Adicionando {len(searches)} músicas...", color=discord.Color.blue()))
+                for s in searches:
+                    await player.add_to_queue(s, interaction.user)
+                await interaction.followup.send(embed=discord.Embed(title="Sucesso", description=f"Adicionadas {len(searches)} músicas à fila.", color=discord.Color.green()))
+            else:
+                song = await player.add_to_queue(search, interaction.user)
+                embed = discord.Embed(
+                    title="Adicionada à Fila",
+                    description=f"**{song['title']}**",
+                    color=discord.Color.green()
                 )
-                
-            await interaction.followup.send(embed=embed)
+                if song.get('thumbnail'):
+                    embed.set_thumbnail(url=song['thumbnail'])
+                await interaction.followup.send(embed=embed)
             
-            # Iniciar reprodução se não estiver tocando ainda
-            if not vc.is_playing():
-                await play_next(ctx)
+            # Start playback if idle
+            if not player.voice_client.is_playing() and not player.is_paused:
+                await player.play_next()
                 
-            return
-
-        # Processar uma única música (comportamento original)
-        try:
-            title, url, thumbnail, duration, channel = await extract_info(search)
         except Exception as e:
-            logging.error(f"Erro no yt_dlp: {e}")
-            await interaction.followup.send(embed=discord.Embed(
-                title="Erro",
-                description=f"Não consegui buscar essa música.\nErro: {str(e)[:100]}...",
-                color=discord.Color.red()))
-            return
+            msg = f"Erro: {e}"
+            await interaction.followup.send(msg)
 
-        # Adiciona na fila
-        song_queue.append((title, url, thumbnail, ctx.author, duration, channel))
-        
-        # Criar um embed melhorado
-        embed = discord.Embed(
-            title="Música Adicionada à Fila",
-            description=f"**{title}**",
-            color=discord.Color.from_rgb(114, 137, 218)  # Cor do Discord
-        )
-        embed.add_field(name="Canal", value=channel, inline=True)
-        embed.add_field(name="Duração", value=duration, inline=True)
-        embed.add_field(name="Posição na Fila", value=f"#{len(song_queue)}", inline=True)
-        embed.add_field(name="Adicionado por", value=ctx.author.mention, inline=False)
-        embed.set_footer(text=f"Fila: {len(song_queue)} música(s)")
-        
-        if thumbnail:
-            embed.set_thumbnail(url=thumbnail)
-            
-        await interaction.followup.send(embed=embed)
 
-        if not vc.is_playing():
-            await play_next(ctx)
 
     # Comando de texto
     @bot.command()
     async def skip(ctx: commands.Context):
-        vc = ctx.guild.voice_client
-        if not vc or not vc.is_playing():
-            await ctx.send(embed=discord.Embed(
-                title="Erro",
-                description="Não há música tocando no momento.",
-                color=discord.Color.red()))
-            return
-        
-        # Parar a música atual
-        vc.stop()
-        
-        # Garantir que a próxima música seja tocada
-        await ctx.send(embed=discord.Embed(
-            title="Música Pulada",
-            description="Pulando para a próxima música...",
-            color=discord.Color.blue()))
-        
-        # Chamar diretamente a função play_next para garantir que a próxima música comece
-        await play_next(ctx)
+        player = get_player(ctx.guild.id)
+        player.skip()
+        await ctx.send("Música pulada.")
 
     # Comando slash
     @bot.tree.command(name="skip", description="Pula para a próxima música")
     async def skip_slash(interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
-        vc = interaction.guild.voice_client
-        if not vc or not vc.is_playing():
-            await interaction.followup.send(embed=discord.Embed(
-                title="Erro",
-                description="Não estou tocando nada no momento.",
-                color=discord.Color.red()))
-            return
-
-        vc.stop()
-        await interaction.followup.send(embed=discord.Embed(
-            title="Skip",
-            description="Música atual pulada.",
-            color=discord.Color.blue()))
+        player = get_player(interaction.guild_id)
+        player.skip()
+        await interaction.response.send_message("Música pulada.")
 
     # Comando de texto
     @bot.command()
     async def stop(ctx: commands.Context):
-        vc = ctx.voice_client
-        if not vc:
-            await ctx.send(embed=discord.Embed(
-                title="Erro",
-                description="Não estou conectado a um canal de voz.",
-                color=discord.Color.red()))
-            return
-
-        song_queue.clear()
-        vc.stop()
-        await ctx.send(embed=discord.Embed(
-            title="Parado",
-            description="Reprodução parada e fila limpa.",
-            color=discord.Color.orange()))
+        player = get_player(ctx.guild.id)
+        player.stop()
+        await ctx.send("Música parada e fila limpa.")
 
     # Comando slash
     @bot.tree.command(name="stop", description="Para a reprodução e limpa a fila")
     async def stop_slash(interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
-        vc = interaction.guild.voice_client
-        if not vc:
-            await interaction.followup.send(embed=discord.Embed(
-                title="Erro",
-                description="Não estou conectado a um canal de voz.",
-                color=discord.Color.red()))
-            return
-
-        song_queue.clear()
-        vc.stop()
-        await interaction.followup.send(embed=discord.Embed(
-            title="Parado",
-            description="Reprodução parada e fila limpa.",
-            color=discord.Color.orange()))
+        player = get_player(interaction.guild_id)
+        player.stop()
+        await interaction.response.send_message("Música parada e fila limpa.")
 
     # Comando de texto
     @bot.command()
     async def agora(ctx: commands.Context):
-        if not current_song:
+        player = get_player(ctx.guild.id)
+        if not player.current_song:
             await ctx.send(embed=discord.Embed(
                 title="Reprodução",
                 description="Não estou tocando nada no momento.",
                 color=discord.Color.blue()))
             return
 
-        # Extrair todas as informações da música
-        if len(current_song) >= 6:  # Formato novo com duração e canal
-            title, url, thumbnail, user, duration, channel = current_song
-        else:  # Compatibilidade com formato antigo
-            title, url, thumbnail, user = current_song
-            duration = "Desconhecida"
-            channel = "Desconhecido"
+        song = player.current_song
+        title = song['title']
+        thumbnail = song.get('thumbnail')
+        user = song['user']
+        duration = song.get('duration', 'Desconhecida')
+        channel = song.get('channel', 'Desconhecido')
             
         # Criar embed melhorado
         embed = discord.Embed(
@@ -645,8 +486,8 @@ def setup_bot():
         embed.add_field(name="Adicionado por", value=user.mention, inline=False)
         
         # Configurar o rodapé
-        if len(song_queue) > 0:
-            embed.set_footer(text=f"Próximas: {len(song_queue)} música(s) na fila")
+        if len(player.queue) > 0:
+            embed.set_footer(text=f"Próximas: {len(player.queue)} música(s) na fila")
         
         # Adicionar imagem de capa, se disponível
         if thumbnail:
@@ -663,53 +504,44 @@ def setup_bot():
     # Comando slash
     @bot.tree.command(name="agora", description="Mostra a música atual")
     async def agora_slash(interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
-        if not current_song:
-            await interaction.followup.send(embed=discord.Embed(
-                title="Reprodução",
-                description="Não estou tocando nada no momento.",
-                color=discord.Color.blue()))
+        player = get_player(interaction.guild_id)
+        if not player.current_song:
+            await interaction.response.send_message("Não estou tocando nada no momento.")
             return
 
-        # Extrair todas as informações da música
-        if len(current_song) >= 6:  # Formato novo com duração e canal
-            title, url, thumbnail, user, duration, channel = current_song
-        else:  # Compatibilidade com formato antigo
-            title, url, thumbnail, user = current_song
-            duration = "Desconhecida"
-            channel = "Desconhecido"
-            
-        # Criar embed melhorado
-        embed = discord.Embed(
-            title="🎵 Tocando Agora",
-            description=f"**{title}**",
-            color=discord.Color.from_rgb(57, 255, 20)  # Verde vibrante
-        )
+        song = player.current_song
+        embed = discord.Embed(title="Tocando Agora", description=f"**{song['title']}**", color=discord.Color.green())
+        if song.get('thumbnail'):
+            embed.set_thumbnail(url=song['thumbnail'])
+        embed.add_field(name="Duração", value=song['duration'])
         
-        # Adicionar campos com informações extras
-        embed.add_field(name="Canal", value=channel, inline=True)
-        embed.add_field(name="Duração", value=duration, inline=True)
-        embed.add_field(name="Adicionado por", value=user.mention, inline=False)
-        
-        # Configurar o rodapé
-        if len(song_queue) > 0:
-            embed.set_footer(text=f"Próximas: {len(song_queue)} música(s) na fila")
-        
-        # Adicionar imagem de capa, se disponível
-        if thumbnail:
-            embed.set_thumbnail(url=thumbnail)
-            # Adicionar uma imagem grande na parte inferior para um visual mais rico
-            if thumbnail.startswith("https://i.ytimg.com/"):
-                # Para miniaturas do YouTube, podemos tentar obter uma versão maior
-                embed.set_image(url=thumbnail.replace("hqdefault", "maxresdefault"))
-            else:
-                embed.set_image(url=thumbnail)
-                
-        await interaction.followup.send(embed=embed)
-        
+        await interaction.response.send_message(embed=embed)
+
+        await interaction.response.send_message(embed=embed)
+
     # Comando de texto
     @bot.command(name="fila")
     async def fila(ctx: commands.Context):
+        player = get_player(ctx.guild.id)
+        if not player.queue and not player.current_song:
+             await ctx.send("A fila está vazia.")
+             return
+             
+        embed = discord.Embed(title="Fila de Reprodução", color=discord.Color.blue())
+        if player.current_song:
+            embed.add_field(name="Tocando Agora", value=player.current_song['title'], inline=False)
+            
+        if player.queue:
+            queue_list = "\n".join([f"{i+1}. {s['title']}" for i, s in enumerate(list(player.queue)[:10])])
+            if len(player.queue) > 10:
+                queue_list += f"\n... e mais {len(player.queue)-10}"
+            embed.add_field(name="Próximas", value=queue_list, inline=False)
+            
+        await ctx.send(embed=embed)
+
+
+
+
         if not song_queue and not current_song:
             await ctx.send(embed=discord.Embed(
                 title="Fila de Reprodução",
@@ -821,7 +653,8 @@ def setup_bot():
 
     # Comando slash
     @bot.tree.command(name="fila", description="Mostra a fila de músicas")
-    async def fila_slash(interaction: discord.Interaction):
+    # @bot.tree.command(name="fila", description="Mostra a fila de músicas")
+    async def fila_slash_legacy(interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         if not song_queue and not current_song:
             await interaction.followup.send(embed=discord.Embed(
@@ -935,62 +768,20 @@ def setup_bot():
     # Comando de texto
     @bot.command()
     async def volume(ctx: commands.Context, vol: float):
-        if vol < 0 or vol > 1:
-            await ctx.send(embed=discord.Embed(
-                title="Erro",
-                description="O volume deve estar entre 0.0 e 1.0",
-                color=discord.Color.red()))
-            return
-
-        vc = ctx.voice_client
-        if not vc:
-            await ctx.send(embed=discord.Embed(
-                title="Erro",
-                description="Não estou em um canal de voz.",
-                color=discord.Color.red()))
-            return
-
-        global current_volume
-        current_volume = vol
-        
-        if vc.source:
-            vc.source.volume = vol
-
-        await ctx.send(embed=discord.Embed(
-            title="Volume",
-            description=f"Volume ajustado para {int(vol * 100)}%",
-            color=discord.Color.blue()))
+        player = get_player(ctx.guild.id)
+        player.set_volume(vol)
+        await ctx.send(f"Volume ajustado para {int(player.volume * 100)}%")
 
     # Comando slash
     @bot.tree.command(name="volume", description="Ajusta o volume (0.0 a 1.0)")
     @app_commands.describe(vol="Volume entre 0.0 e 1.0")
     async def volume_slash(interaction: discord.Interaction, vol: float):
-        await interaction.response.defer(ephemeral=False)
-        if vol < 0 or vol > 1:
-            await interaction.followup.send(embed=discord.Embed(
-                title="Erro",
-                description="O volume deve estar entre 0.0 e 1.0",
-                color=discord.Color.red()))
-            return
+        player = get_player(interaction.guild_id)
+        player.set_volume(vol)
+        await interaction.response.send_message(f"Volume ajustado para {int(player.volume * 100)}%")
 
-        vc = interaction.guild.voice_client
-        if not vc:
-            await interaction.followup.send(embed=discord.Embed(
-                title="Erro",
-                description="Não estou em um canal de voz.",
-                color=discord.Color.red()))
-            return
 
-        global current_volume
-        current_volume = vol
-        
-        if vc.source:
-            vc.source.volume = vol
 
-        await interaction.followup.send(embed=discord.Embed(
-            title="Volume",
-            description=f"Volume ajustado para: {vol*100:.0f}%",
-            color=discord.Color.blue()))
 
     # Comando de texto para reproduzir playlist a partir de arquivo
     @bot.command(name="playlist")
@@ -1095,7 +886,7 @@ def setup_bot():
                                 logging.info(f"Playlist '{filename}' cancelada antes de iniciar reprodução")
                                 break
                                 
-                            await play_next(ctx)
+                            await play_next_legacy(ctx)
                             started_playback = True
                             
                     except asyncio.TimeoutError:
@@ -1134,7 +925,7 @@ def setup_bot():
                 
                 # Iniciar reprodução se não estiver tocando ainda e não iniciamos antes
                 if not vc.is_playing() and not started_playback:
-                    await play_next(ctx)
+                    await play_next_legacy(ctx)
                     
             except Exception as e:
                 logging.error(f"Erro ao processar playlist '{filename}': {e}")
@@ -1248,7 +1039,7 @@ def setup_bot():
                                 logging.info(f"Playlist '{filename}' cancelada antes de iniciar reprodução")
                                 break
                                 
-                            await play_next(ctx)
+                            await play_next_legacy(ctx)
                             started_playback = True
                             
                     except asyncio.TimeoutError:
@@ -1287,7 +1078,7 @@ def setup_bot():
                 
                 # Iniciar reprodução se não estiver tocando ainda e não iniciamos antes
                 if not vc.is_playing() and not started_playback:
-                    await play_next(ctx)
+                    await play_next_legacy(ctx)
                     
             except Exception as e:
                 logging.error(f"Erro ao processar playlist '{filename}': {e}")
@@ -1853,7 +1644,7 @@ async def extract_info(search: str) -> tuple[str, str, str, str, str]:
         logging.error(f"Erro não tratado ao buscar música '{search}': {e}")
         raise ValueError(f"Não foi possível buscar '{search}': {str(e)}")
 
-async def play_next(ctx: commands.Context | discord.Interaction):
+async def play_next_legacy(ctx: commands.Context | discord.Interaction):
     """Tocar a próxima música na fila"""
     global current_song
     
@@ -2099,24 +1890,17 @@ async def api_play(request: MusicRequest):
         raise HTTPException(status_code=400, detail="Bot não está em um canal de voz.")
     
     vc = bot.voice_clients[0]
-    guild = vc.guild
-    # Usar o primeiro canal de texto como fallback para enviar mensagens
-    channel = guild.text_channels[0]
+    player = get_player(vc.guild.id)
 
     try:
-        title, url, thumbnail, duration, channel_name = await extract_info(request.search)
-        # Para a API, o 'autor' pode ser genérico
+        # User placeholder for API
         api_user = bot.user 
-        song_queue.append((title, url, thumbnail, api_user, duration, channel_name))
+        song = await player.add_to_queue(request.search, api_user)
 
-        if not vc.is_playing() and not is_paused:
-            # Simular um contexto para play_next
-            class DummyContext:
-                def __init__(self, guild): self.guild = guild
-                async def send(self, **kwargs): pass
-            await play_next(DummyContext(guild))
+        if not vc.is_playing() and not player.is_paused:
+            await player.play_next()
 
-        return {"status": "success", "message": f"'{title}' adicionado à fila."}
+        return {"status": "success", "message": f"'{song['title']}' adicionado à fila."}
     except Exception as e:
         logging.error(f"API /play error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2128,41 +1912,55 @@ async def api_skip():
         raise HTTPException(status_code=400, detail="Bot não está em um canal de voz.")
     
     vc = bot.voice_clients[0]
-    if not vc.is_playing() and not is_paused:
-        raise HTTPException(status_code=400, detail="Nenhuma música tocando.")
-
-    vc.stop()
+    player = get_player(vc.guild.id)
+    player.skip()
     return {"status": "success", "message": "Música pulada."}
 
 @app.post("/api/pause")
 async def api_pause():
     """Pausa a música atual."""
-    global is_paused
     if not bot.voice_clients:
         raise HTTPException(status_code=400, detail="Bot não está em um canal de voz.")
     
     vc = bot.voice_clients[0]
-    if not vc.is_playing():
-        raise HTTPException(status_code=400, detail="Nenhuma música tocando para pausar.")
-
-    vc.pause()
-    is_paused = True
+    player = get_player(vc.guild.id)
+    player.pause()
     return {"status": "success", "message": "Música pausada."}
 
 @app.post("/api/resume")
 async def api_resume():
     """Retoma a música pausada."""
-    global is_paused
     if not bot.voice_clients:
         raise HTTPException(status_code=400, detail="Bot não está em um canal de voz.")
     
     vc = bot.voice_clients[0]
-    if not vc.is_paused():
-        raise HTTPException(status_code=400, detail="A música não está pausada.")
-
-    vc.resume()
-    is_paused = False
+    player = get_player(vc.guild.id)
+    player.resume()
     return {"status": "success", "message": "Música retomada."}
+
+@app.post("/api/volume")
+async def api_volume(request: VolumeRequest):
+    """Ajusta o volume do bot."""
+    if request.level < 0 or request.level > 1:
+        raise HTTPException(status_code=400, detail="O volume deve estar entre 0.0 e 1.0")
+        
+    if not bot.voice_clients:
+        # Armazenar volume padrão para futuras conexões
+        global current_volume
+        current_volume = request.level
+        logging.info(f"Volume padrão ajustado para {request.level} (sem conexões ativas)")
+        return {"status": "success", "message": f"Volume padrão ajustado para {int(request.level*100)}%"}
+          
+    # Atualizar volume para todos os players ativos
+    count = 0
+    for vc in bot.voice_clients:
+        player = get_player(vc.guild.id)
+        player.set_volume(request.level)
+        count += 1
+        
+    logging.info(f"Volume ajustado para {request.level} via API para {count} players")
+    return {"status": "success", "message": f"Volume ajustado para {int(request.level*100)}%"}
+
 
 @app.post("/api/set_token")
 async def set_token(request: dict = Body(...)):
@@ -2197,6 +1995,77 @@ async def set_token(request: dict = Body(...)):
         logging.error(f"Erro ao salvar token via API: {e}")
         raise HTTPException(status_code=500, detail="Falha ao salvar o token.")
 
+@app.post("/api/startup")
+async def startup_bot(request: dict = Body(...)):
+    """Inicia o bot com um novo token fornecido."""
+    global bot
+    token = request.get("token")
+    
+    if not token or len(token) < 50:
+        raise HTTPException(status_code=400, detail="Token não fornecido ou inválido.")
+    
+    if bot.is_ready():
+        raise HTTPException(status_code=400, detail="Bot já está online.")
+    
+    try:
+        save_token_to_json(token)
+        logging.info("Iniciando bot com novo token via API...")
+        asyncio.create_task(bot.start(token))
+        return {"status": "success", "message": "Bot iniciando com novo token..."}
+    except Exception as e:
+        logging.error(f"Erro ao iniciar bot: {e}")
+        raise HTTPException(status_code=500, detail="Falha ao iniciar o bot.")
+
+@app.post("/api/restart")
+async def restart_bot():
+    """Reinicia o bot com o token atual."""
+    global bot
+    
+    if not bot.is_ready():
+        raise HTTPException(status_code=400, detail="Bot não está online.")
+    
+    # Carregar token atual
+    token = load_token_from_json()
+    if not token:
+        token = os.getenv("DISCORD_TOKEN")
+    
+    if not token:
+        raise HTTPException(status_code=400, detail="Nenhum token configurado para reiniciar.")
+    
+    try:
+        logging.info("Reiniciando bot via API...")
+        # Desconectar do Discord
+        await bot.close()
+        
+        # Aguardar um pouco para limpeza
+        await asyncio.sleep(1)
+        
+        # Recriar o bot e iniciar novamente
+        bot = commands.Bot(command_prefix='/', intents=intents)
+        setup_bot()
+        asyncio.create_task(bot.start(token))
+        
+        return {"status": "success", "message": "Bot reiniciando..."}
+    except Exception as e:
+        logging.error(f"Erro ao reiniciar bot: {e}")
+        raise HTTPException(status_code=500, detail="Falha ao reiniciar o bot.")
+
+@app.post("/api/shutdown")
+async def shutdown_bot():
+    """Desliga o bot."""
+    global bot
+    
+    if not bot.is_ready():
+        raise HTTPException(status_code=400, detail="Bot não está online.")
+    
+    try:
+        logging.info("Desligando bot via API...")
+        await bot.close()
+        return {"status": "success", "message": "Bot desligado. A API continua rodando."}
+    except Exception as e:
+        logging.error(f"Erro ao desligar bot: {e}")
+        raise HTTPException(status_code=500, detail="Falha ao desligar o bot.")
+
 # ========================== INICIALIZAÇÃO ==========================
 
 from fastapi.staticfiles import StaticFiles
@@ -2218,6 +2087,11 @@ async def run_bot_and_api():
     token = load_token_from_json()
     if not token:
         token = os.getenv("DISCORD_TOKEN")
+    
+    # Se ainda não tem token, perguntar no terminal
+    if not token or not token.strip():
+        loop = asyncio.get_event_loop()
+        token = await loop.run_in_executor(None, prompt_token_terminal)
 
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
     server = uvicorn.Server(config)
@@ -2226,14 +2100,32 @@ async def run_bot_and_api():
     api_task = asyncio.create_task(server.serve())
 
     # Verifica se o token é válido antes de tentar iniciar o bot
-    if token and token not in ["SEU_TOKEN_AQUI", "SEU_TOKEN_DO_DISCORD_AQUI"]:
-        logging.info("Token do Discord encontrado. Iniciando o bot...")
-        # Inicia o bot em uma tarefa de fundo
-        bot_task = asyncio.create_task(bot.start(token))
-        await asyncio.gather(api_task, bot_task)
+    if token and token.strip() and token not in ["SEU_TOKEN_AQUI", "SEU_TOKEN_DO_DISCORD_AQUI", "your_discord_token_here"]:
+        async def run_bot_safe():
+            """Tenta iniciar o bot, mas não deixa a API morrer se falhar"""
+            try:
+                logging.info("Token do Discord encontrado. Iniciando o bot...")
+                await bot.start(token)
+            except discord.errors.LoginFailure as e:
+                logging.error(f"❌ Falha de autenticação do Discord: {e}")
+                logging.warning("Token inválido. A API web continua rodando, mas o bot está offline.")
+                logging.warning("Acesse a interface web para configurar um token válido.")
+            except discord.errors.PrivilegedIntentsRequired as e:
+                logging.error(f"❌ Intents não habilitados no Developer Portal: {e}")
+                logging.warning("📌 Acesse https://discord.com/developers/applications")
+                logging.warning("📌 Habilite: Message Content Intent e Presence Intent")
+                logging.warning("⏳ Aguardando token válido via interface web ou terminal...")
+            except Exception as e:
+                logging.error(f"❌ Erro ao iniciar o bot: {e}")
+                logging.warning("⏳ A API web continua rodando. Você pode tentar novamente via interface web.")
+        
+        # Iniciar o bot em background, NÃO bloquear a API
+        bot_task = asyncio.create_task(run_bot_safe())
+        # Apenas aguardarmos a API rodar - o bot roda independentemente
+        await api_task
     else:
-        logging.warning("Nenhum token válido do Discord encontrado. A API web está rodando, mas o bot está offline.")
-        logging.warning("Acesse a interface web para configurar o token.")
+        logging.warning("⏳ Nenhum token válido do Discord encontrado. A API web está rodando, mas o bot está offline.")
+        logging.warning("✨ Acesse a interface web (http://localhost:8000) para configurar o token.")
         await api_task
 
 if __name__ == "__main__":

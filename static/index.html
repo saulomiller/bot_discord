@@ -1,19 +1,22 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music Bot Controller</title>
-    <link rel="stylesheet" href="static/style.css">
+    <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
+
 <body>
 
+    <canvas id="liquid-canvas" class="liquid-background"></canvas>
     <div class="background-glow"></div>
 
     <div class="container">
-        
+
         <header class="app-header">
             <h1>🎵 Controller</h1>
             <div class="status-pill" id="status-indicator">
@@ -27,17 +30,35 @@
             <div class="card card-hero">
                 <div class="album-wrapper">
                     <img id="album-art-img" src="https://i.imgur.com/eF90msA.png" alt="Album Art">
+                    <!-- Audio Visualizer Overlay -->
+                    <div class="audio-visualizer" id="visualizer">
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                    </div>
                 </div>
                 <div class="track-details">
                     <h2 id="song-title">Nenhuma música</h2>
                     <p id="song-artist">Aguardando comando...</p>
-                    
+
                     <div class="media-controls">
                         <button id="pause-resume-btn" class="btn-circle" title="Play/Pause">
                             <i class="fa-solid fa-play"></i> </button>
                         <button id="skip-btn" class="btn-circle secondary" title="Pular">
                             <i class="fa-solid fa-forward"></i>
                         </button>
+                    </div>
+
+                    <!-- Volume Control -->
+                    <div class="volume-control-container">
+                        <i class="fa-solid fa-volume-low"></i>
+                        <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.5">
+                        <i class="fa-solid fa-volume-high"></i>
                     </div>
                 </div>
             </div>
@@ -62,18 +83,40 @@
 
             <div class="card card-settings">
                 <details>
-                    <summary>⚙️ Ajustes e Token</summary>
+                    <summary>⚙️ Ajustes e Playlist</summary>
                     <div class="settings-content">
+                        <div class="setting-group">
+                            <label>Upload Playlist (.txt)</label>
+                            <div class="file-input-wrapper">
+                                <input type="file" id="playlist-upload" accept=".txt">
+                                <button id="upload-playlist-btn" class="btn-small">Enviar</button>
+                            </div>
+                        </div>
+
+                        <!-- Playlist History -->
+                        <div class="setting-group" id="playlist-history-container" style="display:none;">
+                            <label>Histórico de Playlists</label>
+                            <ul id="playlist-history-list" class="simple-list"></ul>
+                        </div>
+
                         <div class="setting-group">
                             <label>Token Discord</label>
                             <input type="password" id="token-input" placeholder="Cole o token...">
-                            <button id="save-token-btn" class="btn-small">Salvar</button>
+                            <button id="save-token-btn" class="btn-small">Salvar Token</button>
                         </div>
+
                         <div class="setting-group">
-                            <label>Upload Playlist</label>
-                            <div class="file-input-wrapper">
-                                <input type="file" id="playlist-upload" accept=".txt">
-                                <button id="upload-playlist-btn" class="btn-small">Enviar .txt</button>
+                            <label>Controle do Bot</label>
+                            <div class="bot-control-buttons">
+                                <button id="init-token-btn" class="btn-small" title="Inicializar com novo token">
+                                    <i class="fa-solid fa-power-off"></i> Inicializar
+                                </button>
+                                <button id="restart-bot-btn" class="btn-small" title="Reiniciar o bot">
+                                    <i class="fa-solid fa-rotate-right"></i> Reiniciar
+                                </button>
+                                <button id="shutdown-bot-btn" class="btn-small danger" title="Desligar o bot">
+                                    <i class="fa-solid fa-stop"></i> Desligar
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -83,6 +126,8 @@
         </main>
     </div>
 
-    <script src="static/script.js"></script>
+    <div id="toast-container"></div>
+    <script src="script.js"></script>
 </body>
+
 </html>
