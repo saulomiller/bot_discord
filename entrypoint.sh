@@ -1,19 +1,20 @@
 #!/bin/bash
 
+# Garante que o diretório de dados exista
+mkdir -p /app/data/playlist
+
 # Garante que os arquivos json existam
-if [ ! -f /app/token.json ]; then
-    echo "{}" > /app/token.json
+if [ ! -f /app/data/token.json ]; then
+    echo "{}" > /app/data/token.json
 fi
 
-if [ ! -f /app/radios.json ]; then
-    echo "{}" > /app/radios.json
+if [ ! -f /app/data/radios.json ]; then
+    echo "{}" > /app/data/radios.json
 fi
 
 echo "Corrigindo permissões dos arquivos..."
 # Ajusta o dono dos arquivos para o usuário appuser
-chown -R appuser:appgroup /app/token.json
-chown -R appuser:appgroup /app/radios.json
-chown -R appuser:appgroup /app/playlist
+chown -R appuser:appgroup /app/data
 
 # Verifica se o arquivo do bot existe (para debug)
 if [ ! -f /app/bot.py ]; then
