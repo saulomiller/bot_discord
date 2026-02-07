@@ -2187,7 +2187,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=FileResponse)
 async def read_index():
-    return "static/index.html"
+    return FileResponse("static/index.html")
 
 async def run_bot_and_api():
     """Inicia o bot do Discord e o servidor da API."""
