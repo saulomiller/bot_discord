@@ -20,10 +20,5 @@ services:
     env_file:
       - .env # O token será lido daqui, preenchido pela UI
     volumes:
-      # Mapeia o arquivo .env do host para o contêiner.
-      # ESSENCIAL para persistir o token. Este arquivo é controlado pelo contêiner.
-      - ./token.json:/app/token.json
-      # Mapeia a pasta de playlists para persistência.
-      - ./playlist:/app/playlist
-      # Mapeia o arquivo de rádios para persistência.
-      - ./radios.json:/app/radios.json
+      # Mapeia a pasta de dados para persistência (token, playlists, radios)
+      - ./data:/app/data

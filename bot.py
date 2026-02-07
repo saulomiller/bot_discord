@@ -23,10 +23,30 @@ logging.getLogger("uvicorn.error").propagate = False
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # --- Gerenciamento de Token e Configuração ---
-TOKEN_FILE = "token.json"
+# --- Gerenciamento de Token e Configuração ---
+DATA_DIR = "data"
+TOKEN_FILE = os.path.join(DATA_DIR, "token.json")
+PLAYLIST_DIR = os.path.join(DATA_DIR, "playlist")
+RADIOS_FILE = os.path.join(DATA_DIR, "radios.json")
+
+# Garantir que o diretório de dados existe
+if not os.path.exists(DATA_DIR):
+    try:
+        os.makedirs(DATA_DIR)
+        logging.info(f"Diretório '{DATA_DIR}' criado com sucesso")
+    except Exception as e:
+        logging.error(f"Erro ao criar diretório '{DATA_DIR}': {e}")
+
+# Verificar se o diretório de playlists existe, caso contrário, criar
+if not os.path.exists(PLAYLIST_DIR):
+    try:
+        os.makedirs(PLAYLIST_DIR)
+        logging.info(f"Diretório '{PLAYLIST_DIR}' criado com sucesso")
+    except Exception as e:
+        logging.error(f"Erro ao criar diretório '{PLAYLIST_DIR}': {e}")
 
 def load_token_from_json():
-    """Carrega o token do arquivo token.json."""
+    """Carrega o token do arquivo data/token.json."""
     if os.path.exists(TOKEN_FILE):
         try:
             with open(TOKEN_FILE, "r") as f:
@@ -38,7 +58,9 @@ def load_token_from_json():
     return None
 
 def save_token_to_json(token: str):
-    """Salva o token no arquivo token.json."""
+    """Salva o token no arquivo data/token.json."""
+    if not os.path.exists(DATA_DIR):
+        os.makedirs(DATA_DIR)
     with open(TOKEN_FILE, "w") as f:
         json.dump({"DISCORD_TOKEN": token}, f)
 
@@ -130,29 +152,38 @@ resource_check_interval = 60
 cpu_usage = 0
 memory_usage = 0
 
-# Diretório para armazenar playlists
-PLAYLIST_DIR = "playlist"
-
 # Caminho para o executável do FFmpeg (será definido pela GUI)
 FFMPEG_PATH = None
-
-# Verificar se o diretório de playlists existe, caso contrário, criar
-if not os.path.exists(PLAYLIST_DIR):
-    try:
-        os.makedirs(PLAYLIST_DIR)
-        logging.info(f"Diretório '{PLAYLIST_DIR}' criado com sucesso")
-    except Exception as e:
-        logging.error(f"Erro ao criar diretório '{PLAYLIST_DIR}': {e}")
 
 # Carregar rádios do arquivo JSON
 def load_radios():
     """Carregar rádios do arquivo JSON"""
-    if os.path.exists("radios.json"):
+    # Tenta carregar do diretório de dados
+    if os.path.exists(RADIOS_FILE):
         try:
-            with open("radios.json", "r", encoding="utf-8") as f:
+            with open(RADIOS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            logging.error(f"Erro ao carregar rádios: {e}")
+            logging.error(f"Erro ao carregar rádios de {RADIOS_FILE}: {e}")
+            
+    # Fallback: Tenta carregar da raiz se não existir em data/ (para compatibilidade ou primeira execução)
+    if os.path.exists("radios.json"):
+        try:
+            logging.info("Carregando radios.json da raiz e copiando para data/radios.json")
+            with open("radios.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # Salvar no novo local para o futuro
+            try:
+                if not os.path.exists(DATA_DIR):
+                    os.makedirs(DATA_DIR)
+                with open(RADIOS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=4)
+            except Exception as e:
+                logging.warning(f"Não foi possível migrar radios.json para data/: {e}")
+            return data
+        except Exception as e:
+            logging.error(f"Erro ao carregar rádios da raiz: {e}")
+            
     return {}
 
 # Dicionário de rádios disponíveis
@@ -1846,33 +1877,98 @@ class VolumeRequest(BaseModel):
 @app.get("/api/status")
 async def get_status():
     """Retorna o status atual do bot."""
-    # Extrair informações da música atual de forma segura
-    current_song_info = None
-    if current_song:
-        try:
-            title, _, thumbnail, user, duration, channel = current_song
-            current_song_info = {
-                "title": title,
-                "thumbnail": thumbnail,
-                "user": user.display_name if hasattr(user, 'display_name') else "Desconhecido",
-                "duration": duration,
-                "channel": channel
-            }
-        except (ValueError, TypeError):
-            current_song_info = {"title": "Informações da música indisponíveis"}
+    # Tentar obter o player ativo (assumindo single-guild ou o primeiro disponível para a API)
+    player = None
+    if bot.voice_clients:
+        vc = bot.voice_clients[0]
+        player = get_player(vc.guild.id)
+    
+    # Valores padrão (globais legacy)
+    stat_current_song = current_song
+    stat_queue = song_queue
+    stat_volume = current_volume
+    stat_paused = is_paused
+    stat_loop = is_looping
+    stat_shuffle = is_shuffling
+    
+    # Se houver player ativo, usar seus dados
+    if player:
+        stat_current_song = player.current_song
+        stat_queue = player.queue
+        stat_volume = player.volume
+        stat_paused = player.is_paused
+        stat_loop = player.is_looping
+        stat_shuffle = player.is_shuffling
 
-    # Extrair informações da fila de forma segura
-    queue_info = []
-    for song in song_queue[:10]: # Limitar a 10 para não sobrecarregar
+    # Processar current_song (pode ser dict ou tuple)
+    current_song_info = None
+    if stat_current_song:
         try:
-            title, _, _, user, duration, _ = song
-            queue_info.append({
-                "title": title,
-                "user": user.display_name if hasattr(user, 'display_name') else "Desconhecido",
-                "duration": duration
-            })
-        except (ValueError, TypeError):
-            queue_info.append({"title": "Informações da música indisponíveis"})
+            if isinstance(stat_current_song, dict):
+                # Formato MusicPlayer (dict)
+                current_song_info = {
+                    "title": stat_current_song.get('title', 'Desconhecido'),
+                    "thumbnail": stat_current_song.get('thumbnail', ''),
+                    "user": str(stat_current_song.get('user', 'Desconhecido')),
+                    "duration": stat_current_song.get('duration', 'Desconhecida'),
+                    "channel": stat_current_song.get('channel', 'Desconhecido')
+                }
+                # Tentar obter display_name se user for objeto
+                u = stat_current_song.get('user')
+                if hasattr(u, 'display_name'):
+                    current_song_info['user'] = u.display_name
+                    
+            elif isinstance(stat_current_song, (list, tuple)):
+                # Formato Legacy (tuple)
+                if len(stat_current_song) >= 6:
+                    title, _, thumbnail, user, duration, channel = stat_current_song
+                else:
+                    title, _, thumbnail, user = stat_current_song
+                    duration = "Desconhecida"
+                    channel = "Desconhecido"
+                    
+                current_song_info = {
+                    "title": title,
+                    "thumbnail": thumbnail,
+                    "user": user.display_name if hasattr(user, 'display_name') else "Desconhecido",
+                    "duration": duration,
+                    "channel": channel
+                }
+        except Exception as e:
+            logging.error(f"Erro ao processar current_song: {e}")
+            current_song_info = {"title": "Erro ao ler música"}
+
+    # Processar fila
+    queue_info = []
+    # Converter deque para lista se necessário e pegar os primeiros 10
+    display_queue = list(stat_queue)[:10]
+    
+    for song in display_queue:
+        try:
+            if isinstance(song, dict):
+                # Formato MusicPlayer
+                u = song.get('user')
+                user_name = u.display_name if hasattr(u, 'display_name') else str(u)
+                queue_info.append({
+                    "title": song.get('title', 'Desconhecido'),
+                    "user": user_name,
+                    "duration": song.get('duration', '?')
+                })
+            elif isinstance(song, (list, tuple)):
+                # Formato Legacy
+                if len(song) >= 6:
+                    title, _, _, user, duration, _ = song
+                else:
+                    title, _, _, user = song
+                    duration = "?"
+                
+                queue_info.append({
+                    "title": title,
+                    "user": user.display_name if hasattr(user, 'display_name') else "Desconhecido",
+                    "duration": duration
+                })
+        except Exception:
+            queue_info.append({"title": "Erro na fila"})
 
     return {
         "bot_user": str(bot.user),
@@ -1880,10 +1976,10 @@ async def get_status():
         "guilds": len(bot.guilds),
         "current_song": current_song_info,
         "queue": queue_info,
-        "volume": current_volume,
-        "is_looping": is_looping,
-        "is_shuffling": is_shuffling,
-        "is_paused": is_paused,
+        "volume": stat_volume,
+        "is_looping": stat_loop,
+        "is_shuffling": stat_shuffle,
+        "is_paused": stat_paused,
         "voice_connections": len(bot.voice_clients)
     }
 
@@ -1989,16 +2085,18 @@ async def set_token(request: dict = Body(...)):
 
         if bot.is_ready():
             logging.info("Bot já está online. Tentando reiniciar com o novo token...")
-            asyncio.create_task(bot.close())
-            bot = commands.Bot(command_prefix='/', intents=intents)
-            setup_bot() # Reconfigura todos os comandos e eventos no novo objeto bot
-            asyncio.create_task(bot.start(token))
-            return {"status": "success", "message": "Token atualizado. Bot reiniciando..."}
-        else:
-            # Se o bot não está online, iniciamos ele pela primeira vez.
-            logging.info("Bot está offline. Iniciando com o novo token...")
-            asyncio.create_task(bot.start(token))
-            return {"status": "success", "message": "Token salvo. Bot iniciando..."}
+            await bot.close()
+            # Aguardar um momento para garantir fechamento
+            await asyncio.sleep(1)
+            
+        # SEMPRE recriar a instância do bot ao iniciar/reiniciar para evitar Session is closed
+        # O objeto bot antigo não pode ser reutilizado se close() foi chamado
+        bot = commands.Bot(command_prefix='/', intents=intents)
+        setup_bot() # Reconfigura todos os comandos e eventos no novo objeto bot
+        
+        logging.info("Iniciando bot com o novo token...")
+        asyncio.create_task(bot.start(token))
+        return {"status": "success", "message": "Token atualizado e bot reiniciando..."}
 
     except Exception as e:
         logging.error(f"Erro ao salvar token via API: {e}")
@@ -2019,6 +2117,11 @@ async def startup_bot(request: dict = Body(...)):
     try:
         save_token_to_json(token)
         logging.info("Iniciando bot com novo token via API...")
+        
+        # Garantir nova instância
+        bot = commands.Bot(command_prefix='/', intents=intents)
+        setup_bot()
+        
         asyncio.create_task(bot.start(token))
         return {"status": "success", "message": "Bot iniciando com novo token..."}
     except Exception as e:
@@ -2030,9 +2133,6 @@ async def restart_bot():
     """Reinicia o bot com o token atual."""
     global bot
     
-    if not bot.is_ready():
-        raise HTTPException(status_code=400, detail="Bot não está online.")
-    
     # Carregar token atual
     token = load_token_from_json()
     if not token:
@@ -2043,11 +2143,10 @@ async def restart_bot():
     
     try:
         logging.info("Reiniciando bot via API...")
-        # Desconectar do Discord
-        await bot.close()
-        
-        # Aguardar um pouco para limpeza
-        await asyncio.sleep(1)
+        if bot.is_ready() or not bot.is_closed():
+             # Desconectar do Discord se estiver conectado
+            await bot.close()
+            await asyncio.sleep(1)
         
         # Recriar o bot e iniciar novamente
         bot = commands.Bot(command_prefix='/', intents=intents)
