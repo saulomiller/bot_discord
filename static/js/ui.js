@@ -99,5 +99,22 @@ export const UI = {
         if (this.elements.player.volumeSlider) {
             this.elements.player.volumeSlider.value = vol;
         }
+    },
+
+    updatePlaylistList(playlists) {
+        const listEl = document.getElementById('playlist-history-list');
+        if (!listEl) return;
+
+        if (!playlists || playlists.length === 0) {
+            listEl.innerHTML = '<li class="empty-state">Nenhuma playlist salva.</li>';
+            return;
+        }
+
+        listEl.innerHTML = playlists.map(name =>
+            `<li class="playlist-item">
+                <i class="fa-solid fa-music"></i>
+                <span>${name}</span>
+            </li>`
+        ).join('');
     }
 };

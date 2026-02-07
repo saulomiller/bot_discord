@@ -2174,6 +2174,57 @@ async def shutdown_bot():
         logging.error(f"Erro ao desligar bot: {e}")
         raise HTTPException(status_code=500, detail="Falha ao desligar o bot.")
 
+@app.post("/api/upload_playlist")
+async def upload_playlist(file: bytes = Body(...), filename: str = Body(...)):
+    """Faz upload de um arquivo de playlist .txt"""
+    try:
+        # Validar extensão
+        if not filename.endswith('.txt'):
+            raise HTTPException(status_code=400, detail="Apenas arquivos .txt são permitidos.")
+        
+        # Garantir que o diretório existe
+        if not os.path.exists(PLAYLIST_DIR):
+            os.makedirs(PLAYLIST_DIR)
+        
+        # Salvar arquivo
+        file_path = os.path.join(PLAYLIST_DIR, filename)
+        
+        # Decodificar bytes para string
+        content = file.decode('utf-8')
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        logging.info(f"Playlist '{filename}' salva com sucesso via API")
+        
+        # Retornar lista de playlists disponíveis
+        playlists = [f for f in os.listdir(PLAYLIST_DIR) if f.endswith('.txt')]
+        
+        return {
+            "status": "success",
+            "message": f"Playlist '{filename}' salva com sucesso!",
+            "playlists": playlists
+        }
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Erro ao decodificar arquivo. Certifique-se de que é UTF-8.")
+    except Exception as e:
+        logging.error(f"Erro ao fazer upload de playlist: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar playlist: {str(e)}")
+
+@app.get("/api/playlists")
+async def get_playlists():
+    """Retorna a lista de playlists disponíveis"""
+    try:
+        if not os.path.exists(PLAYLIST_DIR):
+            os.makedirs(PLAYLIST_DIR)
+        
+        playlists = [f for f in os.listdir(PLAYLIST_DIR) if f.endswith('.txt')]
+        return {"playlists": playlists}
+    except Exception as e:
+        logging.error(f"Erro ao listar playlists: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao listar playlists.")
+
+
 # ========================== INICIALIZAÇÃO ==========================
 
 from fastapi.staticfiles import StaticFiles

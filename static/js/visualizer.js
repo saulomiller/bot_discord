@@ -32,22 +32,26 @@ export class AudioReactiveBackground {
                 width: barWidth - 2,
                 height: 0,
                 targetHeight: 0,
-                hue: (i / barCount) * 360,
-                speed: 0.1 + Math.random() * 0.2
+                // Cores da GUI: azul (210°) a ciano (180°) a roxo (270°)
+                hue: 180 + (i / barCount) * 90, // 180° a 270° (ciano → azul → roxo)
+                speed: 0.1 + Math.random() * 0.2,
+                phase: Math.random() * Math.PI * 2 // Fase aleatória para ondas
             });
         }
     }
 
     animate() {
+        // Gradiente de fundo mais escuro e sutil
         const backgroundGradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
         backgroundGradient.addColorStop(0, 'rgba(10, 15, 35, 1)');
-        backgroundGradient.addColorStop(0.5, 'rgba(20, 25, 50, 1)');
+        backgroundGradient.addColorStop(0.5, 'rgba(15, 20, 45, 1)');
         backgroundGradient.addColorStop(1, 'rgba(10, 15, 35, 1)');
 
         this.ctx.fillStyle = backgroundGradient;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         if (this.isPlaying) {
+            // Modo tocando: animação energética
             const time = Date.now() * 0.002;
             for (let i = 0; i < this.bars.length; i++) {
                 const positionFactor = i / this.bars.length;
@@ -58,8 +62,16 @@ export class AudioReactiveBackground {
                 this.bars[i].targetHeight = value * this.canvas.height * 0.4 * (this.currentVolume + 0.5);
             }
         } else {
-            for (let bar of this.bars) {
-                bar.targetHeight = 5;
+            // Modo idle: ondas suaves e lentas
+            const time = Date.now() * 0.0005; // Mais lento
+            for (let i = 0; i < this.bars.length; i++) {
+                const positionFactor = i / this.bars.length;
+                // Onda senoidal suave que percorre as barras
+                const wave1 = Math.sin(time * 2 + positionFactor * Math.PI * 2 + this.bars[i].phase);
+                const wave2 = Math.sin(time * 1.5 - positionFactor * Math.PI * 3);
+                const combined = (wave1 * 0.6 + wave2 * 0.4);
+                // Altura entre 15% e 35% da tela
+                this.bars[i].targetHeight = (0.15 + combined * 0.1) * this.canvas.height;
             }
         }
 
@@ -69,35 +81,43 @@ export class AudioReactiveBackground {
 
     drawBars() {
         const centerY = this.canvas.height * 0.5;
-        const smoothing = 0.2;
+        const smoothing = this.isPlaying ? 0.2 : 0.05; // Mais suave quando idle
 
         for (let bar of this.bars) {
             bar.height = bar.height * (1 - smoothing) + bar.targetHeight * smoothing;
+
+            // Cores da GUI com saturação ajustada
+            const saturation = this.isPlaying ? 100 : 70; // Menos saturado quando idle
+            const lightness = this.isPlaying ? 65 : 55; // Mais escuro quando idle
+            const alpha = this.isPlaying ? 0.8 : 0.5; // Mais transparente quando idle
 
             const gradient = this.ctx.createLinearGradient(
                 bar.x, centerY - bar.height,
                 bar.x, centerY
             );
 
-            gradient.addColorStop(0, `hsla(${bar.hue}, 100%, 65%, 0.8)`);
-            gradient.addColorStop(1, `hsla(${bar.hue}, 100%, 45%, 0.2)`);
+            gradient.addColorStop(0, `hsla(${bar.hue}, ${saturation}%, ${lightness}%, ${alpha})`);
+            gradient.addColorStop(1, `hsla(${bar.hue}, ${saturation}%, ${lightness - 20}%, ${alpha * 0.3})`);
 
             this.ctx.fillStyle = gradient;
             this.ctx.fillRect(bar.x, centerY - bar.height, bar.width, bar.height);
 
+            // Reflexo
             const gradientReflect = this.ctx.createLinearGradient(
                 bar.x, centerY,
                 bar.x, centerY + bar.height
             );
 
-            gradientReflect.addColorStop(0, `hsla(${bar.hue}, 100%, 45%, 0.2)`);
-            gradientReflect.addColorStop(1, `hsla(${bar.hue}, 100%, 20%, 0)`);
+            gradientReflect.addColorStop(0, `hsla(${bar.hue}, ${saturation}%, ${lightness - 20}%, ${alpha * 0.3})`);
+            gradientReflect.addColorStop(1, `hsla(${bar.hue}, ${saturation}%, 20%, 0)`);
 
             this.ctx.fillStyle = gradientReflect;
             this.ctx.fillRect(bar.x, centerY, bar.width, bar.height);
         }
 
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        // Linha central mais sutil
+        this.ctx.strokeStyle = this.isPlaying ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)';
+        this.ctx.lineWidth = 1;
         this.ctx.beginPath();
         this.ctx.moveTo(0, centerY);
         this.ctx.lineTo(this.canvas.width, centerY);
@@ -109,3 +129,4 @@ export class AudioReactiveBackground {
         if (volume) this.currentVolume = volume;
     }
 }
+

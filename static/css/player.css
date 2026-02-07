@@ -52,7 +52,8 @@
 }
 
 /* Aplica giro APENAS quando tocando */
-.playing .album-wrapper img {
+.card-hero.playing .album-wrapper img,
+.card-hero.playing #album-art-img {
     animation: spinRecord 4s linear infinite;
 }
 

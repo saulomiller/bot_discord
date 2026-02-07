@@ -30,6 +30,7 @@ export const API = {
     skip: () => apiFetch(`${CONFIG.API_BASE}/skip`, { method: 'POST' }),
     setVolume: (level) => apiFetch(`${CONFIG.API_BASE}/volume`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level })
     }),
     setToken: (token) => apiFetch(`${CONFIG.API_BASE}/set_token`, {
@@ -43,5 +44,29 @@ export const API = {
         body: JSON.stringify({ token })
     }),
     restart: () => apiFetch(`${CONFIG.API_BASE}/restart`, { method: 'POST' }),
-    shutdown: () => apiFetch(`${CONFIG.API_BASE}/shutdown`, { method: 'POST' })
+    shutdown: () => apiFetch(`${CONFIG.API_BASE}/shutdown`, { method: 'POST' }),
+    uploadPlaylist: async (file) => {
+        const reader = new FileReader();
+        return new Promise((resolve, reject) => {
+            reader.onload = async (e) => {
+                try {
+                    const content = e.target.result;
+                    const res = await apiFetch(`${CONFIG.API_BASE}/upload_playlist`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            file: btoa(unescape(encodeURIComponent(content))),
+                            filename: file.name
+                        })
+                    });
+                    resolve(res);
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            reader.onerror = reject;
+            reader.readAsText(file);
+        });
+    },
+    getPlaylists: () => apiFetch(`${CONFIG.API_BASE}/playlists`)
 };

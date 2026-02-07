@@ -290,3 +290,59 @@ details[open] summary {
 .bot-control-buttons .btn-small i {
     font-size: 12px;
 }
+
+/* --- Playlist Items --- */
+.simple-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.playlist-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    font-size: 13px;
+    transition: background 0.2s, transform 0.1s;
+    cursor: pointer;
+}
+
+.playlist-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(2px);
+}
+
+.playlist-item i {
+    color: var(--accent-color);
+    font-size: 14px;
+}
+
+.playlist-item span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 13px;
+    padding: 20px;
+    font-style: italic;
+}
+
+.playlist-history-section {
+    margin-top: 16px;
+}
+
+.playlist-history-section label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}

@@ -31,7 +31,218 @@ async function updateStatusLoop() {
     }
 }
 
-// ... (EventListeners omitted for brevity, verify they are correct) ...
+// --- Event Listeners ---
+function setupEventListeners() {
+    // Toggle Sidebar
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const closeSidebarBtn = document.getElementById('close-sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+
+    if (toggleBtn) toggleBtn.addEventListener('click', () => UI.toggleSidebar());
+    if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', () => UI.toggleSidebar());
+    if (overlay) overlay.addEventListener('click', () => UI.toggleSidebar());
+
+    // Token Management
+    const saveTokenBtn = document.getElementById('save-token-btn');
+    if (saveTokenBtn) {
+        saveTokenBtn.addEventListener('click', async () => {
+            const tokenInput = document.getElementById('token-input');
+            const token = tokenInput.value.trim();
+            if (!token) return UI.showToast('Por favor, insira um token.', 'error');
+
+            try {
+                await API.setToken(token);
+                UI.showToast('Token salvo! Reiniciando bot...', 'success');
+                tokenInput.value = '';
+            } catch (e) {
+                UI.showToast(e.message, 'error');
+            }
+        });
+    }
+
+    // Bot Control
+    const initBtn = document.getElementById('init-token-btn');
+    if (initBtn) {
+        initBtn.addEventListener('click', async () => {
+            const tokenInput = document.getElementById('token-input');
+            const token = tokenInput.value.trim();
+            try {
+                await API.startup(token || undefined); // Envia token se houver, ou a API usa o salvo
+                UI.showToast('Inicializando bot...', 'success');
+            } catch (e) {
+                UI.showToast(e.message, 'error');
+            }
+        });
+    }
+
+    const restartBtn = document.getElementById('restart-bot-btn');
+    if (restartBtn) {
+        restartBtn.addEventListener('click', async () => {
+            if (!confirm('Deseja realmente reiniciar o bot?')) return;
+            try {
+                await API.restart();
+                UI.showToast('Reiniciando sistema...', 'info');
+            } catch (e) {
+                UI.showToast(e.message, 'error');
+            }
+        });
+    }
+
+    const shutdownBtn = document.getElementById('shutdown-bot-btn');
+    if (shutdownBtn) {
+        shutdownBtn.addEventListener('click', async () => {
+            if (!confirm('Deseja desligar o bot? A música irá parar.')) return;
+            try {
+                await API.shutdown();
+                UI.showToast('Bot desligado.', 'error');
+            } catch (e) {
+                UI.showToast(e.message, 'error');
+            }
+        });
+    }
+
+    // Media Controls
+    const playPauseBtn = document.getElementById('pause-resume-btn');
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener('click', async () => {
+            // Usa o estado global isPaused
+            try {
+                if (isPaused) {
+                    await API.resume();
+                    UI.showToast('Retomado', 'success');
+                } else {
+                    await API.pause();
+                    UI.showToast('Pausado', 'info');
+                }
+                // O updateStatusLoop vai atualizar o ícone
+            } catch (e) {
+                UI.showToast(e.message, 'error');
+            }
+        });
+    }
+
+    const skipBtn = document.getElementById('skip-btn');
+    if (skipBtn) {
+        skipBtn.addEventListener('click', async () => {
+            try {
+                await API.skip();
+                UI.showToast('Música pulada', 'success');
+            } catch (e) {
+                UI.showToast(e.message, 'error');
+            }
+        });
+    }
+
+    // Music Input
+    const musicInput = document.getElementById('music-input');
+    const playInputBtn = document.getElementById('play-btn');
+    const clearSearchBtn = document.getElementById('clear-search-btn');
+
+    async function handlePlay() {
+        if (!musicInput) return;
+        const query = musicInput.value.trim();
+        if (!query) return;
+
+        try {
+            await API.play(query);
+            UI.showToast('Adicionado à fila!', 'success');
+            musicInput.value = '';
+            if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+        } catch (e) {
+            UI.showToast(e.message, 'error');
+        }
+    }
+
+    if (playInputBtn) {
+        playInputBtn.addEventListener('click', handlePlay);
+    }
+
+    if (musicInput) {
+        musicInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handlePlay();
+        });
+
+        musicInput.addEventListener('input', (e) => {
+            if (clearSearchBtn) {
+                clearSearchBtn.style.display = e.target.value.trim() ? 'block' : 'none';
+            }
+        });
+    }
+
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', () => {
+            if (musicInput) {
+                musicInput.value = '';
+                musicInput.focus();
+            }
+            clearSearchBtn.style.display = 'none';
+        });
+    }
+
+    // Playlist Upload
+    const dropZone = document.getElementById('drop-zone');
+    const playlistUpload = document.getElementById('playlist-upload');
+
+    async function handleFileUpload(file) {
+        if (!file) return;
+
+        if (!file.name.endsWith('.txt')) {
+            UI.showToast('Apenas arquivos .txt são permitidos!', 'error');
+            return;
+        }
+
+        try {
+            UI.showToast('Enviando playlist...', 'info');
+            const result = await API.uploadPlaylist(file);
+            UI.showToast(result.message || 'Playlist salva!', 'success');
+
+            // Atualizar lista de playlists
+            if (result.playlists) {
+                UI.updatePlaylistList(result.playlists);
+            }
+        } catch (e) {
+            UI.showToast(e.message || 'Erro ao enviar playlist', 'error');
+        }
+    }
+
+    if (dropZone) {
+        // Click para abrir seletor
+        dropZone.addEventListener('click', () => {
+            if (playlistUpload) playlistUpload.click();
+        });
+
+        // Drag & Drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+        });
+    }
+
+    if (playlistUpload) {
+        playlistUpload.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+            // Limpar input para permitir re-upload do mesmo arquivo
+            e.target.value = '';
+        });
+    }
+}
 
 // Início
 document.addEventListener('DOMContentLoaded', () => {
@@ -46,4 +257,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     updateStatusLoop();
     setInterval(updateStatusLoop, CONFIG.POLLING_INTERVAL);
+
+    // Carregar lista de playlists
+    API.getPlaylists().then(data => {
+        if (data.playlists) {
+            UI.updatePlaylistList(data.playlists);
+        }
+    }).catch(err => {
+        console.warn('Erro ao carregar playlists:', err);
+    });
 });
