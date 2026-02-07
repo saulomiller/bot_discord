@@ -51,24 +51,26 @@ export class AudioReactiveBackground {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         if (this.isPlaying) {
-            // Modo tocando: animação energética
-            const time = Date.now() * 0.002;
+            // Modo tocando: animação energética mas no ritmo
+            const time = Date.now() * 0.0008; // Reduzido de 0.002 para 0.0008 (60% mais lento)
             for (let i = 0; i < this.bars.length; i++) {
                 const positionFactor = i / this.bars.length;
-                const beat = Math.sin(time * 2) * 0.2;
-                const noise = Math.sin(time * 5 + i * 0.5) * Math.cos(time * 3 + i * 0.2);
+                // Beat mais lento e pronunciado (como batida de música)
+                const beat = Math.sin(time * 1.2) * 0.3; // Reduzido de 2 para 1.2
+                // Variação mais suave
+                const noise = Math.sin(time * 2.5 + i * 0.5) * Math.cos(time * 1.5 + i * 0.2); // Reduzido
                 let amplitude = (1.0 - positionFactor * 0.5) * 0.8;
-                let value = Math.max(0, amplitude + noise * 0.3 + beat);
+                let value = Math.max(0, amplitude + noise * 0.2 + beat); // Reduzido noise de 0.3 para 0.2
                 this.bars[i].targetHeight = value * this.canvas.height * 0.4 * (this.currentVolume + 0.5);
             }
         } else {
             // Modo idle: ondas suaves e lentas
-            const time = Date.now() * 0.0005; // Mais lento
+            const time = Date.now() * 0.0003; // Reduzido de 0.0005 para 0.0003 (40% mais lento)
             for (let i = 0; i < this.bars.length; i++) {
                 const positionFactor = i / this.bars.length;
                 // Onda senoidal suave que percorre as barras
-                const wave1 = Math.sin(time * 2 + positionFactor * Math.PI * 2 + this.bars[i].phase);
-                const wave2 = Math.sin(time * 1.5 - positionFactor * Math.PI * 3);
+                const wave1 = Math.sin(time * 1.5 + positionFactor * Math.PI * 2 + this.bars[i].phase); // Reduzido de 2 para 1.5
+                const wave2 = Math.sin(time * 1.0 - positionFactor * Math.PI * 3); // Reduzido de 1.5 para 1.0
                 const combined = (wave1 * 0.6 + wave2 * 0.4);
                 // Altura entre 15% e 35% da tela
                 this.bars[i].targetHeight = (0.15 + combined * 0.1) * this.canvas.height;
