@@ -29,6 +29,11 @@ async function updateStatusLoop() {
         if (!isDraggingVolume && typeof data.volume === 'number') {
             UI.setVolumeVisual(data.volume);
         }
+
+        // Atualizar Guild ID do soundboard se disponível
+        if (soundboardManager && data.guild_id) {
+            soundboardManager.currentGuildId = data.guild_id;
+        }
     } catch (err) {
         console.warn('Connection lost', err);
         // UI.showToast('Conexão perdida...', 'error');

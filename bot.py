@@ -2133,6 +2133,7 @@ async def get_status():
         "bot_user": str(bot.user),
         "is_ready": bot.is_ready(),
         "guilds": len(bot.guilds),
+        "guild_id": bot.voice_clients[0].guild.id if bot.voice_clients else None,
         "current_song": current_song_info,
         "queue": queue_info,
         "volume": stat_volume,
