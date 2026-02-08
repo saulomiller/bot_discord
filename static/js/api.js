@@ -86,5 +86,37 @@ export const API = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ radio_id: radioId })
+    }),
+
+    // Soundboard Management
+    getSoundboard: () => apiFetch(`${CONFIG.API_BASE}/soundboard`),
+    uploadSoundboard: async (formData) => {
+        const res = await fetch(`${CONFIG.API_BASE}/soundboard/upload`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ detail: res.statusText }));
+            throw new Error(error.detail || 'Erro no upload');
+        }
+        return await res.json();
+    },
+    playSoundboard: (guildId, sfxId) => apiFetch(`${CONFIG.API_BASE}/soundboard/play`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guild_id: guildId, sfx_id: sfxId })
+    }),
+    deleteSoundboard: (sfxId) => apiFetch(`${CONFIG.API_BASE}/soundboard/${sfxId}`, {
+        method: 'DELETE'
+    }),
+    toggleFavoriteSoundboard: (sfxId, favorite) => apiFetch(`${CONFIG.API_BASE}/soundboard/${sfxId}/favorite`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sfx_id: sfxId, favorite })
+    }),
+    updateVolumeSoundboard: (sfxId, volume) => apiFetch(`${CONFIG.API_BASE}/soundboard/${sfxId}/volume`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sfx_id: sfxId, volume })
     })
 };

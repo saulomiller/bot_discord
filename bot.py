@@ -12,7 +12,7 @@ from cachetools import TTLCache
 import psutil
 import time
 from functools import lru_cache
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, UploadFile, File
 from pydantic import BaseModel
 import uvicorn
 from player import MusicPlayer
@@ -188,6 +188,64 @@ def load_radios():
 
 # Dicionário de rádios disponíveis
 RADIOS = load_radios()
+
+# Soundboard configuration
+SOUNDBOARD_DIR = os.path.join(DATA_DIR, "soundboard")
+SOUNDBOARD_METADATA_FILE = os.path.join(SOUNDBOARD_DIR, "metadata.json")
+
+# Garantir que o diretório soundboard existe
+if not os.path.exists(SOUNDBOARD_DIR):
+    try:
+        os.makedirs(SOUNDBOARD_DIR)
+        logging.info(f"Diretório '{SOUNDBOARD_DIR}' criado com sucesso")
+    except Exception as e:
+        logging.error(f"Erro ao criar diretório '{SOUNDBOARD_DIR}': {e}")
+
+def load_soundboard_metadata():
+    """Carregar metadata do soundboard (favoritos, volume, etc)"""
+    if os.path.exists(SOUNDBOARD_METADATA_FILE):
+        try:
+            with open(SOUNDBOARD_METADATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"Erro ao carregar metadata do soundboard: {e}")
+    return {"soundboard": []}
+
+def save_soundboard_metadata(metadata):
+    """Salvar metadata do soundboard"""
+    try:
+        with open(SOUNDBOARD_METADATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"Erro ao salvar metadata do soundboard: {e}")
+
+def get_sfx_metadata(sfx_id):
+    """Obter metadata de um efeito sonoro específico"""
+    metadata = load_soundboard_metadata()
+    for sfx in metadata.get("soundboard", []):
+        if sfx.get("id") == sfx_id:
+            return sfx
+    return {"id": sfx_id, "favorite": False, "volume": 1.0}
+
+def update_sfx_metadata(sfx_id, updates):
+    """Atualizar metadata de um efeito sonoro"""
+    metadata = load_soundboard_metadata()
+    soundboard = metadata.get("soundboard", [])
+    
+    # Procurar SFX existente
+    for sfx in soundboard:
+        if sfx.get("id") == sfx_id:
+            sfx.update(updates)
+            save_soundboard_metadata(metadata)
+            return sfx
+    
+    # Se não existir, criar novo
+    new_sfx = {"id": sfx_id, "favorite": False, "volume": 1.0}
+    new_sfx.update(updates)
+    soundboard.append(new_sfx)
+    metadata["soundboard"] = soundboard
+    save_soundboard_metadata(metadata)
+    return new_sfx
 
 # --- Classe Utilitária para Embeds ---
 class EmbedBuilder:
@@ -1588,6 +1646,84 @@ def setup_bot():
             color=discord.Color.green()
         ))
 
+    # ========================== SOUNDBOARD COMMANDS ==========================
+
+    async def sfx_autocomplete(
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Autocomplete para listar SFX disponíveis"""
+        from pathlib import Path
+        choices = []
+        
+        try:
+            for file in Path(SOUNDBOARD_DIR).glob("*"):
+                if file.suffix.lower() in ['.mp3', '.wav', '.ogg', '.m4a']:
+                    name = file.stem
+                    if current.lower() in name.lower():
+                        choices.append(app_commands.Choice(name=name, value=name))
+        except Exception as e:
+            logging.error(f"Erro no autocomplete de SFX: {e}")
+        
+        return choices[:25]  # Discord limita a 25
+
+    @bot.tree.command(name="sfx", description="Toca um efeito sonoro")
+    @app_commands.describe(nome="Nome do efeito sonoro")
+    @app_commands.autocomplete(nome=sfx_autocomplete)
+    async def sfx_command(interaction: discord.Interaction, nome: str):
+        """Comando para tocar SFX - COM EMBED EFÊMERO"""
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            from pathlib import Path
+            
+            # Verificar se bot está em canal de voz
+            player = get_player(interaction.guild_id)
+            if not player or not player.voice_client:
+                await interaction.followup.send(
+                    "❌ Bot não está em canal de voz",
+                    ephemeral=True
+                )
+                return
+            
+            # Buscar arquivo
+            sfx_path = None
+            for ext in ['.mp3', '.wav', '.ogg', '.m4a']:
+                path = Path(SOUNDBOARD_DIR) / f"{nome}{ext}"
+                if path.exists():
+                    sfx_path = str(path)
+                    break
+            
+            if not sfx_path:
+                await interaction.followup.send(
+                    f"❌ Efeito '{nome}' não encontrado",
+                    ephemeral=True
+                )
+                return
+            
+            # Obter volume configurado
+            metadata = get_sfx_metadata(nome)
+            volume = metadata.get("volume", 1.0)
+            
+            # Tocar SFX
+            await player.play_soundboard(sfx_path, volume=volume)
+            
+            # EMBED EFÊMERO mostrando quem pediu
+            embed = discord.Embed(
+                description=f"🔊 {interaction.user.mention} pediu: **{nome}**",
+                color=discord.Color.from_rgb(147, 112, 219)
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+            logging.info(f"SFX '{nome}' tocado por {interaction.user.name}")
+            
+        except Exception as e:
+            logging.error(f"Erro ao tocar SFX: {e}")
+            await interaction.followup.send(
+                f"❌ Erro ao tocar efeito: {str(e)}",
+                ephemeral=True
+            )
+
 # Configurar o bot na inicialização
 setup_bot()
 
@@ -1884,6 +2020,18 @@ class RadioRemoveRequest(BaseModel):
 class RadioPlayRequest(BaseModel):
     radio_id: str
 
+# Soundboard request models
+class SoundboardPlayRequest(BaseModel):
+    guild_id: int
+    sfx_id: str
+
+class SoundboardFavoriteRequest(BaseModel):
+    sfx_id: str
+    favorite: bool
+
+class SoundboardVolumeRequest(BaseModel):
+    sfx_id: str
+    volume: float
 
 @app.get("/api/status")
 async def get_status():
@@ -2367,6 +2515,199 @@ async def play_radio(request: RadioPlayRequest):
     except Exception as e:
         logging.error(f"Erro ao tocar rádio: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao tocar rádio: {str(e)}")
+
+
+# ========================== SOUNDBOARD API ==========================
+
+@app.get("/api/soundboard")
+async def get_soundboard():
+    """Lista todos os efeitos sonoros disponíveis"""
+    try:
+        from pathlib import Path
+        sfx_files = []
+        
+        for file in Path(SOUNDBOARD_DIR).glob("*"):
+            if file.suffix.lower() in ['.mp3', '.wav', '.ogg', '.m4a']:
+                sfx_id = file.stem
+                metadata = get_sfx_metadata(sfx_id)
+                
+                sfx_files.append({
+                    "id": sfx_id,
+                    "name": sfx_id.replace("_", " ").title(),
+                    "filename": file.name,
+                    "size": file.stat().st_size,
+                    "favorite": metadata.get("favorite", False),
+                    "volume": metadata.get("volume", 1.0)
+                })
+        
+        # Ordenar: favoritos primeiro, depois alfabético
+        sfx_files.sort(key=lambda x: (not x["favorite"], x["name"]))
+        
+        return {"soundboard": sfx_files}
+    except Exception as e:
+        logging.error(f"Erro ao listar soundboard: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao listar soundboard: {str(e)}")
+
+@app.post("/api/soundboard/upload")
+async def upload_soundboard(file: UploadFile = File(...)):
+    """Upload de novo efeito sonoro"""
+    try:
+        from fastapi import UploadFile, File
+        
+        # Validar formato
+        allowed_types = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/x-m4a']
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Formato não suportado. Use MP3, WAV, OGG ou M4A. Recebido: {file.content_type}"
+            )
+        
+        # Salvar arquivo
+        file_path = os.path.join(SOUNDBOARD_DIR, file.filename)
+        
+        # Verificar se já existe
+        if os.path.exists(file_path):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Arquivo '{file.filename}' já existe. Renomeie ou delete o existente."
+            )
+        
+        # Salvar
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        logging.info(f"Soundboard: arquivo '{file.filename}' enviado com sucesso")
+        
+        return {
+            "status": "success",
+            "message": f"Arquivo '{file.filename}' enviado com sucesso!",
+            "filename": file.filename
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Erro ao fazer upload de soundboard: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao fazer upload: {str(e)}")
+
+@app.post("/api/soundboard/play")
+async def play_soundboard_web(request: SoundboardPlayRequest):
+    """Tocar efeito sonoro da GUI web no Discord"""
+    try:
+        from pathlib import Path
+        
+        player = get_player(request.guild_id)
+        
+        if not player or not player.voice_client:
+            raise HTTPException(status_code=400, detail="Bot não está em canal de voz")
+        
+        # Buscar arquivo (tentar múltiplos formatos)
+        sfx_path = None
+        for ext in ['.mp3', '.wav', '.ogg', '.m4a']:
+            path = Path(SOUNDBOARD_DIR) / f"{request.sfx_id}{ext}"
+            if path.exists():
+                sfx_path = str(path)
+                break
+        
+        if not sfx_path:
+            raise HTTPException(status_code=404, detail=f"Efeito sonoro '{request.sfx_id}' não encontrado")
+        
+        # Obter volume configurado
+        metadata = get_sfx_metadata(request.sfx_id)
+        volume = metadata.get("volume", 1.0)
+        
+        # Tocar no Discord
+        await player.play_soundboard(sfx_path, volume=volume)
+        
+        logging.info(f"Soundboard: '{request.sfx_id}' tocado via web GUI")
+        
+        return {
+            "status": "playing",
+            "sfx": request.sfx_id,
+            "volume": volume
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Erro ao tocar soundboard: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao tocar soundboard: {str(e)}")
+
+@app.delete("/api/soundboard/{sfx_id}")
+async def delete_soundboard(sfx_id: str):
+    """Deletar efeito sonoro"""
+    try:
+        from pathlib import Path
+        
+        # Procurar arquivo (tentar múltiplos formatos)
+        deleted = False
+        for ext in ['.mp3', '.wav', '.ogg', '.m4a']:
+            path = Path(SOUNDBOARD_DIR) / f"{sfx_id}{ext}"
+            if path.exists():
+                path.unlink()
+                deleted = True
+                logging.info(f"Soundboard: '{sfx_id}{ext}' deletado")
+                break
+        
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"Efeito sonoro '{sfx_id}' não encontrado")
+        
+        # Remover metadata
+        metadata = load_soundboard_metadata()
+        metadata["soundboard"] = [
+            sfx for sfx in metadata.get("soundboard", [])
+            if sfx.get("id") != sfx_id
+        ]
+        save_soundboard_metadata(metadata)
+        
+        return {
+            "status": "deleted",
+            "sfx": sfx_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Erro ao deletar soundboard: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao deletar soundboard: {str(e)}")
+
+@app.patch("/api/soundboard/{sfx_id}/favorite")
+async def toggle_favorite_soundboard(sfx_id: str, request: SoundboardFavoriteRequest):
+    """Marcar/desmarcar efeito como favorito"""
+    try:
+        updated = update_sfx_metadata(sfx_id, {"favorite": request.favorite})
+        
+        logging.info(f"Soundboard: '{sfx_id}' favorito = {request.favorite}")
+        
+        return {
+            "status": "updated",
+            "sfx": sfx_id,
+            "favorite": updated.get("favorite")
+        }
+    except Exception as e:
+        logging.error(f"Erro ao atualizar favorito: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao atualizar favorito: {str(e)}")
+
+@app.patch("/api/soundboard/{sfx_id}/volume")
+async def update_volume_soundboard(sfx_id: str, request: SoundboardVolumeRequest):
+    """Ajustar volume individual do efeito"""
+    try:
+        # Validar volume
+        if not 0.0 <= request.volume <= 2.0:
+            raise HTTPException(status_code=400, detail="Volume deve estar entre 0.0 e 2.0")
+        
+        updated = update_sfx_metadata(sfx_id, {"volume": request.volume})
+        
+        logging.info(f"Soundboard: '{sfx_id}' volume = {request.volume}")
+        
+        return {
+            "status": "updated",
+            "sfx": sfx_id,
+            "volume": updated.get("volume")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Erro ao atualizar volume: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao atualizar volume: {str(e)}")
 
 
 

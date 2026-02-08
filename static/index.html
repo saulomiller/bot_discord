@@ -141,6 +141,20 @@
                 </ul>
             </div>
 
+            <!-- Cartão de Soundboard -->
+            <div class="card card-soundboard">
+                <div class="card-header">
+                    <h3><i class="fa-solid fa-volume-high"></i> Soundboard</h3>
+                    <button id="upload-sfx-btn" class="btn-small">
+                        <i class="fa-solid fa-upload"></i> Upload
+                    </button>
+                </div>
+
+                <div id="soundboard-grid" class="soundboard-grid custom-scrollbar">
+                    <!-- Preenchido via JS -->
+                </div>
+            </div>
+
 
         </main>
     </div>
@@ -174,6 +188,33 @@
                 <div class="modal-buttons">
                     <button type="submit" class="btn-small">
                         <i class="fa-solid fa-save"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para upload de SFX -->
+    <div id="sfx-upload-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-upload"></i> Upload Sound Effect</h3>
+                <button id="close-upload-modal" class="icon-btn">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <form id="sfx-upload-form">
+                <div class="form-group">
+                    <label for="sfx-file">Arquivo de Áudio (MP3, WAV, OGG, M4A)</label>
+                    <input type="file" id="sfx-file" accept="audio/*" required>
+                </div>
+                <div id="audio-preview" class="audio-preview" style="display: none;">
+                    <label>Preview:</label>
+                    <audio id="preview-audio" controls></audio>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn-small">
+                        <i class="fa-solid fa-upload"></i> Upload
                     </button>
                 </div>
             </form>

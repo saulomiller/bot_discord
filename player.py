@@ -33,6 +33,10 @@ class MusicPlayer:
         self.is_looping = False
         self.is_shuffling = False
         self.loop = asyncio.get_event_loop()
+        
+        # Soundboard state
+        self.sfx_playing = False
+        self.paused_for_sfx = False
 
     @property
     def guild(self):
@@ -149,6 +153,61 @@ class MusicPlayer:
         except Exception as e:
             logging.error(f"Erro ao iniciar playback: {e}")
             await self.play_next() # Tentar próxima
+
+    async def play_soundboard(self, sfx_path: str, volume: float = 1.0):
+        """Tocar efeito sonoro do soundboard
+        
+        Args:
+            sfx_path: Caminho para o arquivo de áudio
+            volume: Volume do efeito (0.0 a 2.0)
+        """
+        if self.sfx_playing:
+            logging.warning("SFX já está tocando, ignorando novo pedido")
+            return
+        
+        if not self.voice_client:
+            logging.error("Voice client não disponível para tocar SFX")
+            return
+        
+        self.sfx_playing = True
+        
+        # Salvar estado da música
+        was_playing = self.voice_client.is_playing()
+        
+        if was_playing:
+            self.paused_for_sfx = True
+            self.voice_client.pause()
+            logging.info("Música pausada para tocar SFX")
+        
+        # Tocar SFX
+        ffmpeg_options = {
+            'options': f'-vn -af "volume={volume}"'
+        }
+        
+        def after_sfx(error):
+            if error:
+                logging.error(f"Erro ao tocar SFX: {error}")
+            
+            self.sfx_playing = False
+            
+            # Retomar música se estava tocando
+            if self.paused_for_sfx:
+                if self.voice_client and self.voice_client.is_paused():
+                    self.voice_client.resume()
+                    logging.info("Música retomada após SFX")
+                self.paused_for_sfx = False
+        
+        try:
+            executable = 'ffmpeg'
+            source = discord.FFmpegPCMAudio(sfx_path, executable=executable, **ffmpeg_options)
+            self.voice_client.play(source, after=after_sfx)
+            logging.info(f"SFX iniciado: {sfx_path} (volume: {volume})")
+        except Exception as e:
+            logging.error(f"Erro ao iniciar SFX: {e}")
+            self.sfx_playing = False
+            if self.paused_for_sfx:
+                self.voice_client.resume()
+                self.paused_for_sfx = False
 
     def stop(self):
         self.queue.clear()

@@ -1,0 +1,179 @@
+/* ========================== SOUNDBOARD ========================== */
+
+.card-soundboard {
+    grid-column: span 2;
+    min-height: 400px;
+}
+
+.soundboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    padding: 16px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.sfx-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.sfx-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.sfx-card.favorite {
+    border-color: rgba(255, 215, 0, 0.5);
+}
+
+.sfx-favorite-icon {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.sfx-favorite-icon.active {
+    color: #FFD700;
+}
+
+.sfx-favorite-icon:hover {
+    transform: scale(1.2);
+}
+
+.sfx-icon {
+    font-size: 40px;
+}
+
+.sfx-name {
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    word-break: break-word;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+}
+
+.sfx-volume-control {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sfx-volume-slider {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.sfx-volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #9370DB;
+    cursor: pointer;
+}
+
+.sfx-volume-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #9370DB;
+    cursor: pointer;
+    border: none;
+}
+
+.sfx-volume-value {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 35px;
+    text-align: right;
+}
+
+.sfx-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.sfx-actions button {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.sfx-actions button:hover {
+    transform: translateY(-1px);
+}
+
+.sfx-test {
+    background: rgba(100, 149, 237, 0.2) !important;
+}
+
+.sfx-test:hover {
+    background: rgba(100, 149, 237, 0.4) !important;
+}
+
+.sfx-play {
+    background: rgba(76, 175, 80, 0.2) !important;
+}
+
+.sfx-play:hover {
+    background: rgba(76, 175, 80, 0.4) !important;
+}
+
+.sfx-delete {
+    background: rgba(244, 67, 54, 0.2) !important;
+}
+
+.sfx-delete:hover {
+    background: rgba(244, 67, 54, 0.4) !important;
+}
+
+.audio-preview {
+    margin-top: 12px;
+}
+
+.audio-preview audio {
+    width: 100%;
+    margin-top: 8px;
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+    .soundboard-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+    }
+
+    .sfx-card {
+        padding: 12px;
+    }
+}
