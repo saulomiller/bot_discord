@@ -577,7 +577,7 @@ def setup_bot():
         player = get_player(ctx.guild.id)
         
         try:
-            # Verificar múltiplas músicas
+            # Verificar múltiplas músicas separadas por ;
             searches = [s.strip() for s in search.split(';') if s.strip()]
             
             if len(searches) > 1:
@@ -586,14 +586,34 @@ def setup_bot():
                     await player.add_to_queue(s, ctx.author)
                 await ctx.send(embed=discord.Embed(title="Sucesso", description=f"Adicionadas {len(searches)} músicas à fila.", color=discord.Color.green()))
             else:
-                song = await player.add_to_queue(search, ctx.author)
-                # Confirmação EFÊMERA e COMPACTA
-                position = len(list(player.queue))
-                embed = EmbedBuilder.create_success_embed(
-                    "Adicionada à fila",
-                    f"**{song['title']}** • Posição #{position}"
-                )
-                await ctx.send(embed=embed, delete_after=5)
+                # Detectar se é uma playlist (URL com /playlist ou /sets/)
+                is_playlist = search.startswith(('http://', 'https://')) and ('/playlist' in search or '/sets/' in search)
+                
+                if is_playlist:
+                    # Processar como playlist
+                    loading_msg = await ctx.send(embed=discord.Embed(
+                        title="⏳ Processando Playlist",
+                        description="Extraindo músicas da playlist...",
+                        color=discord.Color.blue()
+                    ))
+                    
+                    count, songs = await player.add_playlist_to_queue(search, ctx.author)
+                    
+                    await loading_msg.delete()
+                    embed = EmbedBuilder.create_success_embed(
+                        "Playlist Adicionada",
+                        f"**{count} música{'s' if count > 1 else ''}** adicionada{'s' if count > 1 else ''} à fila"
+                    )
+                    await ctx.send(embed=embed)
+                else:
+                    # Música única
+                    song = await player.add_to_queue(search, ctx.author)
+                    position = len(list(player.queue))
+                    embed = EmbedBuilder.create_success_embed(
+                        "Adicionada à fila",
+                        f"**{song['title']}** • Posição #{position}"
+                    )
+                    await ctx.send(embed=embed, delete_after=5)
             
             # Iniciar reprodução se ocioso
             if not player.voice_client.is_playing() and not player.is_paused:
@@ -619,7 +639,7 @@ def setup_bot():
         player = get_player(interaction.guild_id)
 
         try:
-            # Check for multiple songs
+            # Verificar múltiplas músicas separadas por ;
             searches = [s.strip() for s in search.split(';') if s.strip()]
             
             if len(searches) > 1:
@@ -628,16 +648,35 @@ def setup_bot():
                     await player.add_to_queue(s, interaction.user)
                 await interaction.followup.send(embed=discord.Embed(title="Sucesso", description=f"Adicionadas {len(searches)} músicas à fila.", color=discord.Color.green()))
             else:
-                song = await player.add_to_queue(search, interaction.user)
-                # Confirmação EFÊMERA e COMPACTA
-                position = len(list(player.queue))
-                embed = EmbedBuilder.create_success_embed(
-                    "Adicionada à fila",
-                    f"**{song['title']}** • Posição #{position}"
-                )
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                # Detectar se é uma playlist (URL com /playlist ou /sets/)
+                is_playlist = search.startswith(('http://', 'https://')) and ('/playlist' in search or '/sets/' in search)
+                
+                if is_playlist:
+                    # Processar como playlist
+                    await interaction.followup.send(embed=discord.Embed(
+                        title="⏳ Processando Playlist",
+                        description="Extraindo músicas da playlist...",
+                        color=discord.Color.blue()
+                    ))
+                    
+                    count, songs = await player.add_playlist_to_queue(search, interaction.user)
+                    
+                    embed = EmbedBuilder.create_success_embed(
+                        "Playlist Adicionada",
+                        f"**{count} música{'s' if count > 1 else ''}** adicionada{'s' if count > 1 else ''} à fila"
+                    )
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                else:
+                    # Música única
+                    song = await player.add_to_queue(search, interaction.user)
+                    position = len(list(player.queue))
+                    embed = EmbedBuilder.create_success_embed(
+                        "Adicionada à fila",
+                        f"**{song['title']}** • Posição #{position}"
+                    )
+                    await interaction.followup.send(embed=embed, ephemeral=True)
             
-            # Start playback if idle
+            # Iniciar reprodução se ocioso
             if not player.voice_client.is_playing() and not player.is_paused:
                 await player.play_next()
                 
@@ -2597,7 +2636,16 @@ async def play_soundboard_web(request: SoundboardPlayRequest):
     try:
         from pathlib import Path
         
-        player = get_player(request.guild_id)
+        # Se guild_id não for fornecido ou for 0, usar primeiro guild disponível
+        guild_id = request.guild_id
+        if not guild_id or guild_id == 0:
+            if bot.guilds:
+                guild_id = bot.guilds[0].id
+                logging.info(f"Guild ID não fornecido, usando primeiro guild: {guild_id}")
+            else:
+                raise HTTPException(status_code=400, detail="Bot não está em nenhum servidor")
+        
+        player = get_player(guild_id)
         
         if not player or not player.voice_client:
             raise HTTPException(status_code=400, detail="Bot não está em canal de voz")
@@ -2620,12 +2668,13 @@ async def play_soundboard_web(request: SoundboardPlayRequest):
         # Tocar no Discord
         await player.play_soundboard(sfx_path, volume=volume)
         
-        logging.info(f"Soundboard: '{request.sfx_id}' tocado via web GUI")
+        logging.info(f"Soundboard: '{request.sfx_id}' tocado via web GUI (guild: {guild_id})")
         
         return {
             "status": "playing",
             "sfx": request.sfx_id,
-            "volume": volume
+            "volume": volume,
+            "guild_id": guild_id
         }
     except HTTPException:
         raise

@@ -14,7 +14,7 @@ fi
 
 echo "Corrigindo permissões dos arquivos..."
 # Ajusta o dono dos arquivos para o usuário appuser
-chown -R appuser:appgroup /app/data
+chown -R appuser:appgroup /app/data /app/.cache
 
 # Verifica se o arquivo do bot existe (para debug)
 if [ ! -f /app/bot.py ]; then

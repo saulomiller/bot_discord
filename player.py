@@ -14,12 +14,16 @@ YDL_OPTIONS = {
         'preferredquality': '320',
     }],
     'quiet': True,
-    'noplaylist': True,
+    'noplaylist': False,  # Permitir playlists
+    'playlistend': 100,  # Limitar a 100 músicas por playlist
     'socket_timeout': 10,
     'retries': 3,
     'skip_download': True,
-    'extract_flat': False,
+    'extract_flat': 'in_playlist',  # Extração rápida para playlists
     'source_address': '0.0.0.0',
+    'cachedir': '/app/.cache',  # Diretório de cache explícito
+    'geo_bypass': True,  # Tenta contornar restrições geográficas
+    'geo_bypass_country': 'US',  # País para bypass (pode ser ajustado)
 }
 
 class MusicPlayer:
@@ -47,10 +51,16 @@ class MusicPlayer:
         return self.guild.voice_client if self.guild else None
 
     async def add_to_queue(self, search, user):
-        """Busca e adiciona música à fila."""
+        """Busca e adiciona música à fila (apenas primeira se for playlist)."""
         try:
-            info = await self.extract_info(search)
-            # info = (title, url, thumbnail, duration, channel)
+            info_list = await self.extract_info(search)
+            # info_list = [(title, url, thumbnail, duration, channel), ...]
+            
+            if not info_list:
+                raise ValueError("Nenhuma música encontrada.")
+            
+            # Pegar apenas a primeira música
+            info = info_list[0]
             song = {
                 'title': info[0],
                 'url': info[1],
@@ -65,41 +75,90 @@ class MusicPlayer:
             logging.error(f"Erro ao adicionar música: {e}")
             raise e
 
+    async def add_playlist_to_queue(self, search, user):
+        """Busca e adiciona todas as músicas de uma playlist à fila.
+        
+        Returns:
+            tuple: (número de músicas adicionadas, lista de músicas)
+        """
+        try:
+            info_list = await self.extract_info(search)
+            
+            if not info_list:
+                raise ValueError("Nenhuma música encontrada.")
+            
+            songs_added = []
+            for info in info_list:
+                song = {
+                    'title': info[0],
+                    'url': info[1],
+                    'thumbnail': info[2],
+                    'duration': info[3],
+                    'channel': info[4],
+                    'user': user
+                }
+                self.queue.append(song)
+                songs_added.append(song)
+            
+            return len(songs_added), songs_added
+        except Exception as e:
+            logging.error(f"Erro ao adicionar playlist: {e}")
+            raise e
+
     async def extract_info(self, search):
-        """Extrai informações do YouTube."""
-        # Nota: Idealmente moveríamos o cache para cá também, ou usaríamos um cache global
+        """Extrai informações do YouTube/SoundCloud.
+        
+        Retorna lista de tuplas: [(title, url, thumbnail, duration, channel), ...]
+        """
         def run():
             with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+                info = None
+                entries = []
+                
                 if search.startswith(('http://', 'https://')):
+                    # URL direta - pode ser música única ou playlist
                     info = ydl.extract_info(search, download=False)
-                    entries = [info]
+                    
+                    # Verificar se é playlist
+                    if 'entries' in info:
+                        entries = info['entries']
+                    else:
+                        entries = [info]
+                        
                 elif search.startswith(('scsearch:', 'ytsearch:')):
-                    # Permite pesquisas explícitas (Ex: "scsearch: musica")
+                    # Pesquisa explícita
                     info = ydl.extract_info(search, download=False)
                     entries = info.get('entries', [])
                 else:
-                    # Padrão: Pesquisa do YouTube
+                    # Padrão: Pesquisa do YouTube (apenas primeiro resultado)
                     info = ydl.extract_info(f"ytsearch:{search}", download=False)
                     entries = info.get('entries', [])
                 
                 if not entries:
                     raise ValueError("Nenhum resultado encontrado.")
                 
-                entry = entries[0]
-                title = entry.get('title', 'Desconhecido')
-                url = entry.get('url', entry.get('webpage_url', ''))
-                thumbnail = entry.get('thumbnail', '')
+                # Processar todas as entradas
+                results = []
+                for entry in entries:
+                    if not entry:  # Pular entradas vazias
+                        continue
+                        
+                    title = entry.get('title', 'Desconhecido')
+                    url = entry.get('url', entry.get('webpage_url', ''))
+                    thumbnail = entry.get('thumbnail', '')
+                    
+                    duration = entry.get('duration', 0)
+                    if duration:
+                        minutes, seconds = divmod(duration, 60)
+                        hours, minutes = divmod(minutes, 60)
+                        duration_formatted = f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}" if hours > 0 else f"{int(minutes)}:{int(seconds):02d}"
+                    else:
+                        duration_formatted = "Desconhecida"
+                    
+                    channel = entry.get('uploader', entry.get('channel', 'Desconhecido'))
+                    results.append((title, url, thumbnail, duration_formatted, channel))
                 
-                duration = entry.get('duration', 0)
-                if duration:
-                    minutes, seconds = divmod(duration, 60)
-                    hours, minutes = divmod(minutes, 60)
-                    duration_formatted = f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}" if hours > 0 else f"{int(minutes)}:{int(seconds):02d}"
-                else:
-                    duration_formatted = "Desconhecida"
-                
-                channel = entry.get('uploader', entry.get('channel', 'Desconhecido'))
-                return (title, url, thumbnail, duration_formatted, channel)
+                return results
 
         return await self.loop.run_in_executor(None, run)
 
@@ -189,13 +248,30 @@ class MusicPlayer:
                 logging.error(f"Erro ao tocar SFX: {error}")
             
             self.sfx_playing = False
+            logging.info("SFX finalizado, verificando retomada de música")
             
             # Retomar música se estava tocando
             if self.paused_for_sfx:
-                if self.voice_client and self.voice_client.is_paused():
-                    self.voice_client.resume()
-                    logging.info("Música retomada após SFX")
-                self.paused_for_sfx = False
+                # Criar coroutine para retomar música
+                async def resume_music():
+                    try:
+                        if self.voice_client and self.voice_client.is_paused():
+                            self.voice_client.resume()
+                            logging.info("Música retomada após SFX")
+                        else:
+                            logging.warning(f"Voice client não está pausado. Estado: paused={self.voice_client.is_paused() if self.voice_client else 'N/A'}")
+                    except Exception as e:
+                        logging.error(f"Erro ao retomar música: {e}")
+                    finally:
+                        self.paused_for_sfx = False
+                
+                # Executar no loop principal
+                future = asyncio.run_coroutine_threadsafe(resume_music(), self.bot.loop)
+                try:
+                    future.result(timeout=2)
+                except Exception as e:
+                    logging.error(f"Erro ao agendar retomada de música: {e}")
+                    self.paused_for_sfx = False
         
         try:
             executable = 'ffmpeg'

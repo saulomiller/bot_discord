@@ -6,14 +6,20 @@ WORKDIR /app
 # dependências do sistema
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-        ffmpeg \
-        gosu \
-        curl \
-        nodejs \
-        npm && \
+    python3 \
+    python3-pip \
+    ffmpeg \
+    gosu \
+    curl \
+    nodejs \
+    npm \
+    unzip && \
     rm -rf /var/lib/apt/lists/*
+
+# Instala deno para extração do YouTube (resolve WARNING do yt-dlp)
+RUN curl -fsSL https://deno.land/install.sh | sh && \
+    mv /root/.deno/bin/deno /usr/local/bin/deno && \
+    chmod +x /usr/local/bin/deno
 
 COPY requirements.txt .
 
@@ -32,7 +38,9 @@ ARG GID=1000
 RUN groupadd -g ${GID} -o appgroup
 RUN useradd -m -r -d /app -u ${UID} -g appgroup -o -s /bin/bash appuser
 
-RUN mkdir -p /app/playlist
+# Cria diretórios necessários com permissões corretas
+RUN mkdir -p /app/playlist /app/.cache && \
+    chown -R appuser:appgroup /app/playlist /app/.cache
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
