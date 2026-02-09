@@ -2081,14 +2081,25 @@ async def api_play(request: MusicRequest):
                 'list=',   # YouTube playlists
                 '/album/'  # Álbuns
             ]
-            is_playlist = any(indicator in search for indicator in playlist_indicators)
+            
+            # DEBUG: Log detalhado da detecção
+            logging.info(f"URL detectada: {search}")
+            for indicator in playlist_indicators:
+                if indicator in search:
+                    logging.info(f"✓ Indicador de playlist encontrado: '{indicator}' em {search}")
+                    is_playlist = True
+                    break
+            
+            if not is_playlist:
+                logging.info(f"✗ Nenhum indicador de playlist encontrado em: {search}")
+            
             logging.info(f"URL detectada. É playlist? {is_playlist}")
         else:
             logging.info(f"Não é URL, é busca: {search}")
         
         if is_playlist:
             # Usar método assíncrono para playlists
-            logging.info(f"Playlist detectada, usando processamento assíncrono: {search}")
+            logging.info(f"🎵 PLAYLIST DETECTADA! Usando processamento assíncrono: {search}")
             song = await player.add_playlist_async(search, api_user)
             return {
                 "status": "success", 
@@ -2112,6 +2123,7 @@ async def api_play(request: MusicRequest):
                 "message": f"'{song['title']}' adicionado à fila.",
                 "is_playlist": False
             }
+
             
     except Exception as e:
         logging.error(f"API /play error: {e}")
