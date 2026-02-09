@@ -105,8 +105,103 @@ class MusicPlayer:
             logging.error(f"Erro ao adicionar playlist: {e}")
             raise e
 
-    async def extract_info(self, search):
+    async def add_playlist_async(self, search, user):
+        """Adiciona playlist de forma assíncrona - toca primeira música imediatamente.
+        
+        Extrai apenas a primeira música, adiciona à fila e inicia reprodução.
+        Depois processa o resto da playlist em segundo plano.
+        
+        Args:
+            search: URL da playlist
+            user: Usuário que solicitou
+            
+        Returns:
+            dict: Informações da primeira música adicionada
+        """
+        try:
+            # Extrair apenas a primeira música
+            logging.info(f"Extraindo primeira música da playlist: {search}")
+            first_track = await self.extract_info(search, max_entries=1)
+            
+            if not first_track:
+                raise ValueError("Nenhuma música encontrada na playlist.")
+            
+            # Adicionar primeira música à fila
+            info = first_track[0]
+            first_song = {
+                'title': info[0],
+                'url': info[1],
+                'thumbnail': info[2],
+                'duration': info[3],
+                'channel': info[4],
+                'user': user
+            }
+            self.queue.append(first_song)
+            
+            # Iniciar reprodução se não estiver tocando
+            if not self.voice_client or not self.voice_client.is_playing():
+                await self.play_next()
+            
+            # Processar resto da playlist em segundo plano
+            asyncio.create_task(self._process_remaining_playlist(search, user))
+            
+            logging.info(f"Primeira música adicionada: {first_song['title']}")
+            return first_song
+            
+        except Exception as e:
+            logging.error(f"Erro ao adicionar playlist async: {e}")
+            raise e
+    
+    async def _process_remaining_playlist(self, search, user):
+        """Processa o resto da playlist em segundo plano (a partir da 2ª música).
+        
+        Args:
+            search: URL da playlist
+            user: Usuário que solicitou
+        """
+        try:
+            logging.info("Processando resto da playlist em segundo plano...")
+            
+            # Extrair todas as músicas (pulando a primeira que já foi adicionada)
+            # Usamos extract_info sem limite para pegar todas
+            all_tracks = await self.extract_info(search)
+            
+            # Pular a primeira (já foi adicionada)
+            remaining_tracks = all_tracks[1:] if len(all_tracks) > 1 else []
+            
+            added_count = 0
+            for info in remaining_tracks:
+                try:
+                    song = {
+                        'title': info[0],
+                        'url': info[1],
+                        'thumbnail': info[2],
+                        'duration': info[3],
+                        'channel': info[4],
+                        'user': user
+                    }
+                    self.queue.append(song)
+                    added_count += 1
+                    
+                    # Pequeno delay para não sobrecarregar
+                    await asyncio.sleep(0.1)
+                    
+                except Exception as e:
+                    logging.warning(f"Erro ao processar música da playlist: {e}")
+                    continue
+            
+            logging.info(f"Playlist processada: {added_count} músicas adicionadas à fila")
+            
+        except Exception as e:
+            logging.error(f"Erro ao processar resto da playlist: {e}")
+
+
+    async def extract_info(self, search, max_entries=None):
         """Extrai informações do YouTube/SoundCloud.
+        
+        Args:
+            search: URL ou termo de busca
+            max_entries: Número máximo de entradas a extrair (None = todas)
         
         Retorna lista de tuplas: [(title, url, thumbnail, duration, channel), ...]
         """
@@ -137,26 +232,35 @@ class MusicPlayer:
                 if not entries:
                     raise ValueError("Nenhum resultado encontrado.")
                 
+                # Limitar número de entradas se especificado
+                if max_entries is not None:
+                    entries = entries[:max_entries]
+                
                 # Processar todas as entradas
                 results = []
                 for entry in entries:
                     if not entry:  # Pular entradas vazias
                         continue
+                    
+                    try:
+                        title = entry.get('title', 'Desconhecido')
+                        url = entry.get('url', entry.get('webpage_url', ''))
+                        thumbnail = entry.get('thumbnail', '')
                         
-                    title = entry.get('title', 'Desconhecido')
-                    url = entry.get('url', entry.get('webpage_url', ''))
-                    thumbnail = entry.get('thumbnail', '')
-                    
-                    duration = entry.get('duration', 0)
-                    if duration:
-                        minutes, seconds = divmod(duration, 60)
-                        hours, minutes = divmod(minutes, 60)
-                        duration_formatted = f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}" if hours > 0 else f"{int(minutes)}:{int(seconds):02d}"
-                    else:
-                        duration_formatted = "Desconhecida"
-                    
-                    channel = entry.get('uploader', entry.get('channel', 'Desconhecido'))
-                    results.append((title, url, thumbnail, duration_formatted, channel))
+                        duration = entry.get('duration', 0)
+                        if duration:
+                            minutes, seconds = divmod(duration, 60)
+                            hours, minutes = divmod(minutes, 60)
+                            duration_formatted = f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}" if hours > 0 else f"{int(minutes)}:{int(seconds):02d}"
+                        else:
+                            duration_formatted = "Desconhecida"
+                        
+                        channel = entry.get('uploader', entry.get('channel', 'Desconhecido'))
+                        results.append((title, url, thumbnail, duration_formatted, channel))
+                    except Exception as e:
+                        # Log mas não interrompe o processamento
+                        logging.warning(f"Erro ao processar entrada da playlist: {e}")
+                        continue
                 
                 return results
 

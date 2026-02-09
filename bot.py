@@ -2199,12 +2199,43 @@ async def api_play(request: MusicRequest):
     try:
         # User placeholder for API
         api_user = bot.user 
-        song = await player.add_to_queue(request.search, api_user)
-
-        if not vc.is_playing() and not player.is_paused:
-            await player.play_next()
-
-        return {"status": "success", "message": f"'{song['title']}' adicionado à fila."}
+        
+        # Detectar se é uma playlist
+        is_playlist = False
+        search = request.search
+        
+        if search.startswith(('http://', 'https://')):
+            # Verificar indicadores de playlist na URL
+            playlist_indicators = [
+                '/playlist',
+                '/sets/',  # SoundCloud sets
+                'list=',   # YouTube playlists
+                '/album/'  # Álbuns
+            ]
+            is_playlist = any(indicator in search for indicator in playlist_indicators)
+        
+        if is_playlist:
+            # Usar método assíncrono para playlists
+            logging.info(f"Playlist detectada, usando processamento assíncrono: {search}")
+            song = await player.add_playlist_async(search, api_user)
+            return {
+                "status": "success", 
+                "message": f"Playlist adicionada! Tocando: '{song['title']}'. Processando resto em segundo plano...",
+                "is_playlist": True
+            }
+        else:
+            # Música única - método padrão
+            song = await player.add_to_queue(search, api_user)
+            
+            if not vc.is_playing() and not player.is_paused:
+                await player.play_next()
+            
+            return {
+                "status": "success", 
+                "message": f"'{song['title']}' adicionado à fila.",
+                "is_playlist": False
+            }
+            
     except Exception as e:
         logging.error(f"API /play error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
