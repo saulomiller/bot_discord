@@ -649,21 +649,22 @@ def setup_bot():
                 await interaction.followup.send(embed=discord.Embed(title="Sucesso", description=f"Adicionadas {len(searches)} músicas à fila.", color=discord.Color.green()))
             else:
                 # Detectar se é uma playlist (URL com /playlist ou /sets/)
-                is_playlist = search.startswith(('http://', 'https://')) and ('/playlist' in search or '/sets/' in search)
+                is_playlist = search.startswith(('http://', 'https://')) and ('/playlist' in search or '/sets/' in search or 'list=' in search or '/album/' in search)
                 
                 if is_playlist:
-                    # Processar como playlist
+                    # 🚀 USAR MÉTODO ASSÍNCRONO RÁPIDO!
                     await interaction.followup.send(embed=discord.Embed(
                         title="⏳ Processando Playlist",
                         description="Extraindo músicas da playlist...",
                         color=discord.Color.blue()
                     ))
                     
-                    count, songs = await player.add_playlist_to_queue(search, interaction.user)
+                    # Usar o novo método assíncrono que retorna imediatamente
+                    song = await player.add_playlist_async(search, interaction.user)
                     
                     embed = EmbedBuilder.create_success_embed(
                         "Playlist Adicionada",
-                        f"**{count} música{'s' if count > 1 else ''}** adicionada{'s' if count > 1 else ''} à fila"
+                        f"**{song['title']}** está sendo processada em segundo plano!"
                     )
                     await interaction.followup.send(embed=embed, ephemeral=True)
                 else:
@@ -683,6 +684,7 @@ def setup_bot():
         except Exception as e:
             msg = f"Erro: {e}"
             await interaction.followup.send(msg)
+
 
 
 

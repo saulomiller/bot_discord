@@ -75,35 +75,7 @@ class MusicPlayer:
             logging.error(f"Erro ao adicionar música: {e}")
             raise e
 
-    async def add_playlist_to_queue(self, search, user):
-        """Busca e adiciona todas as músicas de uma playlist à fila.
-        
-        Returns:
-            tuple: (número de músicas adicionadas, lista de músicas)
-        """
-        try:
-            info_list = await self.extract_info(search)
-            
-            if not info_list:
-                raise ValueError("Nenhuma música encontrada.")
-            
-            songs_added = []
-            for info in info_list:
-                song = {
-                    'title': info[0],
-                    'url': info[1],
-                    'thumbnail': info[2],
-                    'duration': info[3],
-                    'channel': info[4],
-                    'user': user
-                }
-                self.queue.append(song)
-                songs_added.append(song)
-            
-            return len(songs_added), songs_added
-        except Exception as e:
-            logging.error(f"Erro ao adicionar playlist: {e}")
-            raise e
+
 
     async def add_playlist_async(self, search, user):
         """Adiciona playlist de forma assíncrona - processa tudo em background.
