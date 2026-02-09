@@ -8,18 +8,13 @@ import os
 # Configuração do yt-dlp
 YDL_OPTIONS = {
     'format': 'bestaudio/best',
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'opus',
-        'preferredquality': '320',
-    }],
     'quiet': True,
     'noplaylist': False,  # Permitir playlists
     'playlistend': 100,  # Limitar a 100 músicas por playlist
     'socket_timeout': 10,
     'retries': 3,
     'skip_download': True,
-    'extract_flat': 'in_playlist',  # Extração rápida para playlists
+    # REMOVIDO: 'extract_flat' - estava causando URLs inválidas
     'source_address': '0.0.0.0',
     'cachedir': '/app/.cache',  # Diretório de cache explícito
     'geo_bypass': True,  # Tenta contornar restrições geográficas
