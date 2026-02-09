@@ -45,6 +45,19 @@ class MusicPlayer:
     def voice_client(self):
         return self.guild.voice_client if self.guild else None
 
+    def _format_duration(self, duration_seconds):
+        """Formata duração em segundos para string HH:MM:SS ou MM:SS."""
+        if not duration_seconds:
+            return "Desconhecida"
+        
+        minutes, seconds = divmod(int(duration_seconds), 60)
+        hours, minutes = divmod(minutes, 60)
+        
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+        else:
+            return f"{minutes}:{seconds:02d}"
+
     async def add_to_queue(self, search, user):
         """Busca e adiciona música à fila (apenas primeira se for playlist)."""
         try:
