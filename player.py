@@ -162,33 +162,72 @@ class MusicPlayer:
         try:
             logging.info("Processando resto da playlist em segundo plano...")
             
-            # Extrair todas as músicas (pulando a primeira que já foi adicionada)
-            # Usamos extract_info sem limite para pegar todas
-            all_tracks = await self.extract_info(search)
-            
-            # Pular a primeira (já foi adicionada)
-            remaining_tracks = all_tracks[1:] if len(all_tracks) > 1 else []
-            
+            # OTIMIZAÇÃO: Extrair em lotes pequenos para não travar
+            # Começamos do índice 1 (pulando a primeira que já foi adicionada)
+            batch_size = 10
+            start_index = 1
             added_count = 0
-            for info in remaining_tracks:
+            
+            while True:
                 try:
-                    song = {
-                        'title': info[0],
-                        'url': info[1],
-                        'thumbnail': info[2],
-                        'duration': info[3],
-                        'channel': info[4],
-                        'user': user
-                    }
-                    self.queue.append(song)
-                    added_count += 1
+                    # Extrair próximo lote
+                    logging.info(f"Extraindo lote de músicas {start_index} a {start_index + batch_size - 1}")
                     
-                    # Pequeno delay para não sobrecarregar
-                    await asyncio.sleep(0.1)
+                    # Usar yt-dlp com playlist_start e playlist_end
+                    import yt_dlp
+                    ydl_opts = self.YDL_OPTIONS.copy()
+                    ydl_opts['playliststart'] = start_index + 1  # +1 porque yt-dlp é 1-indexed
+                    ydl_opts['playlistend'] = start_index + batch_size
+                    ydl_opts['extract_flat'] = False  # Precisamos das URLs completas
+                    
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = await asyncio.to_thread(ydl.extract_info, search, download=False)
+                    
+                    if not info:
+                        break
+                    
+                    # Processar entradas
+                    entries = info.get('entries', [info] if 'url' in info else [])
+                    
+                    if not entries:
+                        logging.info("Não há mais músicas na playlist")
+                        break
+                    
+                    # Adicionar músicas à fila
+                    for entry in entries:
+                        if not entry:
+                            continue
+                            
+                        try:
+                            song = {
+                                'title': entry.get('title', 'Desconhecido'),
+                                'url': entry.get('url', ''),
+                                'thumbnail': entry.get('thumbnail', ''),
+                                'duration': self._format_duration(entry.get('duration', 0)),
+                                'channel': entry.get('uploader', 'Desconhecido'),
+                                'user': user
+                            }
+                            
+                            if song['url']:  # Só adicionar se tiver URL válida
+                                self.queue.append(song)
+                                added_count += 1
+                            
+                        except Exception as e:
+                            logging.warning(f"Erro ao processar música da playlist: {e}")
+                            continue
+                    
+                    # Se extraímos menos músicas que o batch_size, chegamos ao fim
+                    if len(entries) < batch_size:
+                        break
+                    
+                    start_index += batch_size
+                    
+                    # Pequeno delay entre lotes
+                    await asyncio.sleep(0.5)
                     
                 except Exception as e:
-                    logging.warning(f"Erro ao processar música da playlist: {e}")
-                    continue
+                    logging.error(f"Erro ao extrair lote da playlist: {e}")
+                    break
             
             logging.info(f"Playlist processada: {added_count} músicas adicionadas à fila")
             
