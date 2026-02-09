@@ -53,7 +53,10 @@ class MusicPlayer:
     async def add_to_queue(self, search, user):
         """Busca e adiciona música à fila (apenas primeira se for playlist)."""
         try:
-            info_list = await self.extract_info(search)
+            logging.info(f"[add_to_queue] Iniciando extração para: {search}")
+            # IMPORTANTE: Limitar a 1 entrada para evitar processar playlists inteiras
+            info_list = await self.extract_info(search, max_entries=1)
+            logging.info(f"[add_to_queue] Extraído {len(info_list)} resultado(s)")
             # info_list = [(title, url, thumbnail, duration, channel), ...]
             
             if not info_list:
@@ -70,6 +73,8 @@ class MusicPlayer:
                 'user': user
             }
             self.queue.append(song)
+            logging.info(f"[add_to_queue] Música adicionada à fila: {song['title']}")
+            logging.info(f"[add_to_queue] Tamanho da fila agora: {len(self.queue)}")
             return song
         except Exception as e:
             logging.error(f"Erro ao adicionar música: {e}")
@@ -268,7 +273,9 @@ class MusicPlayer:
 
     async def play_next(self):
         """Toca a próxima música da fila."""
+        logging.info(f"[play_next] Chamado. Voice client existe: {self.voice_client is not None}")
         if not self.voice_client:
+            logging.warning("[play_next] Voice client não existe, abortando")
             return
 
         if self.is_shuffling and len(self.queue) > 0:
@@ -276,12 +283,15 @@ class MusicPlayer:
             # Implementação original removia índice aleatório.
             pass # Simplificação por enquanto: remoção regular
 
+        logging.info(f"[play_next] Tamanho da fila: {len(self.queue)}")
         if not self.queue:
             self.current_song = None
+            logging.info("[play_next] Fila vazia, nada para tocar")
             return
 
         # Remoção simples por enquanto, lógica de embaralhamento complexa pode ser adicionada depois
         self.current_song = self.queue.popleft()
+        logging.info(f"[play_next] Tocando: {self.current_song['title']}")
 
         source_url = self.current_song['url']
         

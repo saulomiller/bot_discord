@@ -2204,6 +2204,9 @@ async def api_play(request: MusicRequest):
         is_playlist = False
         search = request.search
         
+        # DEBUG: Log da URL recebida
+        logging.info(f"API /play recebeu: {search}")
+        
         if search.startswith(('http://', 'https://')):
             # Verificar indicadores de playlist na URL
             playlist_indicators = [
@@ -2213,6 +2216,9 @@ async def api_play(request: MusicRequest):
                 '/album/'  # Álbuns
             ]
             is_playlist = any(indicator in search for indicator in playlist_indicators)
+            logging.info(f"URL detectada. É playlist? {is_playlist}")
+        else:
+            logging.info(f"Não é URL, é busca: {search}")
         
         if is_playlist:
             # Usar método assíncrono para playlists
@@ -2225,10 +2231,15 @@ async def api_play(request: MusicRequest):
             }
         else:
             # Música única - método padrão
+            logging.info(f"Processando como música única: {search}")
             song = await player.add_to_queue(search, api_user)
             
+            logging.info(f"[API] Música adicionada. is_playing: {vc.is_playing()}, is_paused: {player.is_paused}")
             if not vc.is_playing() and not player.is_paused:
+                logging.info("[API] Iniciando reprodução com play_next()")
                 await player.play_next()
+            else:
+                logging.info(f"[API] NÃO iniciando reprodução. is_playing={vc.is_playing()}, is_paused={player.is_paused}")
             
             return {
                 "status": "success", 
