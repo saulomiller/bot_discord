@@ -106,67 +106,54 @@ class MusicPlayer:
             raise e
 
     async def add_playlist_async(self, search, user):
-        """Adiciona playlist de forma assíncrona - toca primeira música imediatamente.
+        """Adiciona playlist de forma assíncrona - processa tudo em background.
         
-        Extrai apenas a primeira música, adiciona à fila e inicia reprodução.
-        Depois processa o resto da playlist em segundo plano.
+        Inicia o processamento da playlist em segundo plano imediatamente.
+        As músicas são adicionadas à fila conforme são extraídas.
         
         Args:
             search: URL da playlist
             user: Usuário que solicitou
             
         Returns:
-            dict: Informações da primeira música adicionada
+            dict: Informações básicas da playlist
         """
         try:
-            # Extrair apenas a primeira música
-            logging.info(f"Extraindo primeira música da playlist: {search}")
-            first_track = await self.extract_info(search, max_entries=1)
+            logging.info(f"🎵 Iniciando processamento assíncrono de playlist: {search}")
             
-            if not first_track:
-                raise ValueError("Nenhuma música encontrada na playlist.")
-            
-            # Adicionar primeira música à fila
-            info = first_track[0]
-            first_song = {
-                'title': info[0],
-                'url': info[1],
-                'thumbnail': info[2],
-                'duration': info[3],
-                'channel': info[4],
-                'user': user
-            }
-            self.queue.append(first_song)
-            
-            # Iniciar reprodução se não estiver tocando
-            if not self.voice_client or not self.voice_client.is_playing():
-                await self.play_next()
-            
-            # Processar resto da playlist em segundo plano
+            # Processar TODA a playlist em segundo plano (incluindo a primeira)
             asyncio.create_task(self._process_remaining_playlist(search, user))
             
-            logging.info(f"Primeira música adicionada: {first_song['title']}")
-            return first_song
+            # Retornar imediatamente
+            return {
+                'title': 'Playlist',
+                'url': search,
+                'thumbnail': '',
+                'duration': 'Processando...',
+                'channel': 'Playlist',
+                'user': user
+            }
             
         except Exception as e:
             logging.error(f"Erro ao adicionar playlist async: {e}")
             raise e
+
     
     async def _process_remaining_playlist(self, search, user):
-        """Processa o resto da playlist em segundo plano (a partir da 2ª música).
+        """Processa toda a playlist em segundo plano.
         
         Args:
             search: URL da playlist
             user: Usuário que solicitou
         """
         try:
-            logging.info("Processando resto da playlist em segundo plano...")
+            logging.info("🎵 Processando playlist em segundo plano...")
             
             # OTIMIZAÇÃO: Extrair em lotes pequenos para não travar
-            # Começamos do índice 1 (pulando a primeira que já foi adicionada)
             batch_size = 10
-            start_index = 1
+            start_index = 0  # Começar do índice 0 (primeira música)
             added_count = 0
+            first_song_added = False
             
             while True:
                 try:
@@ -211,6 +198,16 @@ class MusicPlayer:
                             if song['url']:  # Só adicionar se tiver URL válida
                                 self.queue.append(song)
                                 added_count += 1
+                                
+                                # Iniciar reprodução assim que a primeira música for adicionada
+                                if not first_song_added:
+                                    first_song_added = True
+                                    logging.info(f"✓ Primeira música da playlist adicionada: {song['title']}")
+                                    
+                                    # Iniciar reprodução se não estiver tocando
+                                    if not self.voice_client or not self.voice_client.is_playing():
+                                        logging.info("▶️ Iniciando reprodução da playlist")
+                                        await self.play_next()
                             
                         except Exception as e:
                             logging.warning(f"Erro ao processar música da playlist: {e}")
@@ -229,7 +226,7 @@ class MusicPlayer:
                     logging.error(f"Erro ao extrair lote da playlist: {e}")
                     break
             
-            logging.info(f"Playlist processada: {added_count} músicas adicionadas à fila")
+            logging.info(f"✓ Playlist processada: {added_count} músicas adicionadas à fila")
             
         except Exception as e:
             logging.error(f"Erro ao processar resto da playlist: {e}")
