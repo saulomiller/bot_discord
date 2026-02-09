@@ -40,7 +40,7 @@ class MusicPlayer:
         
         # Soundboard state
         self.sfx_playing = False
-        self.paused_for_sfx = False
+        self.stopped_for_sfx = False
 
     @property
     def guild(self):
@@ -346,9 +346,7 @@ class MusicPlayer:
             return
 
         if self.is_shuffling and len(self.queue) > 0:
-            # Lógica de embaralhamento: escolher aleatório mas manter fila intacta? Ou embaralhar fila?
-            # Implementação original removia índice aleatório.
-            pass # Simplificação por enquanto: remoção regular
+            pass # Simplificação por enquanto
 
         logging.info(f"[play_next] Tamanho da fila: {len(self.queue)}")
         if not self.queue:
@@ -356,14 +354,20 @@ class MusicPlayer:
             logging.info("[play_next] Fila vazia, nada para tocar")
             return
 
-        # Remoção simples por enquanto, lógica de embaralhamento complexa pode ser adicionada depois
         self.current_song = self.queue.popleft()
         logging.info(f"[play_next] Tocando: {self.current_song['title']}")
 
         source_url = self.current_song['url']
+        seek_position = self.current_song.get('seek', 0)
         
+        # Opções do FFmpeg com seek se necessário
+        before_options = '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+        if seek_position > 0:
+            before_options += f' -ss {seek_position}'
+            logging.info(f"[play_next] Resumindo de {seek_position}s")
+
         ffmpeg_options = {
-            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+            'before_options': before_options,
             'options': f'-vn -af "aresample=48000,atempo=1.0,volume={self.volume}" -bufsize 10M'
         }
 
@@ -373,21 +377,28 @@ class MusicPlayer:
                 if err:
                     logging.error(f"Erro no player: {err}")
                 
+                # Se parou para SFX, não fazer nada (o SFX vai retomar depois)
+                if self.stopped_for_sfx:
+                    logging.info("Música parada para SFX - aguardando retomada via after_sfx")
+                    return
+
                 # Lógica de Loop
                 if self.is_looping and self.current_song:
+                    # Resetar seek para loop
+                    if 'seek' in self.current_song:
+                        del self.current_song['seek']
                     self.queue.appendleft(self.current_song)
                 
                 # Agendar próxima música
                 future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
                 try:
-                    future.result(timeout=10)  # Timeout de 10 segundos
+                    future.result(timeout=10)
                 except asyncio.TimeoutError:
                     logging.error("Timeout ao agendar próxima música")
                 except Exception as e:
                     logging.error(f"Erro ao executar play_next: {e}")
             except Exception as e:
                 logging.error(f"Erro crítico no callback after_play: {e}")
-                # Tentar recuperar agendando próxima música
                 try:
                     future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
                     future.result(timeout=5)
@@ -395,56 +406,63 @@ class MusicPlayer:
                     logging.error("Falha na recuperação do player")
 
         try:
-            # Lógica de verificação do caminho do executável (env var ou padrão)
             executable = 'ffmpeg' 
             self.voice_client.play(
                 discord.FFmpegPCMAudio(source_url, executable=executable, **ffmpeg_options),
                 after=after_play
             )
             self.is_paused = False
+            self.stopped_for_sfx = False
             
-            # Rastrear tempo de início e duração para barra de progresso
+            # Ajustar start_time considerando o seek para o progresso ficar correto
             import time
-            self.song_start_time = time.time()
-            # Extrair duração em segundos do current_song
+            self.song_start_time = time.time() - seek_position
+            
+            # Extrair duração
             duration_str = self.current_song.get('duration', '0:00')
             if isinstance(duration_str, str) and ':' in duration_str:
                 parts = duration_str.split(':')
-                if len(parts) == 2:  # MM:SS
+                if len(parts) == 2:
                     self.song_duration = int(parts[0]) * 60 + int(parts[1])
-                elif len(parts) == 3:  # HH:MM:SS
+                elif len(parts) == 3:
                     self.song_duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
             else:
                 self.song_duration = 0
                 
         except Exception as e:
             logging.error(f"Erro ao iniciar playback: {e}")
-            await self.play_next() # Tentar próxima
+            await self.play_next()
 
     async def play_soundboard(self, sfx_path: str, volume: float = 1.0):
-        """Tocar efeito sonoro do soundboard
-        
-        Args:
-            sfx_path: Caminho para o arquivo de áudio
-            volume: Volume do efeito (0.0 a 2.0)
-        """
+        """Tocar efeito sonoro do soundboard com interrupção e retomada da música."""
         if self.sfx_playing:
-            logging.warning("SFX já está tocando, ignorando novo pedido")
             return
         
         if not self.voice_client:
-            logging.error("Voice client não disponível para tocar SFX")
             return
         
         self.sfx_playing = True
+        self.stopped_for_sfx = False
         
-        # Salvar estado da música
-        was_playing = self.voice_client.is_playing()
-        
-        if was_playing:
-            self.paused_for_sfx = True
-            self.voice_client.pause()
-            logging.info("Música pausada para tocar SFX")
+        # Se estiver tocando música, parar e salvar estado
+        if self.voice_client.is_playing() and self.current_song:
+            self.stopped_for_sfx = True
+            
+            # Calcular posição atual para resume
+            progress = self.get_progress()
+            current_pos = progress['current']
+            
+            logging.info(f"Parando música para SFX. Posição salva: {current_pos}s")
+            
+            # Salvar posição na música atual e recolocar no início da fila
+            self.current_song['seek'] = current_pos
+            self.queue.appendleft(self.current_song)
+            
+            # Parar playback atual (acionará after_play, que deve ignorar por causa de stopped_for_sfx)
+            self.voice_client.stop()
+            
+            # Pequeno delay para garantir que o ffmpeg liberou o áudio
+            await asyncio.sleep(0.5)
         
         # Tocar SFX
         ffmpeg_options = {
@@ -452,55 +470,31 @@ class MusicPlayer:
         }
         
         def after_sfx(error):
-            """Callback executado após SFX terminar."""
-            try:
-                if error:
-                    logging.error(f"Erro ao tocar SFX: {error}")
+            """Callback após SFX terminar."""
+            self.sfx_playing = False
+            
+            if self.stopped_for_sfx:
+                logging.info("SFX finalizado, retomando música...")
+                self.stopped_for_sfx = False
                 
-                self.sfx_playing = False
-                logging.info("SFX finalizado, verificando retomada de música")
-                
-                # Retomar música se estava tocando
-                if self.paused_for_sfx:
-                    # Criar coroutine para retomar música
-                    async def resume_music():
-                        try:
-                            if self.voice_client and self.voice_client.is_paused():
-                                self.voice_client.resume()
-                                logging.info("Música retomada após SFX")
-                            else:
-                                logging.warning(f"Voice client não está pausado. Estado: paused={self.voice_client.is_paused() if self.voice_client else 'N/A'}")
-                        except Exception as e:
-                            logging.error(f"Erro ao retomar música: {e}")
-                        finally:
-                            self.paused_for_sfx = False
-                    
-                    # Executar no loop principal
-                    try:
-                        future = asyncio.run_coroutine_threadsafe(resume_music(), self.bot.loop)
-                        future.result(timeout=2)
-                    except asyncio.TimeoutError:
-                        logging.error("Timeout ao retomar música após SFX")
-                        self.paused_for_sfx = False
-                    except Exception as e:
-                        logging.error(f"Erro ao agendar retomada de música: {e}")
-                        self.paused_for_sfx = False
-            except Exception as e:
-                logging.error(f"Erro crítico no callback after_sfx: {e}")
-                self.sfx_playing = False
-                self.paused_for_sfx = False
-        
+                # Retomar música (play_next vai pegar a música que recolocamos na fila com seek)
+                future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
+                try:
+                    future.result(timeout=10)
+                except Exception as e:
+                    logging.error(f"Erro ao retomar música após SFX: {e}")
+
         try:
             executable = 'ffmpeg'
             source = discord.FFmpegPCMAudio(sfx_path, executable=executable, **ffmpeg_options)
             self.voice_client.play(source, after=after_sfx)
-            logging.info(f"SFX iniciado: {sfx_path} (volume: {volume})")
+            logging.info(f"SFX iniciado: {sfx_path}")
         except Exception as e:
             logging.error(f"Erro ao iniciar SFX: {e}")
             self.sfx_playing = False
-            if self.paused_for_sfx:
-                self.voice_client.resume()
-                self.paused_for_sfx = False
+            if self.stopped_for_sfx:
+                self.stopped_for_sfx = False
+                await self.play_next()
 
     def stop(self):
         self.queue.clear()
@@ -510,13 +504,12 @@ class MusicPlayer:
 
     def skip(self):
         if self.voice_client and self.voice_client.is_playing():
-            self.voice_client.stop() # callback 'after' acionará play_next
+            self.voice_client.stop()
 
     def pause(self):
         if self.voice_client and self.voice_client.is_playing():
             self.voice_client.pause()
             self.is_paused = True
-            # Rastrear tempo de pausa para cálculo correto de progresso
             import time
             self.pause_time = time.time()
 
@@ -524,7 +517,6 @@ class MusicPlayer:
         if self.voice_client and self.voice_client.is_paused():
             self.voice_client.resume()
             self.is_paused = False
-            # Ajustar song_start_time para compensar o tempo pausado
             import time
             if self.pause_time and self.song_start_time:
                 pause_duration = time.time() - self.pause_time
@@ -532,11 +524,4 @@ class MusicPlayer:
             self.pause_time = None
 
     def set_volume(self, volume):
-        """Ajusta o volume do player.
-        
-        NOTA: O volume é aplicado apenas nas próximas músicas.
-        FFmpegPCMAudio não permite ajuste de volume em tempo real após criação.
-        """
         self.volume = max(0.0, min(1.0, volume))
-        # O volume será aplicado na próxima música via opções do FFmpeg
-        # Não é possível alterar o volume da música atual em reprodução

@@ -422,15 +422,16 @@ class MusicCog(commands.Cog):
             
             # Tentar gerar imagem personalizada (Card)
             # Descomente para usar o CARD em vez do EMBED (ou envie ambos)
-            # card_buffer = await loop.run_in_executor(None, create_now_playing_card, player_instance.current_song, progress['percent'])
-            # file = discord.File(card_buffer, filename="nowplaying.png")
-            # embed.set_image(url="attachment://nowplaying.png")
-            # await interaction.followup.send(embed=embed, file=file)
+            card_buffer = await loop.run_in_executor(None, create_now_playing_card, player_instance.current_song, progress['percent'])
+            if card_buffer:
+                file = discord.File(card_buffer, filename="nowplaying.png")
+                embed.set_image(url="attachment://nowplaying.png")
+                await interaction.followup.send(embed=embed, file=file)
+            else:
+                 await interaction.followup.send(embed=embed)
 
             if thumb_url:
                 embed.set_thumbnail(url=thumb_url)
-
-            await interaction.followup.send(embed=embed)
         else:
              await interaction.followup.send(embed=EmbedBuilder.create_error_embed(
                 "Erro",
