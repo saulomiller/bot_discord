@@ -2056,6 +2056,8 @@ async def get_queue():
 @app.post("/api/play")
 async def api_play(request: MusicRequest):
     """Adiciona uma música à fila e inicia a reprodução."""
+    logging.info(f"🔥 [API/PLAY] ENDPOINT CHAMADO! Request: {request.search}")
+    
     if not bot.voice_clients:
         raise HTTPException(status_code=400, detail="Bot não está em um canal de voz.")
     
