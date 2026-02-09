@@ -83,6 +83,25 @@ h1 {
     letter-spacing: -0.5px;
 }
 
+/* Header Actions Container */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.header-actions .icon-btn {
+    transition: transform 0.2s ease;
+}
+
+.header-actions .icon-btn:hover {
+    transform: scale(1.1);
+}
+
+.header-actions .icon-btn:active {
+    transform: scale(0.95);
+}
+
 /* --- Bento Grid Layout --- */
 .bento-grid {
     display: grid;

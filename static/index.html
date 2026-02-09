@@ -20,9 +20,14 @@
         <header class="app-header">
             <button id="sidebar-toggle" class="icon-btn" title="Menu"><i class="fa-solid fa-bars"></i></button>
             <h1>🎵 Controller</h1>
-            <div class="status-pill" id="status-indicator">
-                <span class="dot"></span>
-                <span id="status-text">Desconectado</span>
+            <div class="header-actions">
+                <button id="refresh-btn" class="icon-btn" title="Atualizar">
+                    <i class="fa-solid fa-rotate"></i>
+                </button>
+                <div class="status-pill" id="status-indicator">
+                    <span class="dot"></span>
+                    <span id="status-text">Desconectado</span>
+                </div>
             </div>
         </header>
 
@@ -70,6 +75,17 @@
                 <div class="track-details">
                     <h2 id="song-title">Nenhuma música</h2>
                     <p id="song-artist">Aguardando comando...</p>
+
+                    <!-- Barra de Progresso -->
+                    <div class="progress-container" id="progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <div class="progress-time">
+                            <span id="current-time">0:00</span>
+                            <span id="total-time">0:00</span>
+                        </div>
+                    </div>
 
                     <div class="media-controls">
                         <button id="pause-resume-btn" class="btn-circle" title="Play/Pause">

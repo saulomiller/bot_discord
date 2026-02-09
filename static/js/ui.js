@@ -16,7 +16,15 @@ export const UI = {
             playBtn: document.getElementById('pause-resume-btn'),
             volumeSlider: document.getElementById('volume-slider')
         },
-        queue: document.getElementById('queue-list')
+        queue: document.getElementById('queue-list'),
+
+        // Progress Bar Elements
+        progress: {
+            container: document.getElementById('progress-container'),
+            fill: document.getElementById('progress-fill'),
+            current: document.getElementById('current-time'),
+            total: document.getElementById('total-time')
+        }
     },
 
     showToast(message, type = 'info') {
@@ -49,8 +57,15 @@ export const UI = {
         }
     },
 
+    formatTime(seconds) {
+        if (!seconds) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    },
+
     updateStatus(data, isPaused) {
-        const { statusInfo, player, queue } = this.elements;
+        const { statusInfo, player, queue, progress } = this.elements;
         const ready = data.is_ready;
 
         statusInfo.text.textContent = ready ? `Conectado` : 'Desconectado';
@@ -65,11 +80,28 @@ export const UI = {
 
             if (!isPaused) player.hero.classList.add('playing');
             else player.hero.classList.remove('playing');
+
+            // Atualizar barra de progresso
+            if (data.progress) {
+                progress.container.style.display = 'block';
+                const percent = data.progress.percent || 0;
+                const current = data.progress.current || 0;
+                const duration = data.progress.duration || 0;
+
+                progress.fill.style.width = `${percent}%`;
+                progress.current.textContent = this.formatTime(current);
+                progress.total.textContent = this.formatTime(duration);
+            }
         } else {
             player.title.textContent = 'Nenhuma música';
             player.artist.textContent = 'Aguardando comando...';
             player.art.src = '/static/disc.png';
             player.hero.classList.remove('playing');
+
+            // Esconder barra
+            if (progress && progress.container) {
+                progress.container.style.display = 'none';
+            }
         }
 
         // Fila

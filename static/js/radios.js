@@ -1,8 +1,9 @@
 // radios.js - Gerenciador de Rádios
 export class RadioManager {
-    constructor(api, ui) {
+    constructor(api, ui, updateCallback) {
         this.api = api;
         this.ui = ui;
+        this.updateCallback = updateCallback;  // Callback para atualizar status
         this.radios = [];
     }
 
@@ -119,6 +120,10 @@ export class RadioManager {
         try {
             await this.api.playRadio(radioId);
             this.ui.showToast(`Tocando rádio...`, 'success');
+            // Atualizar imediatamente após tocar rádio
+            if (this.updateCallback) {
+                setTimeout(() => this.updateCallback(), 500);
+            }
         } catch (error) {
             console.error('Erro ao tocar rádio:', error);
             this.ui.showToast(error.message || 'Erro ao tocar rádio', 'error');

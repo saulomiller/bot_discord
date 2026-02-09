@@ -33,6 +33,11 @@ class MusicPlayer:
         self.is_shuffling = False
         self.loop = asyncio.get_event_loop()
         
+        # Progress tracking
+        self.song_start_time = None
+        self.song_duration = 0
+        self.pause_time = None  # Tempo quando foi pausado
+        
         # Soundboard state
         self.sfx_playing = False
         self.paused_for_sfx = False
@@ -57,6 +62,37 @@ class MusicPlayer:
             return f"{hours}:{minutes:02d}:{seconds:02d}"
         else:
             return f"{minutes}:{seconds:02d}"
+    
+    def get_progress(self):
+        """Calcula o progresso atual da música.
+        
+        Returns:
+            dict: {"current": segundos, "duration": segundos, "percent": 0-100}
+        """
+        import time
+        
+        if not self.current_song or not self.song_start_time:
+            return {"current": 0, "duration": 0, "percent": 0}
+        
+        # Calcular tempo decorrido
+        if self.is_paused and self.pause_time:
+            # Se pausado, usar o tempo até a pausa
+            elapsed = self.pause_time - self.song_start_time
+        else:
+            # Se tocando, calcular tempo atual
+            elapsed = time.time() - self.song_start_time
+        
+        duration = self.song_duration or 0
+        
+        # Garantir que não ultrapasse 100%
+        elapsed = min(elapsed, duration) if duration > 0 else elapsed
+        percent = (elapsed / duration * 100) if duration > 0 else 0
+        
+        return {
+            "current": int(elapsed),
+            "duration": int(duration),
+            "percent": round(min(100, percent), 1)
+        }
 
     async def add_to_queue(self, search, user):
         """Busca e adiciona música à fila (apenas primeira se for playlist)."""
@@ -332,19 +368,31 @@ class MusicPlayer:
         }
 
         def after_play(err):
-            if err:
-                logging.error(f"Erro no player: {err}")
-            
-            # Lógica de Loop
-            if self.is_looping and self.current_song:
-                self.queue.appendleft(self.current_song)
-            
-            # Agendar próxima música
-            future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
+            """Callback executado após música terminar."""
             try:
-                future.result()
-            except:
-                pass
+                if err:
+                    logging.error(f"Erro no player: {err}")
+                
+                # Lógica de Loop
+                if self.is_looping and self.current_song:
+                    self.queue.appendleft(self.current_song)
+                
+                # Agendar próxima música
+                future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
+                try:
+                    future.result(timeout=10)  # Timeout de 10 segundos
+                except asyncio.TimeoutError:
+                    logging.error("Timeout ao agendar próxima música")
+                except Exception as e:
+                    logging.error(f"Erro ao executar play_next: {e}")
+            except Exception as e:
+                logging.error(f"Erro crítico no callback after_play: {e}")
+                # Tentar recuperar agendando próxima música
+                try:
+                    future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
+                    future.result(timeout=5)
+                except:
+                    logging.error("Falha na recuperação do player")
 
         try:
             # Lógica de verificação do caminho do executável (env var ou padrão)
@@ -354,6 +402,21 @@ class MusicPlayer:
                 after=after_play
             )
             self.is_paused = False
+            
+            # Rastrear tempo de início e duração para barra de progresso
+            import time
+            self.song_start_time = time.time()
+            # Extrair duração em segundos do current_song
+            duration_str = self.current_song.get('duration', '0:00')
+            if isinstance(duration_str, str) and ':' in duration_str:
+                parts = duration_str.split(':')
+                if len(parts) == 2:  # MM:SS
+                    self.song_duration = int(parts[0]) * 60 + int(parts[1])
+                elif len(parts) == 3:  # HH:MM:SS
+                    self.song_duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+            else:
+                self.song_duration = 0
+                
         except Exception as e:
             logging.error(f"Erro ao iniciar playback: {e}")
             await self.play_next() # Tentar próxima
@@ -389,34 +452,43 @@ class MusicPlayer:
         }
         
         def after_sfx(error):
-            if error:
-                logging.error(f"Erro ao tocar SFX: {error}")
-            
-            self.sfx_playing = False
-            logging.info("SFX finalizado, verificando retomada de música")
-            
-            # Retomar música se estava tocando
-            if self.paused_for_sfx:
-                # Criar coroutine para retomar música
-                async def resume_music():
-                    try:
-                        if self.voice_client and self.voice_client.is_paused():
-                            self.voice_client.resume()
-                            logging.info("Música retomada após SFX")
-                        else:
-                            logging.warning(f"Voice client não está pausado. Estado: paused={self.voice_client.is_paused() if self.voice_client else 'N/A'}")
-                    except Exception as e:
-                        logging.error(f"Erro ao retomar música: {e}")
-                    finally:
-                        self.paused_for_sfx = False
+            """Callback executado após SFX terminar."""
+            try:
+                if error:
+                    logging.error(f"Erro ao tocar SFX: {error}")
                 
-                # Executar no loop principal
-                future = asyncio.run_coroutine_threadsafe(resume_music(), self.bot.loop)
-                try:
-                    future.result(timeout=2)
-                except Exception as e:
-                    logging.error(f"Erro ao agendar retomada de música: {e}")
-                    self.paused_for_sfx = False
+                self.sfx_playing = False
+                logging.info("SFX finalizado, verificando retomada de música")
+                
+                # Retomar música se estava tocando
+                if self.paused_for_sfx:
+                    # Criar coroutine para retomar música
+                    async def resume_music():
+                        try:
+                            if self.voice_client and self.voice_client.is_paused():
+                                self.voice_client.resume()
+                                logging.info("Música retomada após SFX")
+                            else:
+                                logging.warning(f"Voice client não está pausado. Estado: paused={self.voice_client.is_paused() if self.voice_client else 'N/A'}")
+                        except Exception as e:
+                            logging.error(f"Erro ao retomar música: {e}")
+                        finally:
+                            self.paused_for_sfx = False
+                    
+                    # Executar no loop principal
+                    try:
+                        future = asyncio.run_coroutine_threadsafe(resume_music(), self.bot.loop)
+                        future.result(timeout=2)
+                    except asyncio.TimeoutError:
+                        logging.error("Timeout ao retomar música após SFX")
+                        self.paused_for_sfx = False
+                    except Exception as e:
+                        logging.error(f"Erro ao agendar retomada de música: {e}")
+                        self.paused_for_sfx = False
+            except Exception as e:
+                logging.error(f"Erro crítico no callback after_sfx: {e}")
+                self.sfx_playing = False
+                self.paused_for_sfx = False
         
         try:
             executable = 'ffmpeg'
@@ -444,11 +516,20 @@ class MusicPlayer:
         if self.voice_client and self.voice_client.is_playing():
             self.voice_client.pause()
             self.is_paused = True
+            # Rastrear tempo de pausa para cálculo correto de progresso
+            import time
+            self.pause_time = time.time()
 
     def resume(self):
         if self.voice_client and self.voice_client.is_paused():
             self.voice_client.resume()
             self.is_paused = False
+            # Ajustar song_start_time para compensar o tempo pausado
+            import time
+            if self.pause_time and self.song_start_time:
+                pause_duration = time.time() - self.pause_time
+                self.song_start_time += pause_duration
+            self.pause_time = None
 
     def set_volume(self, volume):
         """Ajusta o volume do player.

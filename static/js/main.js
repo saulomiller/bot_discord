@@ -123,7 +123,8 @@ function setupEventListeners() {
                     await API.pause();
                     UI.showToast('Pausado', 'info');
                 }
-                // O updateStatusLoop vai atualizar o ícone
+                // Atualizar imediatamente após ação
+                setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
                 UI.showToast(e.message, 'error');
             }
@@ -136,8 +137,27 @@ function setupEventListeners() {
             try {
                 await API.skip();
                 UI.showToast('Música pulada', 'success');
+                // Atualizar imediatamente após pular
+                setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
                 UI.showToast(e.message, 'error');
+            }
+        });
+    }
+
+    // Botão de Atualização Manual
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            const icon = refreshBtn.querySelector('i');
+            icon.classList.add('fa-spin');
+            try {
+                await updateStatusLoop();
+                UI.showToast('Atualizado!', 'success');
+            } catch (e) {
+                UI.showToast('Erro ao atualizar', 'error');
+            } finally {
+                setTimeout(() => icon.classList.remove('fa-spin'), 500);
             }
         });
     }
@@ -157,6 +177,8 @@ function setupEventListeners() {
             UI.showToast('Adicionado à fila!', 'success');
             musicInput.value = '';
             if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+            // Atualizar imediatamente após adicionar
+            setTimeout(() => updateStatusLoop(), 500);
         } catch (e) {
             UI.showToast(e.message, 'error');
         }
@@ -278,7 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Inicializar gerenciador de rádios
     try {
-        radioManager = new RadioManager(API, UI);
+        radioManager = new RadioManager(API, UI, updateStatusLoop);
         radioManager.init();
         console.log('RadioManager initialized');
     } catch (e) {
@@ -287,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Inicializar gerenciador de soundboard
     try {
-        soundboardManager = new SoundboardManager(API, UI);
+        soundboardManager = new SoundboardManager(API, UI, updateStatusLoop);
         // Guild ID padrão - pode ser configurado dinamicamente
         soundboardManager.init(CONFIG.GUILD_ID || 0);
         console.log('SoundboardManager initialized');

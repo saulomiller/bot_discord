@@ -1,8 +1,9 @@
 // soundboard.js - Gerenciador de Soundboard
 export class SoundboardManager {
-    constructor(api, ui) {
+    constructor(api, ui, updateCallback) {
         this.api = api;
         this.ui = ui;
+        this.updateCallback = updateCallback;  // Callback para atualizar status
         this.soundboard = [];
         this.currentGuildId = null;
     }
@@ -231,6 +232,7 @@ export class SoundboardManager {
         try {
             await this.api.playSoundboard(this.currentGuildId, sfxId);
             this.ui.showToast(`Tocando no Discord: ${sfxId}`, 'success');
+            // Não precisa atualizar status pois soundboard não afeta current_song
         } catch (error) {
             console.error('Erro ao tocar SFX:', error);
             this.ui.showToast(error.message || 'Erro ao tocar efeito', 'error');
