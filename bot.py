@@ -776,7 +776,6 @@ def setup_bot():
         
         await interaction.response.send_message(embed=embed)
 
-        await interaction.response.send_message(embed=embed)
 
     # Comando de texto
     @bot.command(name="fila")
@@ -794,125 +793,13 @@ def setup_bot():
         embed = EmbedBuilder.create_queue_embed(player.current_song, list(player.queue))
         await ctx.send(embed=embed)
 
-
-
-
-        if not song_queue and not current_song:
-            await ctx.send(embed=discord.Embed(
-                title="Fila de Reprodução",
-                description="A fila está vazia.",
-                color=discord.Color.blue()))
-            return
-
-        # Criar um embed mais detalhado para a fila
-        embed = discord.Embed(
-            title="📋 Fila de Reprodução",
-            color=discord.Color.from_rgb(114, 137, 218)  # Cor do Discord
-        )
-        
-        # Função para truncar texto longo
-        def truncate_text(text, max_length=50):
-            return text[:max_length] + "..." if len(text) > max_length else text
-        
-        # Adicionar informações sobre a música atual
-        if current_song:
-            try:
-                # Extrair todas as informações da música atual
-                if len(current_song) >= 6:  # Formato novo com duração e canal
-                    current_title, _, current_thumbnail, current_user, current_duration, current_channel = current_song
-                else:  # Compatibilidade com formato antigo
-                    current_title, _, current_thumbnail, current_user = current_song
-                    current_duration = "Desconhecida"
-                    current_channel = "Desconhecido"
-                
-                # Truncar título longo
-                current_title = truncate_text(current_title, 70)
-                current_channel = truncate_text(current_channel, 30)
-                
-                user_mention = current_user.mention if hasattr(current_user, 'mention') else "Desconhecido"
-                
-                embed.add_field(
-                    name="🎵 Tocando Agora",
-                    value=f"**{current_title}**\n"
-                          f"▸ ⏱️ **Duração:** {current_duration}\n"
-                          f"▸ 🎤 **Canal:** {current_channel}\n"
-                          f"▸ 👤 **Adicionado por:** {user_mention}",
-                    inline=False
-                )
-                
-                # Adicionar separador visual
-                embed.add_field(
-                    name="⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯",
-                    value="",
-                    inline=False
-                )
-                
-                # Adicionar thumbnail da música atual
-                if current_thumbnail:
-                    embed.set_thumbnail(url=current_thumbnail)
-            except Exception as e:
-                logging.error(f"Erro ao criar campo de música atual: {e}")
-                # Continuar com a exibição da fila mesmo se houver erro na música atual
-        
-        # Adicionar as próximas músicas da fila
-        if song_queue:
-            # Limitar o número total de músicas para evitar estourar o limite
-            display_count = min(8, len(song_queue))
-            
-            queue_text = ""
-            total_length = 0
-            
-            for i, song_info in enumerate(song_queue[:display_count], 1):
-                try:
-                    # Verificar o formato da música na fila
-                    if len(song_info) >= 6:  # Formato novo
-                        title, _, _, user, duration, channel = song_info
-                    else:  # Formato antigo
-                        title, _, _, user = song_info
-                        duration = "?"
-                        channel = "?"
-                    
-                    # Truncar títulos longos para economizar espaço
-                    title = truncate_text(title, 70)
-                    
-                    display_name = user.display_name if hasattr(user, 'display_name') else "Desconhecido"
-                    display_name = truncate_text(display_name, 15)
-                    
-                    # Criar linha para esta música e verificar se adicionar não ultrapassará o limite
-                    line = f"**{i}.** {title}\n   ▸ ⏱️ **Duração:** {duration} | 👤 **Por:** {display_name}\n"
-                    
-                    # Verificar se adicionar esta linha excederá o limite do Discord
-                    if total_length + len(line) > 900:  # Margem de segurança abaixo de 1024
-                        queue_text += f"\n... e mais {len(song_queue) - i + 1} música(s)"
-                        break
-                        
-                    queue_text += line
-                    total_length += len(line)
-                except Exception as e:
-                    logging.error(f"Erro ao processar música {i} da fila: {e}")
-                    # Continuar com as próximas músicas
-            
-            if len(song_queue) > display_count and total_length < 900:
-                queue_text += f"\n... e mais {len(song_queue) - display_count} música(s)"
-                
-            embed.add_field(
-                name="📑 Próximas Músicas",
-                value=queue_text or "Nenhuma música na fila",
-                inline=False
-            )
-        
-        # Adicionar informações de rodapé
-        embed.set_footer(text=f"Total na fila: {len(song_queue)} música(s)")
-        
-        await ctx.send(embed=embed)
-
     # Comando slash
     @bot.tree.command(name="fila", description="Mostra a fila de músicas")
-    # @bot.tree.command(name="fila", description="Mostra a fila de músicas")
-    async def fila_slash_legacy(interaction: discord.Interaction):
+    async def fila_slash(interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)  # EFÊMERA - só quem pediu vê
         
-        if not song_queue and not current_song:
+        player = get_player(interaction.guild_id)
+        if not player.queue and not player.current_song:
             embed = EmbedBuilder.create_error_embed(
                 "Fila vazia",
                 "Não há músicas na fila no momento."
@@ -921,8 +808,9 @@ def setup_bot():
             return
 
         # Usar novo embed compacto
-        embed = EmbedBuilder.create_queue_embed(current_song, song_queue)
+        embed = EmbedBuilder.create_queue_embed(player.current_song, list(player.queue))
         await interaction.followup.send(embed=embed, ephemeral=True)
+
 
     # Comando de texto
     @bot.command()
@@ -1439,39 +1327,19 @@ def setup_bot():
         """Comando slash para pular toda a playlist atual"""
         await interaction.response.defer(ephemeral=False)
         
-        global playlist_cancel_flag, playlist_processing_task
-        
         vc = interaction.guild.voice_client
         if not vc:
-            await interaction.followup.send(embed=discord.Embed(
-                title="Erro",
-                description="Não estou conectado a um canal de voz.",
-                color=discord.Color.red()))
+            await interaction.followup.send(embed=EmbedBuilder.create_error_embed(
+                "Erro",
+                "Não estou conectado a um canal de voz."))
             return
         
-        # Verificar se há uma playlist sendo processada
-        if not playlist_processing_task or playlist_processing_task.done():
-            await interaction.followup.send(embed=discord.Embed(
-                title="Informação",
-                description="Não há playlist sendo processada atualmente.",
-                color=discord.Color.blue()))
-            
-            # Mesmo assim podemos limpar a fila e pular a música atual
-            if vc.is_playing():
-                vc.stop()
-                song_queue.clear()
-                await interaction.followup.send(embed=discord.Embed(
-                    title="Playlist Pulada",
-                    description="Música atual pulada e fila limpa.",
-                    color=discord.Color.green()))
-            return
-            
-        # Sinalizar cancelamento da tarefa de processamento
-        playlist_cancel_flag = True
+        # Obter o player do guild
+        player = get_player(interaction.guild.id)
         
         # Limpar a fila de músicas
-        removed_songs = len(song_queue)
-        song_queue.clear()
+        removed_songs = len(player.queue)
+        player.queue.clear()
         
         # Parar a música atual
         was_playing = False
@@ -1479,12 +1347,10 @@ def setup_bot():
             was_playing = True
             vc.stop()
         
-        await interaction.followup.send(embed=discord.Embed(
-            title="Playlist Pulada",
-            description="Cancelando processamento da playlist atual.\n"
-                        f"Removidas {removed_songs} músicas da fila."
-                        + ("\nMúsica atual interrompida." if was_playing else ""),
-            color=discord.Color.green()))
+        await interaction.followup.send(embed=EmbedBuilder.create_success_embed(
+            "Playlist Pulada",
+            f"Removidas {removed_songs} músicas da fila."
+            + ("\\nMúsica atual interrompida." if was_playing else "")))
 
     # Comando para listar rádios disponíveis
     @bot.tree.command(name="radios", description="Lista todas as rádios disponíveis")
