@@ -10,3 +10,5 @@ PyNaCl
 ffmpeg-python
 
 python-multipart
+Pillow
+requests
