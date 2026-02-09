@@ -172,7 +172,7 @@ class MusicPlayer:
                             url = entry.get('webpage_url', url)
                     
                     # Extrair informações completas desta música
-                    full_opts = self.YDL_OPTIONS.copy()
+                    full_opts = YDL_OPTIONS.copy()
                     with yt_dlp.YoutubeDL(full_opts) as ydl:
                         track_info = await asyncio.to_thread(ydl.extract_info, url, download=False)
                     
