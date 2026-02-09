@@ -1,9 +1,10 @@
 // radios.js - Gerenciador de Rádios
 export class RadioManager {
-    constructor(api, ui, updateCallback) {
+    constructor(api, ui, updateCallback, translationManager) {
         this.api = api;
         this.ui = ui;
-        this.updateCallback = updateCallback;  // Callback para atualizar status
+        this.updateCallback = updateCallback;
+        this.tm = translationManager;
         this.radios = [];
     }
 
@@ -29,7 +30,8 @@ export class RadioManager {
         list.innerHTML = '';
 
         if (this.radios.length === 0) {
-            list.innerHTML = '<li style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Nenhuma rádio disponível</li>';
+            const emptyText = this.tm ? this.tm.get('no_radios') : 'Nenhuma rádio disponível';
+            list.innerHTML = `<li style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">${emptyText}</li>`;
             return;
         }
 
@@ -106,7 +108,7 @@ export class RadioManager {
 
         try {
             await this.api.addRadio({ name, url, location, description });
-            this.ui.showToast('Rádio adicionada!', 'success');
+            this.ui.showToast(this.tm ? this.tm.get('radio_added_toast') : 'Rádio adicionada!', 'success');
             await this.loadRadios();
             document.getElementById('radio-modal').classList.remove('active');
             document.getElementById('radio-form').reset();
@@ -119,7 +121,7 @@ export class RadioManager {
     async playRadio(radioId) {
         try {
             await this.api.playRadio(radioId);
-            this.ui.showToast(`Tocando rádio...`, 'success');
+            this.ui.showToast(this.tm ? this.tm.get('radio_playing_toast') : `Tocando rádio...`, 'success');
             // Atualizar imediatamente após tocar rádio
             if (this.updateCallback) {
                 setTimeout(() => this.updateCallback(), 500);
@@ -131,15 +133,17 @@ export class RadioManager {
     }
 
     async deleteRadio(radioId) {
-        if (!confirm('Deletar esta rádio?')) return;
+        const confirmMsg = this.tm ? this.tm.get('radio_delete_confirm') : 'Deletar esta rádio?';
+        if (!confirm(confirmMsg)) return;
 
         try {
             await this.api.removeRadio(radioId);
-            this.ui.showToast('Rádio removida', 'success');
+            this.ui.showToast(this.tm ? this.tm.get('radio_removed_toast') : 'Rádio removida', 'success');
             await this.loadRadios();
         } catch (error) {
             console.error('Erro ao deletar rádio:', error);
-            this.ui.showToast('Erro ao deletar rádio', 'error');
+            const err = this.tm ? this.tm.get('radio_delete_error') : 'Erro ao deletar rádio';
+            this.ui.showToast(err, 'error');
         }
     }
 }

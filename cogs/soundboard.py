@@ -3,9 +3,11 @@ from discord.ext import commands
 from discord import app_commands
 import logging
 import os
+import asyncio
 from pathlib import Path
 from config import SOUNDBOARD_DIR
 from utils.helpers import get_sfx_metadata
+from utils.i18n import t
 
 class SoundboardCog(commands.Cog):
     def __init__(self, bot):
@@ -33,8 +35,8 @@ class SoundboardCog(commands.Cog):
         
         return choices[:25]  # Discord limita a 25
 
-    @app_commands.command(name="sfx", description="Toca um efeito sonoro")
-    @app_commands.describe(nome="Nome do efeito sonoro")
+    @app_commands.command(name="sfx", description="Plays a sound effect", description_localizations={'pt-BR': 'Toca um efeito sonoro'})
+    @app_commands.describe(nome="Sound effect name")
     @app_commands.autocomplete(nome=sfx_autocomplete)
     async def sfx_command(self, interaction: discord.Interaction, nome: str):
         """Comando para tocar SFX - COM EMBED EFÊMERO"""
@@ -45,7 +47,7 @@ class SoundboardCog(commands.Cog):
             player = self.get_player(interaction.guild_id)
             if not player or not player.voice_client:
                 await interaction.followup.send(
-                    "❌ Bot não está em canal de voz",
+                    t('user_must_be_in_voice'),
                     ephemeral=True
                 )
                 return
@@ -60,7 +62,7 @@ class SoundboardCog(commands.Cog):
             
             if not sfx_path:
                 await interaction.followup.send(
-                    f"❌ Efeito '{nome}' não encontrado",
+                    t('sfx_not_found', name=nome),
                     ephemeral=True
                 )
                 return
@@ -74,7 +76,7 @@ class SoundboardCog(commands.Cog):
             
             # EMBED EFÊMERO mostrando quem pediu
             embed = discord.Embed(
-                description=f"🔊 {interaction.user.mention} pediu: **{nome}**",
+                description=t('sfx_requested_by', user=interaction.user.mention, name=nome),
                 color=discord.Color.from_rgb(147, 112, 219)
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -84,7 +86,7 @@ class SoundboardCog(commands.Cog):
         except Exception as e:
             logging.error(f"Erro ao tocar SFX: {e}")
             await interaction.followup.send(
-                f"❌ Erro ao tocar efeito: {str(e)}",
+                t('error'),
                 ephemeral=True
             )
 

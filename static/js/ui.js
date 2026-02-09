@@ -1,4 +1,10 @@
 export const UI = {
+    tm: null, // TranslationManager instance
+
+    setTranslationManager(tm) {
+        this.tm = tm;
+    },
+
     elements: {
         toastContainer: document.getElementById('toast-container'),
         sidebar: document.getElementById('settings-sidebar'),
@@ -67,8 +73,9 @@ export const UI = {
     updateStatus(data, isPaused) {
         const { statusInfo, player, queue, progress } = this.elements;
         const ready = data.is_ready;
+        const statusKey = ready ? 'status_connected' : 'status_disconnected';
 
-        statusInfo.text.textContent = ready ? `Conectado` : 'Desconectado';
+        statusInfo.text.textContent = this.tm ? this.tm.get(statusKey) : (ready ? 'Conectado' : 'Desconectado');
         statusInfo.dot.style.background = ready ? '#30d158' : '#ff453a';
 
         // Informações da Música
@@ -89,16 +96,14 @@ export const UI = {
                 const duration = data.progress.duration || 0;
 
                 progress.fill.style.width = `${percent}%`;
+
+                // Atualizar atributos ARIA e texto
+                progress.fill.setAttribute('aria-valuenow', Math.round(percent));
+                progress.fill.textContent = percent > 5 ? `${Math.round(percent)}%` : ''; // Só mostra texto se houver espaço
+
                 progress.current.textContent = this.formatTime(current);
                 progress.total.textContent = this.formatTime(duration);
             }
-        } else {
-            player.title.textContent = 'Nenhuma música';
-            player.artist.textContent = 'Aguardando comando...';
-            player.art.src = '/static/disc.png';
-            player.hero.classList.remove('playing');
-
-            // Esconder barra
             if (progress && progress.container) {
                 progress.container.style.display = 'none';
             }
@@ -117,14 +122,18 @@ export const UI = {
                 queue.appendChild(li);
             });
         } else {
-            queue.innerHTML = '<li class="queue-item queue-empty">A fila está vazia.</li>';
+            const emptyKey = 'queue_empty';
+            const emptyText = this.tm ? this.tm.get(emptyKey) : 'A fila está vazia.';
+            queue.innerHTML = `<li class="queue-item queue-empty">${emptyText}</li>`;
         }
 
         // Ícone do Botão Play
         player.playBtn.innerHTML = isPaused
             ? '<i class="fa-solid fa-play"></i>'
             : '<i class="fa-solid fa-pause"></i>';
-        player.playBtn.title = isPaused ? 'Retomar' : 'Pausar';
+
+        const titleKey = isPaused ? 'resume' : 'paused'; // 'paused' is actually used as 'pause' command button title
+        player.playBtn.title = this.tm ? this.tm.get(titleKey) : (isPaused ? 'Retomar' : 'Pausar');
     },
 
     setVolumeVisual(vol) {
@@ -138,7 +147,9 @@ export const UI = {
         if (!listEl) return;
 
         if (!playlists || playlists.length === 0) {
-            listEl.innerHTML = '<li class="empty-state">Nenhuma playlist salva.</li>';
+            const emptyKey = 'empty_playlists';
+            const emptyText = this.tm ? this.tm.get(emptyKey) : 'Nenhuma playlist salva.';
+            listEl.innerHTML = `<li class="empty-state">${emptyText}</li>`;
             return;
         }
 

@@ -577,3 +577,50 @@ details[open] summary {
 .modal-buttons .btn-small.secondary {
     background: rgba(255, 255, 255, 0.05);
 }
+
+/* --- Language Switcher --- */
+.language-switcher {
+    display: flex;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--card-border);
+    padding: 4px;
+    border-radius: 12px;
+    gap: 4px;
+}
+
+.lang-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.lang-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.lang-btn.active {
+    background: var(--accent-color);
+    color: white;
+    box-shadow: 0 4px 12px rgba(10, 132, 255, 0.3);
+}
+
+.lang-btn .flag {
+    font-size: 16px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.lang-btn .name {
+    letter-spacing: 0.5px;
+}

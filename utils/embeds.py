@@ -1,4 +1,5 @@
 import discord
+from utils.i18n import t
 
 class EmbedBuilder:
     """Classe para criar embeds padronizados e compactos"""
@@ -14,9 +15,9 @@ class EmbedBuilder:
     @staticmethod
     def create_now_playing_embed(song_info, queue_length=0, current_seconds=0, total_seconds=0, color=None):
         """Criar embed compacto para música tocando"""
-        title = song_info.get('title', 'Desconhecido')
-        channel = song_info.get('channel', 'Desconhecido')
-        author = song_info.get('author', 'Desconhecido')
+        title = song_info.get('title', t('unknown'))
+        channel = song_info.get('channel', t('unknown'))
+        author = song_info.get('author', t('unknown'))
         
         # Criar descrição compacta
         description = f"🎵 **{title}**\n"
@@ -31,7 +32,7 @@ class EmbedBuilder:
             description += f"\n\n{progress_bar}"
         
         if queue_length > 0:
-            description += f"\n📋 {queue_length} na fila"
+            description += f"\n📋 {queue_length} {t('in_queue')}"
         
         # Usar cor dominante se fornecida, senão usar padrão
         embed_color = color if color else EmbedBuilder.COLOR_MUSIC
@@ -45,16 +46,7 @@ class EmbedBuilder:
     
     @staticmethod
     def create_progress_bar(current_seconds, total_seconds, bar_length=10):
-        """Cria uma barra de progresso visual com Unicode.
-        
-        Args:
-            current_seconds: Tempo atual em segundos
-            total_seconds: Duração total em segundos
-            bar_length: Comprimento da barra (padrão: 10 caracteres)
-            
-        Returns:
-            str: Barra de progresso formatada (ex: "▬▬▬🔘▬▬▬▬▬▬ 1:23 / 3:45")
-        """
+        """Cria uma barra de progresso visual com Unicode."""
         if total_seconds <= 0:
             return "▬▬▬▬▬▬▬▬▬▬ 0:00 / 0:00"
         
@@ -98,7 +90,7 @@ class EmbedBuilder:
         """Criar embed de erro (para mensagens efêmeras)"""
         full_desc = description
         if suggestion:
-            full_desc += f"\n\n💡 **Sugestão:** {suggestion}"
+            full_desc += f"\n\n💡 **{t('suggestion')}:** {suggestion}"
         
         embed = discord.Embed(
             title=f"❌ {title}",
@@ -126,15 +118,15 @@ class EmbedBuilder:
         total_duration = sum(song.get('duration', 0) for song in queue_list)
         total_minutes = int(total_duration / 60)
         
-        description = f"📋 **Fila** ({total_songs} músicas • ~{total_minutes}min)\n\n"
+        description = f"📋 **{t('queue')}** ({total_songs} {t('songs')} • ~{total_minutes}{t('minutes_abbr')})\n\n"
         
         if current_song:
-            description += f"🎵 **Tocando:** {current_song.get('title', 'Desconhecido')}\n\n"
+            description += f"🎵 **{t('playing_now')}** {current_song.get('title', t('unknown'))}\n\n"
         
         # Mostrar apenas as primeiras 10 músicas
         display_limit = min(10, total_songs)
         for i, song in enumerate(queue_list[:display_limit], 1):
-            title = song.get('title', 'Desconhecido')
+            title = song.get('title', t('unknown'))
             duration = song.get('duration_formatted', '?:??')
             # Usar emojis numéricos
             number_emoji = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'][i-1] if i <= 10 else f"{i}."
@@ -142,7 +134,7 @@ class EmbedBuilder:
         
         if total_songs > display_limit:
             remaining = total_songs - display_limit
-            description += f"\n... e mais {remaining} música{'s' if remaining > 1 else ''}"
+            description += f"\n{t('and_more_songs', count=remaining)}"
         
         embed = discord.Embed(
             description=description,
@@ -154,14 +146,14 @@ class EmbedBuilder:
     @staticmethod
     def create_radio_embed(radio_info):
         """Criar embed compacto para rádio"""
-        name = radio_info.get('name', 'Desconhecido')
-        location = radio_info.get('location', 'Desconhecido')
+        name = radio_info.get('name', t('unknown'))
+        location = radio_info.get('location', t('unknown'))
         description = radio_info.get('description', '')
         
-        embed_desc = f"📻 **{name}** ao vivo\n"
+        embed_desc = f"📻 **{name}** {t('live')}\n"
         if description:
             embed_desc += f"{description}\n\n"
-        embed_desc += f"📍 {location} • 🎧 Conectado"
+        embed_desc += f"📍 {location} • 🎧 {t('connected')}"
         
         embed = discord.Embed(
             description=embed_desc,

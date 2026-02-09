@@ -4,6 +4,7 @@ import { AudioReactiveBackground } from './visualizer.js';
 import { RadioManager } from './radios.js';
 import { SoundboardManager } from './soundboard.js';
 import { CONFIG } from './config.js';
+import { TranslationManager } from './translations.js';
 
 // Estado
 let isPaused = false;
@@ -11,6 +12,7 @@ let isDraggingVolume = false;
 let liquidBg; // Inicializar depois
 let radioManager; // Gerenciador de rádios
 let soundboardManager; // Gerenciador de soundboard
+let translationManager; // Gerenciador de traduções
 
 // --- Inicialização ---
 
@@ -21,6 +23,19 @@ async function updateStatusLoop() {
         isPaused = !!data.is_paused;
 
         UI.updateStatus(data, isPaused);
+
+        if (data.language && translationManager && translationManager.currentLang !== data.language) {
+            // Se o backend diz que o idioma é diferente do frontend (local),
+            // decidimos qual é a fonte da verdade.
+            // Para evitar loops, vamos assumir que o backend persiste a configuração global.
+            // Se o usuário mudou localmente recentemente, o backend deve ser atualizado.
+            // Mas se acabou de carregar, o backend manda.
+
+            // Simples: Se localStorage não existe, usa backend.
+            if (!localStorage.getItem('app_language')) {
+                translationManager.setLanguage(data.language);
+            }
+        }
 
         if (liquidBg) {
             liquidBg.syncPlayState(!isPaused && data.is_ready, data.volume || 0.5);
@@ -51,13 +66,38 @@ function setupEventListeners() {
     if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', () => UI.toggleSidebar());
     if (overlay) overlay.addEventListener('click', () => UI.toggleSidebar());
 
+    // Language Selector (Novo Design com Botões)
+    const langBtns = document.querySelectorAll('.lang-btn');
+    if (langBtns.length > 0 && translationManager) {
+        // Marcar o botão inicial baseado no idioma atual
+        langBtns.forEach(btn => {
+            if (btn.dataset.lang === translationManager.currentLang) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+
+            btn.addEventListener('click', () => {
+                const newLang = btn.dataset.lang;
+                if (newLang === translationManager.currentLang) return;
+
+                // UI Update
+                langBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Logic Update
+                translationManager.setLanguage(newLang);
+            });
+        });
+    }
+
     // Token Management
     const saveTokenBtn = document.getElementById('save-token-btn');
     if (saveTokenBtn) {
         saveTokenBtn.addEventListener('click', async () => {
             const tokenInput = document.getElementById('token-input');
             const token = tokenInput.value.trim();
-            if (!token) return UI.showToast('Por favor, insira um token.', 'error');
+            if (!token) return UI.showToast(translationManager.get('error_search'), 'error');
 
             try {
                 await API.setToken(token);
@@ -100,7 +140,7 @@ function setupEventListeners() {
     const shutdownBtn = document.getElementById('shutdown-bot-btn');
     if (shutdownBtn) {
         shutdownBtn.addEventListener('click', async () => {
-            if (!confirm('Deseja desligar o bot? A música irá parar.')) return;
+            if (!confirm(translationManager.get('confirm_shutdown'))) return;
             try {
                 await API.shutdown();
                 UI.showToast('Bot desligado.', 'error');
@@ -136,7 +176,7 @@ function setupEventListeners() {
         skipBtn.addEventListener('click', async () => {
             try {
                 await API.skip();
-                UI.showToast('Música pulada', 'success');
+                UI.showToast(translationManager.get('skip_toast'), 'success');
                 // Atualizar imediatamente após pular
                 setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
@@ -153,9 +193,9 @@ function setupEventListeners() {
             icon.classList.add('fa-spin');
             try {
                 await updateStatusLoop();
-                UI.showToast('Atualizado!', 'success');
+                UI.showToast(translationManager.get('success_update'), 'success');
             } catch (e) {
-                UI.showToast('Erro ao atualizar', 'error');
+                UI.showToast(translationManager.get('error_update'), 'error');
             } finally {
                 setTimeout(() => icon.classList.remove('fa-spin'), 500);
             }
@@ -174,7 +214,7 @@ function setupEventListeners() {
 
         try {
             await API.play(query);
-            UI.showToast('Adicionado à fila!', 'success');
+            UI.showToast(translationManager.get('added_to_queue_toast'), 'success');
             musicInput.value = '';
             if (clearSearchBtn) clearSearchBtn.style.display = 'none';
             // Atualizar imediatamente após adicionar
@@ -218,7 +258,7 @@ function setupEventListeners() {
         if (!file) return;
 
         if (!file.name.endsWith('.txt')) {
-            UI.showToast('Apenas arquivos .txt são permitidos!', 'error');
+            UI.showToast(translationManager.get('txt_only_error'), 'error');
             return;
         }
 
@@ -277,14 +317,24 @@ function setupEventListeners() {
 
 // Início
 document.addEventListener('DOMContentLoaded', () => {
+    // 1. Inicializar traduções imediatamente
     try {
-        console.log('DOM Loaded, initializing...');
+        translationManager = new TranslationManager();
+        UI.setTranslationManager(translationManager);
+        console.log('TranslationManager initialized');
+    } catch (e) {
+        console.error('TranslationManager init failed:', e);
+    }
+
+    // 2. Inicializar visualizer
+    try {
+        console.log('DOM Loaded, initializing visualizer...');
         liquidBg = new AudioReactiveBackground();
-        console.log('Visualizer initialized');
     } catch (e) {
         console.error('Visualizer init failed:', e);
     }
 
+    // 3. Setup UI e Handlers
     setupEventListeners();
     updateStatusLoop();
     setInterval(updateStatusLoop, CONFIG.POLLING_INTERVAL);
@@ -300,7 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Inicializar gerenciador de rádios
     try {
-        radioManager = new RadioManager(API, UI, updateStatusLoop);
+        radioManager = new RadioManager(API, UI, updateStatusLoop, translationManager);
         radioManager.init();
         console.log('RadioManager initialized');
     } catch (e) {
@@ -309,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Inicializar gerenciador de soundboard
     try {
-        soundboardManager = new SoundboardManager(API, UI, updateStatusLoop);
+        soundboardManager = new SoundboardManager(API, UI, updateStatusLoop, translationManager);
         // Guild ID padrão - pode ser configurado dinamicamente
         soundboardManager.init(CONFIG.GUILD_ID || 0);
         console.log('SoundboardManager initialized');

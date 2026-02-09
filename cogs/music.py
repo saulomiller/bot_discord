@@ -11,6 +11,7 @@ from config import RADIOS_FILE, PLAYLIST_DIR, DATA_DIR, FFMPEG_PATH
 from utils.embeds import EmbedBuilder
 from utils.helpers import ensure_voice, check_system_resources, load_radios, extract_info, playlist_cache
 from utils.image import get_dominant_color, create_now_playing_card
+from utils.i18n import t
 from io import BytesIO
 
 class MusicCog(commands.Cog):
@@ -32,18 +33,18 @@ class MusicCog(commands.Cog):
         vc = await ensure_voice(ctx)
         if vc:
             await ctx.send(embed=discord.Embed(
-                title="Conectado",
-                description=f"Juntei-me ao canal **{vc.channel.name}**.",
+                title=t('connected'),
+                description=t('joined_channel', channel=vc.channel.name),
                 color=discord.Color.green()))
 
-    @app_commands.command(name="join", description="Entra no canal de voz")
+    @app_commands.command(name="join", description="Joins the voice channel", description_localizations={'pt-BR': 'Entra no canal de voz'})
     async def join_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         vc = await ensure_voice(interaction)
         if vc:
             await interaction.followup.send(embed=discord.Embed(
-                title="Conectado",
-                description=f"Juntei-me ao canal **{vc.channel.name}**.",
+                title=t('connected'),
+                description=t('joined_channel', channel=vc.channel.name),
                 color=discord.Color.green()))
 
     @commands.command()
@@ -52,29 +53,29 @@ class MusicCog(commands.Cog):
         if vc:
             await vc.disconnect()
             await ctx.send(embed=discord.Embed(
-                title="Desconectado",
-                description="Saí do canal de voz.",
+                title=t('disconnected'),
+                description=t('left_channel'),
                 color=discord.Color.orange()))
         else:
             await ctx.send(embed=discord.Embed(
-                title="Erro",
-                description="Não estou em um canal de voz.",
+                title=t('error'),
+                description=t('not_in_voice'),
                 color=discord.Color.red()))
 
-    @app_commands.command(name="leave", description="Sai do canal de voz")
+    @app_commands.command(name="leave", description="Leaves the voice channel", description_localizations={'pt-BR': 'Sai do canal de voz'})
     async def leave_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         vc = interaction.guild.voice_client
         if vc:
             await vc.disconnect()
             await interaction.followup.send(embed=discord.Embed(
-                title="Desconectado",
-                description="Saí do canal de voz.",
+                title=t('disconnected'),
+                description=t('left_channel'),
                 color=discord.Color.orange()))
         else:
             await interaction.followup.send(embed=discord.Embed(
-                title="Erro",
-                description="Não estou em um canal de voz.",
+                title=t('error'),
+                description=t('not_in_voice'),
                 color=discord.Color.red()))
 
     @commands.command(name="sair_todos")
@@ -94,16 +95,16 @@ class MusicCog(commands.Cog):
         
         if count > 0:
             await ctx.send(embed=discord.Embed(
-                title="Desconectado",
-                description=f"Saí de {count} canais de voz em todos os servidores.",
+                title=t('disconnected'),
+                description=t('left_all_channels', count=count),
                 color=discord.Color.orange()))
         else:
             await ctx.send(embed=discord.Embed(
-                title="Informação",
-                description="Não estou conectado a nenhum canal de voz.",
+                title=t('info'),
+                description=t('not_in_voice'),
                 color=discord.Color.blue()))
     
-    @app_commands.command(name="sair_todos", description="Sai de todos os canais de voz em todos os servidores")
+    @app_commands.command(name="sair_todos", description="Disconnects from all voice channels in all servers", description_localizations={'pt-BR': 'Sai de todos os canais de voz em todos os servidores'})
     async def sair_todos_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         count = 0
@@ -121,13 +122,13 @@ class MusicCog(commands.Cog):
         
         if count > 0:
             await interaction.followup.send(embed=discord.Embed(
-                title="Desconectado",
-                description=f"Saí de {count} canais de voz em todos os servidores.",
+                title=t('disconnected'),
+                description=t('left_all_channels', count=count),
                 color=discord.Color.orange()))
         else:
             await interaction.followup.send(embed=discord.Embed(
-                title="Informação",
-                description="Não estou conectado a nenhum canal de voz.",
+                title=t('info'),
+                description=t('not_in_voice'),
                 color=discord.Color.blue()))
 
     # --- Comandos de Reprodução ---
@@ -137,113 +138,142 @@ class MusicCog(commands.Cog):
         vc = await ensure_voice(ctx)
         if not vc: return
         
+        if not vc: 
+            return
+        
         player = self.get_player(ctx.guild.id)
         
-        try:
-            searches = [s.strip() for s in search.split(';') if s.strip()]
+        # Verificar se é playlist
+        if 'list=' in search:
+            if self.playlist_processing_task and not self.playlist_processing_task.done():
+                await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), "Já existe uma playlist sendo processada. Aguarde."))
+                return
+
+            status_msg = await ctx.send(embed=EmbedBuilder.create_info_embed(t('processing_playlist'), t('extracting_playlist')))
             
-            if len(searches) > 1:
-                await ctx.send(embed=discord.Embed(title="Adicionando...", description=f"Adicionando {len(searches)} músicas...", color=discord.Color.blue()))
-                for s in searches:
-                    await player.add_to_queue(s, ctx.author)
-                await ctx.send(embed=discord.Embed(title="Sucesso", description=f"Adicionadas {len(searches)} músicas à fila.", color=discord.Color.green()))
-            else:
-                is_playlist = search.startswith(('http://', 'https://')) and ('/playlist' in search or '/sets/' in search)
+            try:
+                loop = asyncio.get_event_loop()
+                data = await loop.run_in_executor(None, lambda: extract_info(search, download=False))
                 
-                if is_playlist:
-                    loading_msg = await ctx.send(embed=discord.Embed(
-                        title="⏳ Processando Playlist",
-                        description="Extraindo músicas da playlist...",
-                        color=discord.Color.blue()
-                    ))
+                if 'entries' in data:
+                    songs = [entry for entry in data['entries'] if entry]
+                    for song in songs:
+                        player.queue.append(song)
                     
-                    count, songs = await player.add_playlist_to_queue(search, ctx.author) # Note: add_playlist_to_queue might not be in the simple player.py I saw earlier? 
-                    # Wait, player.py had add_to_queue and add_playlist_async. 
-                    # Checking player.py again... it has add_playlist_async. 
-                    # The bot.py I read had add_playlist_to_queue in the ctx command (line 630), but add_playlist_async in slash (line 693).
-                    # I should probably use add_playlist_async if possible or check if add_playlist_to_queue exists.
-                    # Looking at player.py content (Step 7), there is NO add_playlist_to_queue. Only add_playlist_async.
-                    # So the original bot.py code was calling a method that might not exist in the new player.py? 
-                    # Ah, maybe I missed it or it was added?
-                    # Let's assume add_playlist_async is the way to go.
+                    if not player.is_playing:
+                        await player.play_next()
                     
-                    # Actually, for the text command, let's use add_playlist_async too for consistency.
-                    song = await player.add_playlist_async(search, ctx.author)
-
-                    await loading_msg.delete()
-                    embed = EmbedBuilder.create_success_embed(
-                        "Playlist Adicionada",
-                        f"**{song['title']}** está sendo processada em segundo plano!"
-                    )
-                    await ctx.send(embed=embed)
+                    await status_msg.edit(embed=EmbedBuilder.create_success_embed(t('playlist_added'), t('added_songs_queue', count=len(songs))))
                 else:
-                    song = await player.add_to_queue(search, ctx.author)
-                    position = len(list(player.queue))
-                    embed = EmbedBuilder.create_success_embed(
-                        "Adicionada à fila",
-                        f"**{song['title']}** • Posição #{position}"
-                    )
-                    await ctx.send(embed=embed, delete_after=5)
-            
-            if not player.voice_client.is_playing() and not player.is_paused:
-                await player.play_next()
-
-        except Exception as e:
-            logging.error(f"Erro no play: {e}")
-            await ctx.send(f"Erro ao buscar música: {e}")
-
-    @app_commands.command(name="play", description="Toca músicas do YouTube ou SoundCloud (use ; para múltiplas)")
-    @app_commands.describe(search="Nome, URL ou 'scsearch: termo' para SoundCloud")
-    async def play_slash(self, interaction: discord.Interaction, search: str):
-        await interaction.response.defer()
-        
-        vc = await ensure_voice(interaction)
-        if not vc:
-            await interaction.followup.send("Você precisa estar em um canal de voz!", ephemeral=True)
+                    await status_msg.edit(embed=EmbedBuilder.create_error_embed(t('error'), "Não foi possível extrair a playlist."))
+            except Exception as e:
+                await status_msg.edit(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
             return
+
+        # Busca normal (YouTube/SoundCloud)
+        searches = search.split(";")
+        if len(searches) > 1:
+            await ctx.send(embed=EmbedBuilder.create_info_embed(t('adding_songs', count=len(searches))))
+        
+        for query in searches:
+            query = query.strip()
+            if not query: continue
+            
+            try:
+                info = extract_info(query, download=False)
+                if not info: continue
+                
+                entries = info.get('entries', [info])
+                for entry in entries:
+                    player.queue.append(entry)
+                    if not player.is_playing:
+                        await player.play_next()
+                    else:
+                        # Se já estiver tocando, avisa que adicionou à fila (se for apenas 1 música)
+                        if len(searches) == 1 and len(entries) == 1:
+                             pos = len(player.queue)
+                             await ctx.send(embed=EmbedBuilder.create_info_embed(
+                                 t('added_to_queue'), 
+                                 f"🎵 **{entry.get('title')}**\n{t('position_in_queue', position=pos)}"
+                             ))
+
+            except Exception as e:
+                await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), f"Erro ao adicionar: {query}"))
+                logging.error(f"Erro no play: {e}")
+
+        if len(searches) > 1:
+            await ctx.send(embed=EmbedBuilder.create_success_embed(t('success'), t('added_songs_queue', count=len(searches))))
+
+    @app_commands.command(name="play", description="Plays music from YouTube or SoundCloud", description_localizations={'pt-BR': 'Toca músicas do YouTube ou SoundCloud'})
+    @app_commands.describe(search="Name, URL or 'scsearch: term' for SoundCloud")
+    async def play_slash(self, interaction: discord.Interaction, search: str):
+        if not interaction.user.voice:
+            await interaction.response.send_message(t('user_must_be_in_voice'), ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        vc = await ensure_voice(interaction)
+        if not vc: return
 
         player = self.get_player(interaction.guild_id)
 
-        try:
-            searches = [s.strip() for s in search.split(';') if s.strip()]
-            
-            if len(searches) > 1:
-                await interaction.followup.send(embed=discord.Embed(title="Adicionando...", description=f"Adicionando {len(searches)} músicas...", color=discord.Color.blue()))
-                for s in searches:
-                    await player.add_to_queue(s, interaction.user)
-                await interaction.followup.send(embed=discord.Embed(title="Sucesso", description=f"Adicionadas {len(searches)} músicas à fila.", color=discord.Color.green()))
-            else:
-                is_playlist = search.startswith(('http://', 'https://')) and ('/playlist' in search or '/sets/' in search or 'list=' in search or '/album/' in search)
+         # Verificar se é playlist
+        if 'list=' in search:
+             if self.playlist_processing_task and not self.playlist_processing_task.done():
+                await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), "Já existe uma playlist sendo processada."))
+                return
+             
+             msg = await interaction.followup.send(embed=EmbedBuilder.create_info_embed(t('processing_playlist'), t('extracting_playlist')))
+             try:
+                loop = asyncio.get_event_loop()
+                data = await loop.run_in_executor(None, lambda: extract_info(search, download=False))
                 
-                if is_playlist:
-                    await interaction.followup.send(embed=discord.Embed(
-                        title="⏳ Processando Playlist",
-                        description="Extraindo músicas da playlist...",
-                        color=discord.Color.blue()
-                    ))
+                if 'entries' in data:
+                    songs = [entry for entry in data['entries'] if entry]
+                    for song in songs:
+                        player.queue.append(song)
                     
-                    song = await player.add_playlist_async(search, interaction.user)
+                    if not player.is_playing:
+                        await player.play_next()
                     
-                    embed = EmbedBuilder.create_success_embed(
-                        "Playlist Adicionada",
-                        f"**{song['title']}** está sendo processada em segundo plano!"
-                    )
-                    await interaction.followup.send(embed=embed, ephemeral=True)
+                    await interaction.followup.send(embed=EmbedBuilder.create_success_embed(t('playlist_added'), t('added_songs_queue', count=len(songs))))
                 else:
-                    song = await player.add_to_queue(search, interaction.user)
-                    position = len(list(player.queue))
-                    embed = EmbedBuilder.create_success_embed(
-                        "Adicionada à fila",
-                        f"**{song['title']}** • Posição #{position}"
-                    )
-                    await interaction.followup.send(embed=embed, ephemeral=True)
-            
-            if not player.voice_client.is_playing() and not player.is_paused:
-                await player.play_next()
+                    await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), "Falha ao extrair playlist."))
+
+             except Exception as e:
+                 await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
+             return
+
+        # Busca normal
+        searches = search.split(";")
+        
+        for query in searches:
+            query = query.strip()
+            if not query: continue
+
+            try:
+                info = extract_info(query, download=False)
+                if not info: continue
+
+                entries = info.get('entries', [info])
+                for entry in entries:
+                    player.queue.append(entry)
+                    if not player.is_playing:
+                        await player.play_next()
+                    else:
+                        if len(searches) == 1 and len(entries) == 1:
+                            pos = len(player.queue)
+                            await interaction.followup.send(embed=EmbedBuilder.create_info_embed(
+                                t('added_to_queue'), 
+                                f"🎵 **{entry.get('title')}**\n{t('position_in_queue', position=pos)}"
+                            ))
+            except Exception as e:
+                logging.error(f"Erro no play_slash: {e}")
+                await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
+        
+        if len(searches) > 1:
+             await interaction.followup.send(embed=discord.Embed(title=t('success'), description=t('added_songs_queue', count=len(searches)), color=discord.Color.green()))
                 
-        except Exception as e:
-            msg = f"Erro: {e}"
-            await interaction.followup.send(msg)
 
     @commands.command()
     async def skip(self, ctx: commands.Context):
@@ -251,7 +281,7 @@ class MusicCog(commands.Cog):
         player.skip()
         await ctx.send("Música pulada.")
 
-    @app_commands.command(name="skip", description="Pula para a próxima música")
+    @app_commands.command(name="skip", description="Skips to the next song", description_localizations={'pt-BR': 'Pula para a próxima música'})
     async def skip_slash(self, interaction: discord.Interaction):
         player = self.get_player(interaction.guild_id)
         player.skip()
@@ -263,7 +293,7 @@ class MusicCog(commands.Cog):
         player.stop()
         await ctx.send("Música parada e fila limpa.")
 
-    @app_commands.command(name="stop", description="Para a reprodução e limpa a fila")
+    @app_commands.command(name="stop", description="Stops playback and clears the queue", description_localizations={'pt-BR': 'Para a reprodução e limpa a fila'})
     async def stop_slash(self, interaction: discord.Interaction):
         player = self.get_player(interaction.guild_id)
         player.stop()
@@ -274,83 +304,144 @@ class MusicCog(commands.Cog):
         player = self.get_player(ctx.guild.id)
         if not player.current_song:
             await ctx.send(embed=discord.Embed(
-                title="Reprodução",
-                description="Não estou tocando nada no momento.",
+                title=t('playback'),
+                description=t('not_playing'),
                 color=discord.Color.blue()))
             return
 
         song = player.current_song
         title = song['title']
-        thumbnail = song.get('thumbnail')
         user = song['user']
-        duration = song.get('duration', 'Desconhecida')
-        channel = song.get('channel', 'Desconhecido')
+        duration = song.get('duration', t('unknown'))
+        channel = song.get('channel', t('unknown'))
             
         embed = discord.Embed(
-            title="🎵 Tocando Agora",
+            title=t('now_playing'),
             description=f"**{title}**",
             color=discord.Color.from_rgb(57, 255, 20)
         )
         
-        embed.add_field(name="Canal", value=channel, inline=True)
-        embed.add_field(name="Duração", value=duration, inline=True)
-        embed.add_field(name="Adicionado por", value=user.mention, inline=False)
+        embed.add_field(name=t('channel'), value=channel, inline=True)
+        embed.add_field(name=t('duration'), value=duration, inline=True)
+        if hasattr(user, 'mention'):
+            embed.add_field(name=t('added_by'), value=user.mention, inline=False)
+        else:
+            embed.add_field(name=t('added_by'), value=str(user), inline=False)
         
         if len(player.queue) > 0:
-            embed.set_footer(text=f"Próximas: {len(player.queue)} música(s) na fila")
-        
-        if thumbnail:
-            embed.set_thumbnail(url=thumbnail)
-            if thumbnail.startswith("https://i.ytimg.com/"):
-                embed.set_image(url=thumbnail.replace("hqdefault", "maxresdefault"))
-            else:
-                embed.set_image(url=thumbnail)
-                
+            embed.set_footer(text=t('next_songs_in_queue', count=len(player.queue)))
+            
         await ctx.send(embed=embed)
 
-    @app_commands.command(name="agora", description="Mostra a música atual")
+    @app_commands.command(name="agora", description="Shows the currently playing song", description_localizations={'pt-BR': 'Mostra a música tocando agora'})
     async def agora_slash(self, interaction: discord.Interaction):
         player = self.get_player(interaction.guild_id)
         if not player.current_song:
-            await interaction.response.send_message("Não estou tocando nada no momento.")
+            await interaction.response.send_message(embed=discord.Embed(
+                title=t('playback'),
+                description=t('not_playing'),
+                color=discord.Color.blue()))
             return
 
         song = player.current_song
-        embed = discord.Embed(title="Tocando Agora", description=f"**{song['title']}**", color=discord.Color.green())
-        if song.get('thumbnail'):
-            embed.set_thumbnail(url=song['thumbnail'])
-        embed.add_field(name="Duração", value=song['duration'])
+        title = song['title']
+        user = song['user']
+        duration = song.get('duration', t('unknown'))
+        channel = song.get('channel', t('unknown'))
+            
+        embed = discord.Embed(
+            title=t('now_playing'),
+            description=f"**{title}**",
+            color=discord.Color.from_rgb(57, 255, 20)
+        )
         
+        embed.add_field(name=t('channel'), value=channel, inline=True)
+        embed.add_field(name=t('duration'), value=duration, inline=True)
+        if hasattr(user, 'mention'):
+            embed.add_field(name=t('added_by'), value=user.mention, inline=False)
+        else:
+            embed.add_field(name=t('added_by'), value=str(user), inline=False)
+        
+        if len(player.queue) > 0:
+            embed.set_footer(text=t('next_songs_in_queue', count=len(player.queue)))
+            
         await interaction.response.send_message(embed=embed)
 
     @commands.command(name="fila")
     async def fila(self, ctx: commands.Context):
         player = self.get_player(ctx.guild.id)
-        if not player.queue and not player.current_song:
-            embed = EmbedBuilder.create_error_embed(
-                "Fila vazia",
-                "Não há músicas na fila no momento."
-            )
-            await ctx.send(embed=embed, delete_after=5)
+        if len(player.queue) == 0 and not player.current_song:
+            await ctx.send(embed=discord.Embed(
+                title=t('queue_empty'),
+                description=t('queue_no_songs'),
+                color=discord.Color.blue()))
             return
-             
-        embed = EmbedBuilder.create_queue_embed(player.current_song, list(player.queue))
+
+        # Calcular duração total da fila
+        total_seconds = sum(s.get('duration_seconds', 0) for s in player.queue)
+        total_time_str = f"{int(total_seconds // 60)}{t('minutes_abbr')}"
+
+        embed = discord.Embed(
+            title=f"{t('queue')} ({len(player.queue)} {t('songs')} • {total_time_str})",
+            color=discord.Color.blue()
+        )
+
+        if player.current_song:
+            embed.add_field(
+                name=t('playing_now'),
+                value=f"**{player.current_song['title']}** \n`{player.current_song.get('duration', '?')}`",
+                inline=False
+            )
+
+        songs_list = ""
+        for i, song in enumerate(list(player.queue)[:10], 1):
+            songs_list += f"`{i}.` **{song['title']}** | `{song.get('duration', '?')}`\n"
+        
+        if len(player.queue) > 10:
+            songs_list += f"\n{t('and_more_songs', count=len(player.queue) - 10)}"
+            
+        if songs_list:
+            embed.add_field(name=t('next_songs_in_queue', count=len(player.queue)), value=songs_list, inline=False)
+            
         await ctx.send(embed=embed)
 
-    @app_commands.command(name="fila", description="Mostra a fila de músicas")
+    @app_commands.command(name="fila", description="Shows the music queue", description_localizations={'pt-BR': 'Mostra a fila de músicas'})
     async def fila_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
         player = self.get_player(interaction.guild_id)
-        if not player.queue and not player.current_song:
-            embed = EmbedBuilder.create_error_embed(
-                "Fila vazia",
-                "Não há músicas na fila no momento."
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
+        if len(player.queue) == 0 and not player.current_song:
+            await interaction.followup.send(embed=discord.Embed(
+                title=t('queue_empty'),
+                description=t('queue_no_songs'),
+                color=discord.Color.blue()), ephemeral=True)
             return
 
-        embed = EmbedBuilder.create_queue_embed(player.current_song, list(player.queue))
+        total_seconds = sum(s.get('duration_seconds', 0) for s in player.queue)
+        total_time_str = f"{int(total_seconds // 60)}{t('minutes_abbr')}"
+
+        embed = discord.Embed(
+            title=f"{t('queue')} ({len(player.queue)} {t('songs')} • {total_time_str})",
+            color=discord.Color.blue()
+        )
+
+        if player.current_song:
+             embed.add_field(
+                name=t('playing_now'),
+                value=f"**{player.current_song['title']}** \n`{player.current_song.get('duration', '?')}`",
+                inline=False
+            )
+
+        songs_list = ""
+        for i, song in enumerate(list(player.queue)[:10], 1):
+            songs_list += f"`{i}.` **{song['title']}** | `{song.get('duration', '?')}`\n"
+        
+        if len(player.queue) > 10:
+            songs_list += f"\n{t('and_more_songs', count=len(player.queue) - 10)}"
+            
+        if songs_list:
+             embed.add_field(name=t('next_songs_in_queue', count=len(player.queue)), value=songs_list, inline=False)
+            
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @commands.command()
@@ -363,8 +454,8 @@ class MusicCog(commands.Cog):
         )
         await ctx.send(embed=embed, delete_after=5)
 
-    @app_commands.command(name="volume", description="Ajusta o volume (0.0 a 1.0)")
-    @app_commands.describe(vol="Volume entre 0.0 e 1.0")
+    @app_commands.command(name="volume", description="Adjusts the volume (0.0 to 1.0)", description_localizations={'pt-BR': 'Ajusta o volume (0.0 a 1.0)'})
+    @app_commands.describe(vol="Volume between 0.0 and 1.0")
     async def volume_slash(self, interaction: discord.Interaction, vol: float):
         player = self.get_player(interaction.guild_id)
         player.set_volume(vol)
@@ -374,7 +465,7 @@ class MusicCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="nowplaying", description="Mostra a música tocando atualmente com barra de progresso")
+    @app_commands.command(name="nowplaying", description="Shows currently playing song with progress bar", description_localizations={'pt-BR': 'Mostra a música tocando atualmente com barra de progresso'})
     async def nowplaying_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         
@@ -440,155 +531,169 @@ class MusicCog(commands.Cog):
 
     # --- Comandos de Rádio ---
 
-    @app_commands.command(name="radios", description="Lista todas as rádios disponíveis")
-    async def radios_slash(self, interaction: discord.Interaction):
+    @commands.command()
+    async def radios(self, ctx: commands.Context):
+        if not self.RADIOS:
+            await ctx.send(t('no_radios_found'))
+            return
+
         embed = discord.Embed(
-            title="📻 Rádios Disponíveis",
-            description="Use /radio [nome] para tocar uma rádio",
-            color=discord.Color.blue()
+            title=t('radios_available'),
+            description=t('use_radio_command'),
+            color=discord.Color.gold()
         )
+        
+        for r_id, r_info in self.RADIOS.items():
+            name = r_info.get('name', r_id)
+            location = r_info.get('location', t('unknown'))
+            embed.add_field(name=f"{name} ({r_id})", value=location, inline=True)
+            
+        await ctx.send(embed=embed)
 
-        for key, radio in self.RADIOS.items():
-            embed.add_field(
-                name=f"{radio['name']} ({radio['location']})",
-                value=f"Comando: `/radio {key}`\n{radio['description']}",
-                inline=False
-            )
+    @app_commands.command(name="radios", description="Lists available radio stations", description_localizations={'pt-BR': 'Lista as rádios disponíveis'})
+    async def radios_slash(self, interaction: discord.Interaction):
+        if not self.RADIOS:
+            await interaction.response.send_message(t('no_radios_found'))
+            return
 
+        embed = discord.Embed(
+            title=t('radios_available'),
+            description=t('use_radio_command'),
+            color=discord.Color.gold()
+        )
+        
+        for r_id, r_info in self.RADIOS.items():
+            name = r_info.get('name', r_id)
+            location = r_info.get('location', t('unknown'))
+            embed.add_field(name=f"{name} ({r_id})", value=location, inline=True)
+            
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="radio", description="Toca uma rádio")
-    @app_commands.describe(nome="Nome da rádio para tocar (use /radios para ver a lista)")
-    async def radio_slash(self, interaction: discord.Interaction, nome: str):
-        await interaction.response.defer(ephemeral=False)
+    @commands.command()
+    async def radio(self, ctx: commands.Context, radio_id: str):
+        vc = await ensure_voice(ctx)
+        if not vc: return
         
-        if nome not in self.RADIOS:
-            await interaction.followup.send(
-                embed=discord.Embed(
-                    title="Erro",
-                    description="Rádio não encontrada. Use /radios para ver a lista de rádios disponíveis.",
-                    color=discord.Color.red()
-                ),
-                ephemeral=True
-            )
+        radio_info = self.RADIOS.get(radio_id.lower())
+        if not radio_info:
+            await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), t('radio_not_found')))
             return
-
-        if not interaction.user.voice:
-            await interaction.followup.send(
-                embed=discord.Embed(
-                    title="Erro",
-                    description="Você precisa estar em um canal de voz para usar este comando!",
-                    color=discord.Color.red()
-                ),
-                ephemeral=True
-            )
+            
+        url = radio_info.get('url')
+        if not url:
+            await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), t('invalid_url')))
             return
-
+            
+        player = self.get_player(ctx.guild.id)
+        
+        # Parar música atual se houver
+        player.stop()
+        
         try:
-            radio = self.RADIOS[nome]
-            vc = interaction.guild.voice_client
-            if vc:
-                if vc.channel != interaction.user.voice.channel:
-                    await vc.move_to(interaction.user.voice.channel)
-            else:
-                vc = await interaction.user.voice.channel.connect()
+            # Rádios geralmente são streams diretos, usamos add_to_queue mas com metadados manuais seria melhor
+            # O MusicPlayer detecta stream se for URL
+            await player.add_to_queue(url, ctx.author)
+            
+            # Forçar update de metadados para parecer rádio
+            if player.queue:
+                player.queue[-1]['title'] = radio_info.get('name', radio_id)
+                player.queue[-1]['is_radio'] = True
+                player.queue[-1]['thumbnail'] = radio_info.get('favicon')
+            
+            await player.play_next()
+            await ctx.send(embed=EmbedBuilder.create_radio_embed(radio_info))
+            
+        except Exception as e:
+             await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
 
-            # Usar FFMPEG_PATH de config se existir, ou 'ffmpeg'
-            executable = 'ffmpeg'
-            # Note: I didn't verify if FFMPEG_PATH was in config.py. It wasn't in my plan for config.py.
-            # I should just use 'ffmpeg' or add it to config if needed. 
-            # In bot.py it checked global FFMPEG_PATH which seemed undefined in the displayed code or maybe I missed it.
-            # I will assume 'ffmpeg' is fine for now.
+    @app_commands.command(name="radio", description="Plays a specific radio station", description_localizations={'pt-BR': 'Toca uma rádio específica'})
+    @app_commands.describe(radio_id="Radio ID")
+    async def radio_slash(self, interaction: discord.Interaction, radio_id: str):
+        if not interaction.user.voice:
+             await interaction.response.send_message(t('user_must_be_in_voice'), ephemeral=True)
+             return
 
-            ffmpeg_options = {
-                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-                'options': f'-vn -af "aresample=48000,atempo=1.0,volume=0.5" -bufsize 10M' # volume default 0.5
-            }
-            if vc.is_playing():
-                vc.stop()
+        await interaction.response.defer()
+        vc = await ensure_voice(interaction)
+        if not vc: return
+        
+        radio_info = self.RADIOS.get(radio_id.lower())
+        if not radio_info:
+            await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), t('radio_not_found')))
+            return
+            
+        url = radio_info.get('url')
+        if not url:
+            await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), t('invalid_url')))
+            return
+            
+        player = self.get_player(interaction.guild_id)
+        player.stop()
+        
+        try:
+            await player.add_to_queue(url, interaction.user)
+             # Forçar update de metadados
+            if player.queue:
+                player.queue[-1]['title'] = radio_info.get('name', radio_id)
+                player.queue[-1]['is_radio'] = True
+                player.queue[-1]['thumbnail'] = radio_info.get('favicon')
 
-            # Limpar player queue se existir
-            if interaction.guild.id in self.bot.players:
-                player = self.bot.players[interaction.guild.id]
-                player.queue.clear()
-                player.current_song = None
-
-            vc.play(
-                discord.FFmpegPCMAudio(radio['url'], executable=executable, **ffmpeg_options),
-                after=lambda e: logging.error(f'Erro na reprodução da rádio: {e}') if e else None
-            )
-
-            embed = EmbedBuilder.create_radio_embed(radio)
-            await interaction.followup.send(embed=embed)
+            await player.play_next()
+            await interaction.followup.send(embed=EmbedBuilder.create_radio_embed(radio_info))
+            
+        except Exception as e:
+             await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
             
         except Exception as e:
             logging.error(f"Erro ao tocar rádio: {e}")
-            embed = EmbedBuilder.create_error_embed(
-                "Erro ao tocar rádio",
-                f"Não foi possível iniciar a transmissão: {str(e)}"
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
 
-    @app_commands.command(name="addradio", description="Adiciona uma nova rádio personalizada")
-    async def add_radio_slash(self, interaction: discord.Interaction, nome: str, url: str, localizacao: str = "Desconhecido", descricao: str = "Rádio personalizada"):
-        await interaction.response.defer(ephemeral=False)
-        
-        if not url.startswith(('http://', 'https://')):
-            await interaction.followup.send(embed=discord.Embed(title="Erro", description="URL inválida.", color=discord.Color.red()))
+    @app_commands.command(name="addradio", description="Adds a new custom radio (Admin)", description_localizations={'pt-BR': 'Adiciona uma nova rádio personalizada (Admin)'})
+    @app_commands.describe(id="Unique ID for remote", nome="Radio Name", url="Stream URL", localizacao="Location (optional)")
+    async def add_radio_slash(self, interaction: discord.Interaction, id: str, nome: str, url: str, localizacao: str = "Desconhecido"):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(t('need_admin'), ephemeral=True)
+            return
+
+        if id in self.RADIOS:
+            await interaction.response.send_message(embed=EmbedBuilder.create_error_embed(t('error'), t('radio_exists', name=nome)), ephemeral=True)
             return
             
-        radio_id = nome.lower().replace(" ", "_")
-        
-        if radio_id in self.RADIOS:
-            await interaction.followup.send(embed=discord.Embed(title="Erro", description=f"Uma rádio com o nome '{nome}' já existe.", color=discord.Color.red()))
-            return
-            
-        self.RADIOS[radio_id] = {
+        self.RADIOS[id] = {
             "name": nome,
-            "location": localizacao,
             "url": url,
-            "description": descricao
+            "location": localizacao
         }
         
         try:
-            with open(RADIOS_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.RADIOS, f, ensure_ascii=False, indent=4)
+            with open(RADIOS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.RADIOS, f, indent=4)
+            await interaction.response.send_message(embed=EmbedBuilder.create_success_embed(t('radio_added'), t('radio_added_success', name=nome, id=id)))
         except Exception as e:
-            logging.error(f"Erro ao salvar rádios: {e}")
-            await interaction.followup.send(embed=discord.Embed(title="Erro", description="Ocorreu um erro ao salvar a rádio.", color=discord.Color.red()))
-            return
-            
-        await interaction.followup.send(embed=discord.Embed(
-            title="Rádio Adicionada",
-            description=f"Rádio '{nome}' adicionada com sucesso!\nUse `/radio {radio_id}` para tocar.",
-            color=discord.Color.green()
-        ))
+            logging.error(f"Erro ao salvar rádio: {e}")
+            await interaction.response.send_message(embed=EmbedBuilder.create_error_embed(t('error'), t('error_saving_radio')), ephemeral=True)
 
-    @app_commands.command(name="removeradio", description="Remove uma rádio personalizada")
-    async def remove_radio_slash(self, interaction: discord.Interaction, nome: str):
-        await interaction.response.defer(ephemeral=False)
-        
-        radio_id = nome.lower().replace(" ", "_")
-        
-        if radio_id not in self.RADIOS:
-            await interaction.followup.send(embed=discord.Embed(title="Erro", description=f"Rádio '{nome}' não encontrada.", color=discord.Color.red()))
+    @app_commands.command(name="removeradio", description="Removes an existing radio (Admin)", description_localizations={'pt-BR': 'Remove uma rádio existente (Admin)'})
+    @app_commands.describe(id="ID of the radio to remove")
+    async def remove_radio_slash(self, interaction: discord.Interaction, id: str):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(t('need_admin'), ephemeral=True)
+            return
+
+        if id not in self.RADIOS:
+            await interaction.response.send_message(embed=EmbedBuilder.create_error_embed(t('error'), t('radio_not_found')), ephemeral=True)
             return
             
-        del self.RADIOS[radio_id]
+        name = self.RADIOS[id].get('name', id)
+        del self.RADIOS[id]
         
         try:
-            with open(RADIOS_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.RADIOS, f, ensure_ascii=False, indent=4)
+            with open(RADIOS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.RADIOS, f, indent=4)
+            await interaction.response.send_message(embed=EmbedBuilder.create_success_embed(t('radio_removed'), t('radio_removed_success', name=name)))
         except Exception as e:
-            logging.error(f"Erro ao salvar rádios: {e}")
-            await interaction.followup.send(embed=discord.Embed(title="Erro", description="Erro ao remover rádio.", color=discord.Color.red()))
-            return
-            
-        await interaction.followup.send(embed=discord.Embed(
-            title="Rádio Removida",
-            description=f"Rádio '{nome}' removida com sucesso!",
-            color=discord.Color.green()
-        ))
+            logging.error(f"Erro ao remover rádio: {e}")
+            await interaction.response.send_message(embed=EmbedBuilder.create_error_embed(t('error'), t('error_removing_radio')), ephemeral=True)
 
     @commands.command(name="sync")
     async def sync_commands(self, ctx: commands.Context):

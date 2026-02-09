@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Music Bot Controller</title>
+    <title>Controlador de Bot de Música</title>
     <link rel="stylesheet" href="/static/style.css?v=2">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -19,7 +19,7 @@
 
         <header class="app-header">
             <button id="sidebar-toggle" class="icon-btn" title="Menu"><i class="fa-solid fa-bars"></i></button>
-            <h1>🎵 Controller</h1>
+            <h1 data-i18n="header_title">🎵 Painel de Controle</h1>
             <div class="header-actions">
                 <button id="refresh-btn" class="icon-btn" title="Atualizar">
                     <i class="fa-solid fa-rotate"></i>
@@ -34,27 +34,43 @@
         <!-- Barra Lateral -->
         <aside id="settings-sidebar" class="sidebar">
             <div class="sidebar-header">
-                <h3>Ajustes</h3>
+                <h3 data-i18n="settings_title">Ajustes</h3>
                 <button id="close-sidebar" class="icon-btn"><i class="fa-solid fa-times"></i></button>
             </div>
 
             <div class="sidebar-content">
                 <div class="setting-group">
-                    <label>Token Discord</label>
-                    <input type="password" id="token-input" placeholder="Cole o token...">
-                    <button id="save-token-btn" class="btn-small">Salvar Token</button>
+                    <label data-i18n="language_label">Idioma / Language</label>
+                    <div class="language-switcher" id="language-switcher">
+                        <button class="lang-btn active" data-lang="pt">
+                            <span class="flag">🇧🇷</span>
+                            <span class="name">PT</span>
+                        </button>
+                        <button class="lang-btn" data-lang="en">
+                            <span class="flag">🇺🇸</span>
+                            <span class="name">EN</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="setting-group">
-                    <label>Controle do Bot</label>
+                    <label data-i18n="discord_token">Token Discord</label>
+                    <input type="password" id="token-input" placeholder="Cole o token..."
+                        data-i18n-placeholder="token_placeholder">
+                    <button id="save-token-btn" class="btn-small" data-i18n="save_token">Salvar Token</button>
+                </div>
+
+                <div class="setting-group">
+                    <label data-i18n="bot_control">Controle do Bot</label>
                     <div class="bot-control-buttons">
-                        <button id="init-token-btn" class="btn-small" title="Inicializar">
+                        <button id="init-token-btn" class="btn-small" title="Inicializar" data-i18n="btn_start">
                             <i class="fa-solid fa-power-off"></i> Iniciar
                         </button>
-                        <button id="restart-bot-btn" class="btn-small" title="Reiniciar">
+                        <button id="restart-bot-btn" class="btn-small" title="Reiniciar" data-i18n="btn_restart">
                             <i class="fa-solid fa-rotate-right"></i> Reiniciar
                         </button>
-                        <button id="shutdown-bot-btn" class="btn-small danger" title="Desligar">
+                        <button id="shutdown-bot-btn" class="btn-small danger" title="Desligar"
+                            data-i18n="btn_shutdown">
                             <i class="fa-solid fa-stop"></i> Desligar
                         </button>
                     </div>
@@ -73,13 +89,14 @@
                     <div class="vinyl-hole"></div>
                 </div>
                 <div class="track-details">
-                    <h2 id="song-title">Nenhuma música</h2>
-                    <p id="song-artist">Aguardando comando...</p>
+                    <h2 id="song-title" data-i18n="no_song">Nenhuma música</h2>
+                    <p id="song-artist" data-i18n="waiting">Aguardando comando...</p>
 
-                    <!-- Barra de Progresso -->
+                    <!-- Barra de Progresso Customizada -->
                     <div class="progress-container" id="progress-container" style="display: none;">
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progress-fill"></div>
+                        <div class="progress">
+                            <div class="progress-bar" id="progress-fill" role="progressbar" style="width: 0%;"
+                                aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
                         <div class="progress-time">
                             <span id="current-time">0:00</span>
@@ -101,9 +118,10 @@
             </div>
 
             <div class="card card-input">
-                <h3>Adicionar à Fila</h3>
+                <h3 data-i18n="add_to_queue">Adicionar à Fila</h3>
                 <div class="input-group">
-                    <input type="text" id="music-input" placeholder="Cole o link ou nome..." autocomplete="off">
+                    <input type="text" id="music-input" placeholder="Cole o link ou nome..." autocomplete="off"
+                        data-i18n-placeholder="input_placeholder">
                     <button id="clear-search-btn" class="icon-btn" title="Limpar" style="display: none;"><i
                             class="fa-solid fa-times"></i></button>
                     <button id="play-btn"><i class="fa-solid fa-plus"></i></button>
@@ -112,31 +130,32 @@
 
             <div class="card card-queue">
                 <div class="card-header">
-                    <h3><i class="fa-solid fa-list-ol"></i> Fila</h3>
-                    <span class="badge">Próximas</span>
+                    <h3><i class="fa-solid fa-list-ol"></i> <span data-i18n="queue_title">Fila</span></h3>
+                    <span class="badge" data-i18n="queue_next">Próximas</span>
                 </div>
                 <ul id="queue-list" class="custom-scrollbar">
-                    <li class="queue-empty">A fila está vazia.</li>
+                    <li class="queue-empty" data-i18n="queue_empty">A fila está vazia.</li>
                 </ul>
             </div>
 
             <!-- Cartão de Playlist (Movido das Configurações) -->
             <div class="card card-playlist">
                 <div class="card-header">
-                    <h3><i class="fa-solid fa-list-check"></i> Playlists Salvas</h3>
+                    <h3><i class="fa-solid fa-list-check"></i> <span data-i18n="playlists_title">Playlists Salvas</span>
+                    </h3>
                 </div>
 
                 <div class="setting-group">
-                    <label>Upload Nova Playlist (.txt)</label>
+                    <label data-i18n="upload_playlist">Upload Nova Playlist (.txt)</label>
                     <div class="file-drop-zone" id="drop-zone">
                         <i class="fa-solid fa-cloud-arrow-up"></i>
-                        <p>Arraste arquivo .txt</p>
+                        <p data-i18n="drag_drop">Arraste arquivo .txt</p>
                         <input type="file" id="playlist-upload" accept=".txt" hidden>
                     </div>
                 </div>
 
                 <div class="playlist-history-section">
-                    <label>Minhas Playlists</label>
+                    <label data-i18n="my_playlists">Minhas Playlists</label>
                     <ul id="playlist-history-list" class="simple-list">
                         <!-- Itens preenchidos via JS -->
                     </ul>
@@ -146,8 +165,8 @@
             <!-- Cartão de Rádios -->
             <div class="card card-radios">
                 <div class="card-header">
-                    <h3><i class="fa-solid fa-radio"></i> Rádios</h3>
-                    <button id="add-radio-btn" class="btn-small">
+                    <h3><i class="fa-solid fa-radio"></i> <span data-i18n="radios_title">Rádios</span></h3>
+                    <button id="add-radio-btn" class="btn-small" data-i18n="btn_add">
                         <i class="fa-solid fa-plus"></i> Adicionar
                     </button>
                 </div>
@@ -160,8 +179,9 @@
             <!-- Cartão de Soundboard -->
             <div class="card card-soundboard">
                 <div class="card-header">
-                    <h3><i class="fa-solid fa-volume-high"></i> Soundboard</h3>
-                    <button id="upload-sfx-btn" class="btn-small">
+                    <h3><i class="fa-solid fa-volume-high"></i> <span data-i18n="soundboard_title">Soundboard</span>
+                    </h3>
+                    <button id="upload-sfx-btn" class="btn-small" data-i18n="btn_upload">
                         <i class="fa-solid fa-upload"></i> Upload
                     </button>
                 </div>
@@ -179,30 +199,30 @@
     <div id="radio-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3><i class="fa-solid fa-radio"></i> Adicionar Nova Rádio</h3>
+                <h3 data-i18n="modal_radio_title"><i class="fa-solid fa-radio"></i> Adicionar Nova Rádio</h3>
                 <button id="cancel-radio-btn" class="icon-btn">
                     <i class="fa-solid fa-times"></i>
                 </button>
             </div>
             <form id="radio-form">
                 <div class="form-group">
-                    <label for="radio-name">Nome da Rádio *</label>
+                    <label for="radio-name" data-i18n="label_radio_name">Nome da Rádio *</label>
                     <input type="text" id="radio-name" placeholder="Ex: Mix FM Brasil" required>
                 </div>
                 <div class="form-group">
-                    <label for="radio-url">URL do Stream *</label>
+                    <label for="radio-url" data-i18n="label_radio_url">URL do Stream *</label>
                     <input type="url" id="radio-url" placeholder="https://..." required>
                 </div>
                 <div class="form-group">
-                    <label for="radio-location">Localização</label>
+                    <label for="radio-location" data-i18n="label_radio_location">Localização</label>
                     <input type="text" id="radio-location" placeholder="Ex: São Paulo, Brasil">
                 </div>
                 <div class="form-group">
-                    <label for="radio-description">Descrição</label>
+                    <label for="radio-description" data-i18n="label_radio_desc">Descrição</label>
                     <textarea id="radio-description" placeholder="Descrição da rádio..." rows="3"></textarea>
                 </div>
                 <div class="modal-buttons">
-                    <button type="submit" class="btn-small">
+                    <button type="submit" class="btn-small" data-i18n="btn_save">
                         <i class="fa-solid fa-save"></i> Salvar
                     </button>
                 </div>
@@ -214,22 +234,22 @@
     <div id="sfx-upload-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3><i class="fa-solid fa-upload"></i> Upload Sound Effect</h3>
+                <h3 data-i18n="modal_sfx_title"><i class="fa-solid fa-upload"></i> Enviar Efeito Sonoro</h3>
                 <button id="close-upload-modal" class="icon-btn">
                     <i class="fa-solid fa-times"></i>
                 </button>
             </div>
             <form id="sfx-upload-form">
                 <div class="form-group">
-                    <label for="sfx-file">Arquivo de Áudio (MP3, WAV, OGG, M4A)</label>
+                    <label for="sfx-file" data-i18n="label_sfx_file">Arquivo de Áudio (MP3, WAV, OGG, M4A)</label>
                     <input type="file" id="sfx-file" accept="audio/*" required>
                 </div>
                 <div id="audio-preview" class="audio-preview" style="display: none;">
-                    <label>Preview:</label>
+                    <label data-i18n="label_preview">Prévia:</label>
                     <audio id="preview-audio" controls></audio>
                 </div>
                 <div class="modal-buttons">
-                    <button type="submit" class="btn-small">
+                    <button type="submit" class="btn-small" data-i18n="btn_send">
                         <i class="fa-solid fa-upload"></i> Upload
                     </button>
                 </div>
