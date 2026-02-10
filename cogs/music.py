@@ -9,7 +9,7 @@ import aiofiles
 from utils.player import MusicPlayer
 from config import RADIOS_FILE, PLAYLIST_DIR, DATA_DIR, FFMPEG_PATH
 from utils.embeds import EmbedBuilder
-from utils.helpers import ensure_voice, check_system_resources, load_radios, extract_info, playlist_cache
+from utils.helpers import ensure_voice, check_system_resources, load_radios, playlist_cache
 from utils.image import get_dominant_color, create_now_playing_card
 from utils.i18n import t
 from io import BytesIO
@@ -138,9 +138,6 @@ class MusicCog(commands.Cog):
         vc = await ensure_voice(ctx)
         if not vc: return
         
-        if not vc: 
-            return
-        
         player = self.get_player(ctx.guild.id)
         player.dashboard_context = ctx # Vincular canal de texto para dashboard
         
@@ -153,20 +150,9 @@ class MusicCog(commands.Cog):
             status_msg = await ctx.send(embed=EmbedBuilder.create_info_embed(t('processing_playlist'), t('extracting_playlist')))
             
             try:
-                loop = asyncio.get_event_loop()
-                data = await loop.run_in_executor(None, lambda: extract_info(search, download=False))
-                
-                if 'entries' in data:
-                    songs = [entry for entry in data['entries'] if entry]
-                    for song in songs:
-                        player.queue.append(song)
-                    
-                    if not player.is_playing:
-                        await player.play_next()
-                    
-                    await status_msg.edit(embed=EmbedBuilder.create_success_embed(t('playlist_added'), t('added_songs_queue', count=len(songs))))
-                else:
-                    await status_msg.edit(embed=EmbedBuilder.create_error_embed(t('error'), "Não foi possível extrair a playlist."))
+                # Usar método da classe MusicPlayer sem run_in_executor pois já é async
+                await player.add_playlist_async(search, ctx.author)
+                await status_msg.edit(embed=EmbedBuilder.create_success_embed(t('playlist_added'), t('processing_background', title="Playlist")))
             except Exception as e:
                 await status_msg.edit(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
             return
@@ -181,26 +167,26 @@ class MusicCog(commands.Cog):
             if not query: continue
             
             try:
-                info = extract_info(query, download=False)
-                if not info: continue
+                # Usar método da classe MusicPlayer
+                await player.add_to_queue(query, ctx.author)
                 
-                entries = info.get('entries', [info])
-                for entry in entries:
-                    player.queue.append(entry)
-                    if not player.is_playing:
-                        await player.play_next()
-                    else:
-                        # Se já estiver tocando, avisa que adicionou à fila (se for apenas 1 música)
-                        if len(searches) == 1 and len(entries) == 1:
-                             pos = len(player.queue)
-                             await ctx.send(embed=EmbedBuilder.create_info_embed(
-                                 t('added_to_queue'), 
-                                 f"🎵 **{entry.get('title')}**\n{t('position_in_queue', position=pos)}"
-                             ))
+                if not player.is_playing:
+                    await player.play_next()
+                else:
+                    # Se já estiver tocando, avisa que adicionou à fila (se for apenas 1 música)
+                    # add_to_queue coloca no fim
+                    if len(searches) == 1:
+                         pos = len(player.queue)
+                         # Tenta pegar a ultima música adicionada
+                         last_song = player.queue[-1]
+                         await ctx.send(embed=EmbedBuilder.create_info_embed(
+                             t('added_to_queue'), 
+                             f"🎵 **{last_song.get('title')}**\n{t('position_in_queue', position=pos)}"
+                         ))
 
             except Exception as e:
-                await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), f"Erro ao adicionar: {query}"))
-                logging.error(f"Erro no play: {e}")
+                await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), f"Erro ao adicionar: {query} - {str(e)}"))
+                logging.error(f"Erro no play prefix: {e}")
 
         if len(searches) > 1:
             await ctx.send(embed=EmbedBuilder.create_success_embed(t('success'), t('added_songs_queue', count=len(searches))))
@@ -227,20 +213,8 @@ class MusicCog(commands.Cog):
              
              msg = await interaction.followup.send(embed=EmbedBuilder.create_info_embed(t('processing_playlist'), t('extracting_playlist')))
              try:
-                loop = asyncio.get_event_loop()
-                data = await loop.run_in_executor(None, lambda: extract_info(search, download=False))
-                
-                if 'entries' in data:
-                    songs = [entry for entry in data['entries'] if entry]
-                    for song in songs:
-                        player.queue.append(song)
-                    
-                    if not player.is_playing:
-                        await player.play_next()
-                    
-                    await interaction.followup.send(embed=EmbedBuilder.create_success_embed(t('playlist_added'), t('added_songs_queue', count=len(songs))))
-                else:
-                    await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), "Falha ao extrair playlist."))
+                await player.add_playlist_async(search, interaction.user)
+                await interaction.followup.send(embed=EmbedBuilder.create_success_embed(t('playlist_added'), t('processing_background', title="Playlist")))
 
              except Exception as e:
                  await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
@@ -254,24 +228,21 @@ class MusicCog(commands.Cog):
             if not query: continue
 
             try:
-                info = extract_info(query, download=False)
-                if not info: continue
+                await player.add_to_queue(query, interaction.user)
 
-                entries = info.get('entries', [info])
-                for entry in entries:
-                    player.queue.append(entry)
-                    if not player.is_playing:
-                        await player.play_next()
-                    else:
-                        if len(searches) == 1 and len(entries) == 1:
-                            pos = len(player.queue)
-                            await interaction.followup.send(embed=EmbedBuilder.create_info_embed(
-                                t('added_to_queue'), 
-                                f"🎵 **{entry.get('title')}**\n{t('position_in_queue', position=pos)}"
-                            ))
+                if not player.is_playing:
+                    await player.play_next()
+                else:
+                    if len(searches) == 1:
+                        pos = len(player.queue)
+                        last_song = player.queue[-1]
+                        await interaction.followup.send(embed=EmbedBuilder.create_info_embed(
+                            t('added_to_queue'), 
+                            f"🎵 **{last_song.get('title')}**\n{t('position_in_queue', position=pos)}"
+                        ))
             except Exception as e:
                 logging.error(f"Erro no play_slash: {e}")
-                await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
+                await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), f"Erro ao adicionar: {query} - {str(e)}"))
         
         if len(searches) > 1:
              await interaction.followup.send(embed=discord.Embed(title=t('success'), description=t('added_songs_queue', count=len(searches)), color=discord.Color.green()))
