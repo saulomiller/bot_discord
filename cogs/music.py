@@ -37,7 +37,7 @@ class MusicCog(commands.Cog):
                 description=t('joined_channel', channel=vc.channel.name),
                 color=discord.Color.green()))
 
-    @app_commands.command(name="join", description="Joins the voice channel", description_localizations={'pt-BR': 'Entra no canal de voz'})
+    @app_commands.command(name="join", description="Joins the voice channel")
     async def join_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         vc = await ensure_voice(interaction)
@@ -62,7 +62,7 @@ class MusicCog(commands.Cog):
                 description=t('not_in_voice'),
                 color=discord.Color.red()))
 
-    @app_commands.command(name="leave", description="Leaves the voice channel", description_localizations={'pt-BR': 'Sai do canal de voz'})
+    @app_commands.command(name="leave", description="Leaves the voice channel")
     async def leave_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         vc = interaction.guild.voice_client
@@ -104,7 +104,7 @@ class MusicCog(commands.Cog):
                 description=t('not_in_voice'),
                 color=discord.Color.blue()))
     
-    @app_commands.command(name="sair_todos", description="Disconnects from all voice channels in all servers", description_localizations={'pt-BR': 'Sai de todos os canais de voz em todos os servidores'})
+    @app_commands.command(name="sair_todos", description="Disconnects from all voice channels in all servers")
     async def sair_todos_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         count = 0
@@ -205,7 +205,7 @@ class MusicCog(commands.Cog):
         if len(searches) > 1:
             await ctx.send(embed=EmbedBuilder.create_success_embed(t('success'), t('added_songs_queue', count=len(searches))))
 
-    @app_commands.command(name="play", description="Plays music from YouTube or SoundCloud", description_localizations={'pt-BR': 'Toca músicas do YouTube ou SoundCloud'})
+    @app_commands.command(name="play", description="Plays music from YouTube or SoundCloud")
     @app_commands.describe(search="Name, URL or 'scsearch: term' for SoundCloud")
     async def play_slash(self, interaction: discord.Interaction, search: str):
         if not interaction.user.voice:
@@ -283,7 +283,7 @@ class MusicCog(commands.Cog):
         player.skip()
         await ctx.send("Música pulada.")
 
-    @app_commands.command(name="skip", description="Skips to the next song", description_localizations={'pt-BR': 'Pula para a próxima música'})
+    @app_commands.command(name="skip", description="Skips to the next song")
     async def skip_slash(self, interaction: discord.Interaction):
         player = self.get_player(interaction.guild_id)
         player.skip()
@@ -295,7 +295,7 @@ class MusicCog(commands.Cog):
         player.stop()
         await ctx.send("Música parada e fila limpa.")
 
-    @app_commands.command(name="stop", description="Stops playback and clears the queue", description_localizations={'pt-BR': 'Para a reprodução e limpa a fila'})
+    @app_commands.command(name="stop", description="Stops playback and clears the queue")
     async def stop_slash(self, interaction: discord.Interaction):
         player = self.get_player(interaction.guild_id)
         player.stop()
@@ -335,7 +335,7 @@ class MusicCog(commands.Cog):
             
         await ctx.send(embed=embed)
 
-    @app_commands.command(name="agora", description="Shows the currently playing song", description_localizations={'pt-BR': 'Mostra a música tocando agora'})
+    @app_commands.command(name="agora", description="Shows the currently playing song")
     async def agora_slash(self, interaction: discord.Interaction):
         player = self.get_player(interaction.guild_id)
         if not player.current_song:
@@ -407,7 +407,7 @@ class MusicCog(commands.Cog):
             
         await ctx.send(embed=embed)
 
-    @app_commands.command(name="fila", description="Shows the music queue", description_localizations={'pt-BR': 'Mostra a fila de músicas'})
+    @app_commands.command(name="fila", description="Shows the music queue")
     async def fila_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
@@ -456,7 +456,7 @@ class MusicCog(commands.Cog):
         )
         await ctx.send(embed=embed, delete_after=5)
 
-    @app_commands.command(name="volume", description="Adjusts the volume (0.0 to 1.0)", description_localizations={'pt-BR': 'Ajusta o volume (0.0 a 1.0)'})
+    @app_commands.command(name="volume", description="Adjusts the volume (0.0 to 1.0)")
     @app_commands.describe(vol="Volume between 0.0 and 1.0")
     async def volume_slash(self, interaction: discord.Interaction, vol: float):
         player = self.get_player(interaction.guild_id)
@@ -467,7 +467,7 @@ class MusicCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="nowplaying", description="Shows currently playing song with progress bar", description_localizations={'pt-BR': 'Mostra a música tocando atualmente com barra de progresso'})
+    @app_commands.command(name="nowplaying", description="Shows currently playing song with progress bar")
     async def nowplaying_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         
@@ -559,7 +559,7 @@ class MusicCog(commands.Cog):
             
         await ctx.send(embed=embed)
 
-    @app_commands.command(name="radios", description="Lists available radio stations", description_localizations={'pt-BR': 'Lista as rádios disponíveis'})
+    @app_commands.command(name="radios", description="Lists available radio stations")
     async def radios_slash(self, interaction: discord.Interaction):
         if not self.RADIOS:
             await interaction.response.send_message(t('no_radios_found'))
@@ -615,7 +615,7 @@ class MusicCog(commands.Cog):
         except Exception as e:
              await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
 
-    @app_commands.command(name="radio", description="Plays a specific radio station", description_localizations={'pt-BR': 'Toca uma rádio específica'})
+    @app_commands.command(name="radio", description="Plays a specific radio station")
     @app_commands.describe(radio_id="Radio ID")
     async def radio_slash(self, interaction: discord.Interaction, radio_id: str):
         if not interaction.user.voice:
@@ -653,7 +653,7 @@ class MusicCog(commands.Cog):
         except Exception as e:
              await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
 
-    @app_commands.command(name="addradio", description="Adds a new custom radio (Admin)", description_localizations={'pt-BR': 'Adiciona uma nova rádio personalizada (Admin)'})
+    @app_commands.command(name="addradio", description="Adds a new custom radio (Admin)")
     @app_commands.describe(id="Unique ID for remote", nome="Radio Name", url="Stream URL", localizacao="Location (optional)")
     async def add_radio_slash(self, interaction: discord.Interaction, id: str, nome: str, url: str, localizacao: str = "Desconhecido"):
         if not interaction.user.guild_permissions.administrator:
@@ -678,7 +678,7 @@ class MusicCog(commands.Cog):
             logging.error(f"Erro ao salvar rádio: {e}")
             await interaction.response.send_message(embed=EmbedBuilder.create_error_embed(t('error'), t('error_saving_radio')), ephemeral=True)
 
-    @app_commands.command(name="removeradio", description="Removes an existing radio (Admin)", description_localizations={'pt-BR': 'Remove uma rádio existente (Admin)'})
+    @app_commands.command(name="removeradio", description="Removes an existing radio (Admin)")
     @app_commands.describe(id="ID of the radio to remove")
     async def remove_radio_slash(self, interaction: discord.Interaction, id: str):
         if not interaction.user.guild_permissions.administrator:
