@@ -142,6 +142,7 @@ class MusicCog(commands.Cog):
             return
         
         player = self.get_player(ctx.guild.id)
+        player.dashboard_context = ctx # Vincular canal de texto para dashboard
         
         # Verificar se é playlist
         if 'list=' in search:
@@ -216,6 +217,7 @@ class MusicCog(commands.Cog):
         if not vc: return
 
         player = self.get_player(interaction.guild_id)
+        player.dashboard_context = interaction # Vincular canal de texto para dashboard
 
          # Verificar se é playlist
         if 'list=' in search:
@@ -511,6 +513,13 @@ class MusicCog(commands.Cog):
                 color=dominant_color
             )
             
+            # Garantir que loop está definido
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
             # Tentar gerar imagem personalizada (Card)
             # Descomente para usar o CARD em vez do EMBED (ou envie ambos)
             card_buffer = await loop.run_in_executor(None, create_now_playing_card, player_instance.current_song, progress['percent'])
@@ -643,10 +652,6 @@ class MusicCog(commands.Cog):
             
         except Exception as e:
              await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
-            
-        except Exception as e:
-            logging.error(f"Erro ao tocar rádio: {e}")
-            await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), str(e)))
 
     @app_commands.command(name="addradio", description="Adds a new custom radio (Admin)", description_localizations={'pt-BR': 'Adiciona uma nova rádio personalizada (Admin)'})
     @app_commands.describe(id="Unique ID for remote", nome="Radio Name", url="Stream URL", localizacao="Location (optional)")

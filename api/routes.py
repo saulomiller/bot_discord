@@ -428,12 +428,7 @@ async def play_soundboard(request: Request, body: SoundboardPlayRequest):
         logging.error(f"Erro ao tocar SFX: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao tocar efeito: {str(e)}")
 
-@router.post("/api/soundboard/upload")
-async def upload_soundboard(file: bytes = Body(...), file_name: str = None):
-    # Nota: FastAPI UploadFile é melhor, mas o frontend pode estar enviando como body raw ou form data
-    # O frontend usa FormData com campo 'file'. O correto seria usar UploadFile.
-    # Vou ajustar a assinatura para UploadFile para ser compatível com FormData.
-    pass 
+
 
 # Redefinindo rota de upload corretamente para usar UploadFile
 from fastapi import UploadFile, File

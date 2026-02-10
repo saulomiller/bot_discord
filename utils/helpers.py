@@ -247,6 +247,7 @@ async def extract_info(search: str) -> tuple[str, str, str, str, str]:
     except asyncio.TimeoutError:
         logging.error(f"Timeout ao buscar informações da música: {search}")
         raise ValueError(f"A busca por '{search}' demorou muito tempo. Tente novamente.")
+    except Exception as e:
         logging.error(f"Erro não tratado ao buscar música '{search}': {e}")
         raise ValueError(f"Não foi possível buscar '{search}': {str(e)}")
 

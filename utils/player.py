@@ -42,6 +42,12 @@ class MusicPlayer:
         self.sfx_playing = False
         self.stopped_for_sfx = False
 
+        # Dashboard (Card Vivo)
+        self.dashboard_message = None
+        self.dashboard_context = None # ctx ou interaction
+        self.dashboard_task = None
+        self.last_img_url = None
+
     @property
     def guild(self):
         return self.bot.get_guild(self.guild_id)
@@ -93,6 +99,129 @@ class MusicPlayer:
             "duration": int(duration),
             "percent": round(min(100, percent), 1)
         }
+
+    # --- Dashboard Logic ---
+
+    async def start_dashboard_task(self):
+        """Inicia a tarefa de atualização do dashboard."""
+        if self.dashboard_task and not self.dashboard_task.done():
+            return
+        
+        self.dashboard_task = self.bot.loop.create_task(self.update_dashboard_loop())
+
+    async def stop_dashboard_task(self):
+        """Para a tarefa de atualização."""
+        if self.dashboard_task:
+            self.dashboard_task.cancel()
+            try:
+                await self.dashboard_task
+            except asyncio.CancelledError:
+                pass
+            self.dashboard_task = None
+
+    async def update_dashboard_loop(self):
+        """Loop que atualiza a BARRA DE PROGRESSO no embed (texto) a cada 5s."""
+        try:
+            while True:
+                await asyncio.sleep(5)
+                
+                if not self.voice_client or not self.voice_client.is_playing() or self.is_paused:
+                    continue
+                
+                if not self.dashboard_message:
+                    continue
+
+                # Atualizar apenas o Embed (Barra de Progresso)
+                try:
+                    # Recriar embed com progresso atual
+                    from utils.embeds import EmbedBuilder
+                    progress = self.get_progress()
+                    
+                    # Manter a imagem original se possível, apenas editar o embed
+                    # O embed precisa ser recriado com os novos valores
+                    embed = EmbedBuilder.create_now_playing_embed(
+                        self.current_song,
+                        len(self.queue),
+                        current_seconds=progress['current'],
+                        total_seconds=progress['duration'],
+                        # color=... (idealmente manter a cor anterior)
+                    )
+                    
+                    # Recolocar a imagem (não faz upload de novo, usa a mesma URL se disponível no embed anterior)
+                    # Mas como é attachment, é complicado reusar em edit sem re-upload ou manter attachment.
+                    # Melhora: Editar apenas description/fields se possível.
+                    
+                    # Simplificação: Apenas editar o embed
+                    await self.dashboard_message.edit(embed=embed)
+                    
+                except discord.NotFound:
+                    self.dashboard_message = None # Mensagem deletada
+                except Exception as e:
+                    logging.debug(f"Erro ao atualizar dashboard (loop): {e}")
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logging.error(f"Erro fatal no dashboard loop: {e}")
+
+    async def send_dashboard(self):
+        """Envia/Renova a mensagem do dashboard (Imagem + Embed)."""
+        if not self.dashboard_context or not self.current_song:
+            return
+
+        # Apagar mensagem anterior para não spammar
+        if self.dashboard_message:
+            try:
+                await self.dashboard_message.delete()
+            except:
+                pass
+            self.dashboard_message = None
+
+        try:
+            # Gerar Imagem (PIL)
+            # Rodar em executor para não travar
+            from utils.image import create_now_playing_card
+            
+            # Converter queue para lista de dicts se nao for
+            next_songs = list(self.queue)
+            
+            img_buffer = await self.loop.run_in_executor(
+                None, 
+                create_now_playing_card, 
+                self.current_song, 
+                next_songs, 
+                len(self.queue)
+            )
+            
+            file = None
+            if img_buffer:
+                file = discord.File(img_buffer, filename="dashboard.png")
+
+            # Gerar Embed Inicial
+            from utils.embeds import EmbedBuilder
+            progress = self.get_progress()
+            
+            embed = EmbedBuilder.create_now_playing_embed(
+                self.current_song, 
+                len(self.queue),
+                current_seconds=progress['current'],
+                total_seconds=progress['duration']
+            )
+            
+            if file:
+                embed.set_image(url="attachment://dashboard.png")
+                
+            # Enviar para o canal vinculado
+            channel = self.dashboard_context.channel if hasattr(self.dashboard_context, 'channel') else self.dashboard_context
+            
+            if channel:
+                self.dashboard_message = await channel.send(embed=embed, file=file)
+                # Iniciar loop se não estiver rodando
+                await self.start_dashboard_task()
+
+        except Exception as e:
+            logging.error(f"Erro ao enviar dashboard: {e}")
+
 
     async def add_to_queue(self, search, user):
         """Busca e adiciona música à fila (apenas primeira se for playlist)."""
@@ -429,6 +558,12 @@ class MusicPlayer:
             else:
                 self.song_duration = 0
                 
+            # Iniciar Dashboard
+            try:
+                 await self.send_dashboard()
+            except Exception as e:
+                 logging.error(f"Erro ao iniciar dashboard: {e}")
+
         except Exception as e:
             logging.error(f"Erro ao iniciar playback: {e}")
             await self.play_next()
@@ -497,6 +632,7 @@ class MusicPlayer:
                 await self.play_next()
 
     def stop(self):
+        asyncio.create_task(self.stop_dashboard_task())
         self.queue.clear()
         self.current_song = None
         if self.voice_client and self.voice_client.is_playing():
