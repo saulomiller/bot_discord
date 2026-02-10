@@ -35,7 +35,7 @@ class SoundboardCog(commands.Cog):
         
         return choices[:25]  # Discord limita a 25
 
-    @app_commands.command(name="sfx", description="Plays a sound effect", description_localizations={'pt-BR': 'Toca um efeito sonoro'})
+    @app_commands.command(name="sfx", description="Plays a sound effect")
     @app_commands.describe(nome="Sound effect name")
     @app_commands.autocomplete(nome=sfx_autocomplete)
     async def sfx_command(self, interaction: discord.Interaction, nome: str):
