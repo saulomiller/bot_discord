@@ -56,6 +56,11 @@ class MusicPlayer:
     def voice_client(self):
         return self.guild.voice_client if self.guild else None
 
+    @property
+    def is_playing(self):
+        """Retorna True se estiver tocando áudio."""
+        return self.voice_client and self.voice_client.is_playing()
+
     def _format_duration(self, duration_seconds):
         """Formata duração em segundos para string HH:MM:SS ou MM:SS."""
         if not duration_seconds:
