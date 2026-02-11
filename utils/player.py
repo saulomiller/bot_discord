@@ -597,6 +597,11 @@ class MusicPlayer:
 
         self.current_song = self.queue.popleft()
         logging.info(f"[play_next] Preparando: {self.current_song['title']}")
+        # Log de debug: mostrar duração e flags para investigar ausência de barra de progresso
+        try:
+            logging.debug(f"[play_next] current_song metadata: title={self.current_song.get('title')}, duration_seconds={self.current_song.get('duration_seconds')}, is_lazy={self.current_song.get('is_lazy')}")
+        except Exception:
+            pass
 
         # 2. LAZY RESOLVE - Resolver URL de stream AGORA
         source_url = self.current_song['url']

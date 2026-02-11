@@ -156,14 +156,30 @@ function setupEventListeners() {
         playPauseBtn.addEventListener('click', async () => {
             // Usa o estado global isPaused
             try {
+                // Otimização UX: alternar estado local imediatamente para feedback visual
+                const prev = isPaused;
+                // Tentar executar a ação no backend
                 if (isPaused) {
                     await API.resume();
                     UI.showToast('Retomado', 'success');
+                    isPaused = false;
                 } else {
                     await API.pause();
                     UI.showToast('Pausado', 'info');
+                    isPaused = true;
                 }
-                // Atualizar imediatamente após ação
+
+                // Atualizar visual do botão imediatamente
+                try {
+                    const playerEl = UI.elements.player;
+                    if (playerEl && playerEl.playBtn) {
+                        playerEl.playBtn.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+                        const titleKey = isPaused ? 'resume' : 'paused';
+                        playerEl.playBtn.title = translationManager ? translationManager.get(titleKey) : (isPaused ? 'Retomar' : 'Pausar');
+                    }
+                } catch (e) {}
+
+                // Re-sincronizar com servidor em seguida
                 setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
                 UI.showToast(e.message, 'error');

@@ -535,6 +535,12 @@ class MusicCog(commands.Cog):
             current_seconds = progress['current']
             total_seconds = progress['duration']
 
+            # Debug: logar duração atual para investigar barra de progresso
+            try:
+                logging.debug(f"[nowplaying] progress: current={current_seconds}, total={total_seconds}, song_duration_seconds={player_instance.current_song.get('duration_seconds')}")
+            except Exception:
+                pass
+
             # Extrair cor dominante
             thumb_url = player_instance.current_song.get('thumbnail')
             dominant_color = None

@@ -104,7 +104,10 @@ export const UI = {
                 progress.current.textContent = this.formatTime(current);
                 progress.total.textContent = this.formatTime(duration);
             }
-            if (progress && progress.container) {
+            // Mostrar ou esconder o container de progresso conforme disponibilidade
+            if (data.progress && data.progress.duration > 0) {
+                progress.container.style.display = 'block';
+            } else {
                 progress.container.style.display = 'none';
             }
         }
