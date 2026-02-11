@@ -4,6 +4,7 @@ import logging
 from collections import deque
 import yt_dlp
 import os
+import time
 
 # Configuração do yt-dlp
 YDL_OPTIONS = {
@@ -40,7 +41,9 @@ class MusicPlayer:
         
         # Soundboard state
         self.sfx_playing = False
+        self.sfx_playing = False
         self.stopped_for_sfx = False
+        self.consecutive_errors = 0
 
         # Dashboard (Card Vivo)
         self.dashboard_message = None
@@ -80,7 +83,7 @@ class MusicPlayer:
         Returns:
             dict: {"current": segundos, "duration": segundos, "percent": 0-100}
         """
-        import time
+
         
         if not self.current_song or not self.song_start_time:
             return {"current": 0, "duration": 0, "percent": 0}
@@ -546,10 +549,11 @@ class MusicPlayer:
                 after=after_play
             )
             self.is_paused = False
+            self.consecutive_errors = 0
             self.stopped_for_sfx = False
             
             # Ajustar start_time considerando o seek para o progresso ficar correto
-            import time
+
             self.song_start_time = time.time() - seek_position
             
             # Extrair duração
@@ -571,6 +575,13 @@ class MusicPlayer:
 
         except Exception as e:
             logging.error(f"Erro ao iniciar playback: {e}")
+            self.consecutive_errors += 1
+            if self.consecutive_errors > 5:
+                logging.error("Muitos erros consecutivos. Parando playback para evitar loop.")
+                self.stop()
+                return
+
+            await asyncio.sleep(1) # Delay para evitar hot loop
             await self.play_next()
 
     async def play_soundboard(self, sfx_path: str, volume: float = 1.0):
@@ -651,14 +662,14 @@ class MusicPlayer:
         if self.voice_client and self.voice_client.is_playing():
             self.voice_client.pause()
             self.is_paused = True
-            import time
+
             self.pause_time = time.time()
 
     def resume(self):
         if self.voice_client and self.voice_client.is_paused():
             self.voice_client.resume()
             self.is_paused = False
-            import time
+
             if self.pause_time and self.song_start_time:
                 pause_duration = time.time() - self.pause_time
                 self.song_start_time += pause_duration
