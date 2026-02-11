@@ -21,7 +21,8 @@ YDL_OPTIONS = {
     'geo_bypass': True,  # Tenta contornar restrições geográficas
     'geo_bypass_country': 'US',  # País para bypass (pode ser ajustado)
     # Correção para warnings de challenge solver e bloqueios
-    'remote_components': 'ejs:github',
+    # IMPORTANTE: Deve ser uma lista, senão o yt-dlp itera sobre a string (b, :, u...)
+    'remote_components': ['ejs:github'],
     'impersonate_browser': 'chrome',
 }
 
