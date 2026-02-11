@@ -24,7 +24,7 @@ def get_font(name, size):
     return FONTS[key]
 
 # --- Otimização: Cache de Imagens ---
-@lru_cache(maxsize=50)
+@lru_cache(maxsize=80)
 def fetch_image_content(url):
     """Baixa e cachea conteúdo de imagens."""
     if not url:
@@ -37,7 +37,32 @@ def fetch_image_content(url):
         logging.error(f"Erro ao baixar imagem {url}: {e}")
         return None
 
-def get_dominant_color(image_url):
+        return None
+
+@lru_cache(maxsize=80)
+def generate_blurred_background(image_bytes, width, height):
+    """Gera o background desfocado a partir dos bytes da imagem original."""
+    if not image_bytes: return None
+    try:
+        thumb = Image.open(BytesIO(image_bytes)).convert("RGB")
+        bg = thumb.resize((width, height))
+        bg = bg.filter(ImageFilter.GaussianBlur(25))
+        bg = ImageEnhance.Brightness(bg).enhance(0.35)
+        return bg
+    except Exception as e:
+        logging.error(f"Erro no cache de blur: {e}")
+        return None
+
+@lru_cache(maxsize=120)
+def generate_thumbnail(image_bytes, size):
+    """Gera a thumbnail redimensionada (quadrada)."""
+    if not image_bytes: return None
+    try:
+        thumb = Image.open(BytesIO(image_bytes)).convert("RGB")
+        return thumb.resize(size)
+    except Exception as e:
+        logging.error(f"Erro no cache de thumbnail: {e}")
+        return None
     """
     Extrai a cor dominante de uma imagem a partir de uma URL.
     Retorna um discord.Color.
@@ -98,125 +123,163 @@ def truncate_text(draw, text, font, max_width, suffix="..."):
 
     return text[:left-1] + suffix
 
+
+def apply_side_gradient(base_img, start_x):
+    """Adiciona gradient escuro da direita para a esquerda."""
+    width, height = base_img.size
+    
+    # Otimização: Criar 1 linha e redimensionar (mais rápido que iterar pixel a pixel)
+    gradient = Image.new("L", (width, 1))
+    for x in range(width):
+        if x < start_x:
+            alpha = 0
+        else:
+            alpha = int(255 * (x - start_x) / (width - start_x))
+        gradient.putpixel((x, 0), alpha)
+        
+    gradient = gradient.resize((width, height))
+    
+    black = Image.new("RGBA", (width, height), (0, 0, 0, 200))
+    base_img.paste(black, (0, 0), gradient)
+
+def draw_text_shadow(draw, pos, text, font, fill, offset=2):
+    x, y = pos
+    # Sombra
+    draw.text((x+offset, y+offset), text, font=font, fill=(0,0,0))
+    # Texto
+    draw.text((x, y), text, font=font, fill=fill)
+
+def wrap_two_lines(draw, text, font, max_width):
+    """Quebra o texto em no máximo 2 linhas."""
+    words = text.split()
+    lines = []
+    current = ""
+
+    for word in words:
+        test_line = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), test_line, font=font)
+        w = bbox[2] - bbox[0]
+
+        if w <= max_width:
+            current = test_line
+        else:
+            if current:
+                lines.append(current)
+            current = word
+            # Se já temos 1 linha e estamos quebrando para a segunda,
+            # a próxima iteração vai definir a segunda linha.
+            # Se tentarmos criar uma terceira, paramos.
+            if len(lines) >= 1:
+                break
+    
+    if current:
+        lines.append(current)
+
+    return lines[:2]
+
 def create_now_playing_card(song_info, next_songs=None, queue_length=0):
-    """
-    Gera uma imagem 'Now Playing' personalizada com lista de próximas músicas.
-    Retorna um objeto BytesIO pronto para enviar no Discord.
-    """
-    # Correção: Argumento padrão mutável
+    """Gera card estilo Spotify com grid e layout moderno."""
     if next_songs is None:
         next_songs = []
 
-    try:
-        # Configurações de dimensão
-        width, height = 800, 350
-        background_color = (20, 20, 20)
-        
-        # Criar base
-        card = Image.new("RGB", (width, height), background_color)
-        draw = ImageDraw.Draw(card)
-        
-        # Carregar Thumbnail (Capa)
-        thumb_url = song_info.get('thumbnail')
-        content = fetch_image_content(thumb_url)
-        
-        if content:
-            try:
-                thumb = Image.open(BytesIO(content)).convert("RGB")
-                
-                # Fundo desfocado (Artwork Blur)
-                bg_thumb = thumb.resize((width, height))
-                bg_thumb = bg_thumb.filter(ImageFilter.GaussianBlur(20))
-                bg_thumb = ImageEnhance.Brightness(bg_thumb).enhance(0.4)
-                card.paste(bg_thumb, (0, 0))
-                
-                # Arte da capa (CD Style - Circular)
-                thumb_size = 260
-                thumb = thumb.resize((thumb_size, thumb_size))
-                
-                # Criar máscara circular
-                mask = Image.new("L", (thumb_size, thumb_size), 0)
-                draw_mask = ImageDraw.Draw(mask)
-                draw_mask.ellipse((0, 0, thumb_size, thumb_size), fill=255)
-                
-                # Criar furo central (CD/Vinil)
-                center = thumb_size // 2
-                hole_radius = 25
-                draw_mask.ellipse((center - hole_radius, center - hole_radius, center + hole_radius, center + hole_radius), fill=0)
-                
-                # Aplicar máscara
-                thumb.putalpha(mask)
-                
-                # Sombra simples (circular)
-                shadow = Image.new("RGBA", (thumb_size, thumb_size), (0, 0, 0, 0))
-                draw_shadow = ImageDraw.Draw(shadow)
-                draw_shadow.ellipse((5, 5, thumb_size-5, thumb_size-5), fill=(0, 0, 0, 100))
-                
-                card.paste(shadow, (45, 50), shadow)
-                card.paste(thumb, (40, 45), thumb)
-            except Exception as e:
-                logging.error(f"Erro ao processar thumbnail: {e}")
-        
-        # Configurar fontes usando cache
-        font_title = get_font('arialbd.ttf', 40)
-        font_artist = get_font('arial.ttf', 24)
-        font_list_header = get_font('arialbd.ttf', 22)
-        font_list_item = get_font('arial.ttf', 20)
+    width, height = 900, 360
+    padding = 30
 
-        # --- Seção Esquerda: Música Atual ---
-        text_x = 320
-        
-        # Título
-        title = song_info.get('title', 'Desconhecido')
-        
-        # Truncagem inteligente baseada em pixels
-        max_title_width = 450
-        
-        try:
-            title = truncate_text(draw, title, font_title, max_title_width)
-        except Exception as e:
-            logging.warning(f"Erro na truncagem de texto: {e}")
-            if len(title) > 30:
-                title = title[:27] + "..."
+    # Base escura
+    card = Image.new("RGB", (width, height), (18,18,18))
+    draw = ImageDraw.Draw(card)
 
-        draw.text((text_x, 50), title, font=font_title, fill=(255, 255, 255))
-        
-        # Artista / Canal
-        artist = song_info.get('channel', 'Desconhecido')
-        draw.text((text_x, 100), f"🎙️ {artist}", font=font_artist, fill=(200, 200, 200))
-        
-        # Solicitante
-        user = song_info.get('user', 'Desconhecido')
-        draw.text((text_x, 130), f"👤 Pedido por: {user}", font=font_artist, fill=(180, 180, 180))
-        
-        # --- Seção Direita inferior: Próximas Músicas ---
-        if next_songs:
-            list_y = 190
-            draw.text((text_x, list_y), "UP NEXT:", font=font_list_header, fill=(255, 215, 0))
+    thumb_url = song_info.get('thumbnail')
+    content = fetch_image_content(thumb_url)
+    
+    thumb = None
+    if content:
+        # Background blur usando cache
+        bg = generate_blurred_background(content, width, height)
+        if bg:
+            card.paste(bg, (0,0))
             
-            list_y += 30
-            for i, song in enumerate(next_songs[:3]):
-                song_title = song.get('title', 'Desconhecido')
-                duration = song.get('duration', '?:??')
-                
-                # Truncagem simples nas próximas músicas (pode ser melhorado depois se precisar)
-                if len(song_title) > 40:
-                    song_title = song_title[:37] + "..."
-                    
-                line = f"{i+1}. {song_title} ({duration})"
-                draw.text((text_x, list_y), line, font=font_list_item, fill=(230, 230, 230))
-                list_y += 25
-                
-            if queue_length > 3:
-                draw.text((text_x, list_y), f"...e mais {queue_length - 3} na fila", font=font_list_item, fill=(150, 150, 150))
-        else:
-            draw.text((text_x, 220), "Fila vazia... Adicione mais músicas!", font=font_artist, fill=(150, 150, 150))
+        # Thumbnail usando cache
+        thumb = generate_thumbnail(content, (240, 240))  # Tamanho fixo do layout (cover_size)
 
-        buffer = BytesIO()
-        card.save(buffer, "PNG")
-        buffer.seek(0)
-        return buffer
+    # Gradient lateral
+    apply_side_gradient(card, start_x=260)
 
-    except Exception as e:
-        logging.error(f"Erro ao gerar card de música: {e}")
-        return None
+    # ==============================
+    # GRID LAYOUT
+    # ==============================
+
+    cover_size = 240
+    cover_x = padding
+    cover_y = (height - cover_size)//2
+
+    if thumb:
+        card.paste(thumb, (cover_x, cover_y))
+
+    text_x = cover_x + cover_size + 40
+    text_width = width - text_x - padding
+
+    # Fontes
+    font_title = get_font("arialbd.ttf", 42)
+    font_artist = get_font("arial.ttf", 24)
+    font_small = get_font("arial.ttf", 20)
+
+    # ==============================
+    # TÍTULO (2 linhas)
+    # ==============================
+
+    title = song_info.get("title", "Desconhecido")
+    try:
+        lines = wrap_two_lines(draw, title, font_title, text_width)
+    except Exception:
+        lines = [title]
+
+    y = 60
+    for line in lines:
+        draw_text_shadow(draw, (text_x, y), line, font_title, (255,255,255))
+        y += 48
+
+    # ==============================
+    # ARTISTA
+    # ==============================
+
+    artist = song_info.get("channel", "Desconhecido")
+    draw_text_shadow(draw, (text_x, y+5), f"🎙️ {artist}", font_artist, (210,210,210))
+
+    # ==============================
+    # USER
+    # ==============================
+
+    user = song_info.get("user", "?")
+    draw_text_shadow(draw, (text_x, y+35), f"👤 {user}", font_small, (170,170,170))
+
+    # ==============================
+    # QUEUE
+    # ==============================
+
+    qy = 200
+    
+    if next_songs:
+        draw_text_shadow(draw, (text_x, qy), "UP NEXT", font_small, (255,215,0))
+        qy += 28
+
+        for i, song in enumerate(next_songs[:3]):
+            t = song.get("title", "")
+            try:
+                t = truncate_text(draw, t, font_small, text_width)
+            except:
+                pass
+            
+            line = f"{i+1}. {t}"
+            draw_text_shadow(draw, (text_x, qy), line, font_small, (220,220,220))
+            qy += 26
+            
+        if queue_length > 3:
+             draw_text_shadow(draw, (text_x, qy), f"...e mais {queue_length - 3} na fila", font_small, (150,150,150))
+    else:
+        draw_text_shadow(draw, (text_x, qy), "Fila vazia...", font_small, (150,150,150))
+
+    buffer = BytesIO()
+    card.save(buffer, "PNG")
+    buffer.seek(0)
+    return buffer
