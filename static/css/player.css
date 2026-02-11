@@ -18,12 +18,11 @@
 /* --- Estilos do Disco de Vinil --- */
 .album-wrapper {
     position: relative;
-    border-radius: 50%;
-    /* Garante que o container seja redondo */
+    border-radius: 12px;
+    /* Garante que o container seja quadrado com cantos arredondados */
     overflow: hidden;
-    /* Corta a imagem em círculo */
+    position: relative;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    /* Sombra em todo o disco */
 }
 
 #album-art-img {
@@ -35,28 +34,10 @@
        mas animação infinita geralmente precisa de play-state */
 }
 
-/* Furo central do vinil */
-/* Nota: O novo HTML tem .vinyl-hole como irmão da img dentro do wrapper */
-.vinyl-hole {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 15%;
-    /* Ajuste o tamanho conforme necessário */
-    height: 15%;
-    background-color: #1c1c1e;
-    /* Combina com o fundo do cartão ou cor específica */
-    border-radius: 50%;
-    z-index: 10;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.8);
-}
+/* Furo central removido */
 
 /* Aplica giro APENAS quando tocando */
-.card-hero.playing .album-wrapper img,
-.card-hero.playing #album-art-img {
-    animation: spinRecord 4s linear infinite;
-}
+/* Animação de giro removida */
 
 .track-details h2 {
     font-size: 24px;

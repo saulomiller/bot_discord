@@ -246,23 +246,23 @@ def create_now_playing_card(song_info, next_songs=None, queue_length=0):
     # ==============================
 
     artist = song_info.get("channel", "Desconhecido")
-    draw_text_shadow(draw, (text_x, y+5), f"🎙️ {artist}", font_artist, (210,210,210))
+    draw_text_shadow(draw, (text_x, y+5), artist, font_artist, (210,210,210))
 
     # ==============================
     # USER
     # ==============================
 
     user = song_info.get("user", "?")
-    draw_text_shadow(draw, (text_x, y+35), f"👤 {user}", font_small, (170,170,170))
+    draw_text_shadow(draw, (text_x, y+35), f"Adicionado por {user}", font_small, (170,170,170))
 
     # ==============================
     # QUEUE
     # ==============================
 
-    qy = 200
+    qy = y + 90
     
     if next_songs:
-        draw_text_shadow(draw, (text_x, qy), "UP NEXT", font_small, (255,215,0))
+        draw_text_shadow(draw, (text_x, qy), "Próximas músicas", font_small, (255,215,0))
         qy += 28
 
         for i, song in enumerate(next_songs[:3]):

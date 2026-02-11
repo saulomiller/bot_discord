@@ -504,13 +504,19 @@ class MusicPlayer:
         
         # Opções do FFmpeg com seek se necessário
         before_options = '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+        
+        # Opções de saída (após o input)
+        # IMPORTANTE: Usar -ss como output option para evitar corrupção de stream AAC/HLS ao resumir
+        # O input seeking (-ss antes do -i) é mais rápido mas pode pular headers vitais
+        output_options = f'-vn -af "aresample=48000,atempo=1.0,volume={self.volume}" -bufsize 10M'
+        
         if seek_position > 0:
-            before_options += f' -ss {seek_position}'
-            logging.info(f"[play_next] Resumindo de {seek_position}s")
+            output_options += f' -ss {seek_position}'
+            logging.info(f"[play_next] Resumindo de {seek_position}s (Output Seek)")
 
         ffmpeg_options = {
             'before_options': before_options,
-            'options': f'-vn -af "aresample=48000,atempo=1.0,volume={self.volume}" -bufsize 10M'
+            'options': output_options
         }
 
         def after_play(err):
