@@ -57,14 +57,34 @@ def create_now_playing_card(song_info, next_songs=[], queue_length=0):
                 bg_thumb = ImageEnhance.Brightness(bg_thumb).enhance(0.4) # Mais escuro
                 card.paste(bg_thumb, (0, 0))
                 
-                # Arte da capa (quadrada à esquerda)
+                # Arte da capa (CD Style - Circular)
                 thumb_size = 260
                 thumb = thumb.resize((thumb_size, thumb_size))
                 
-                # Sombra simples na capa (opcional, desenhando retângulo preto atrás)
-                draw.rectangle((35, 45, 35 + thumb_size + 10, 45 + thumb_size + 10), fill=(0,0,0, 100))
+                # Criar máscara circular
+                mask = Image.new("L", (thumb_size, thumb_size), 0)
+                draw_mask = ImageDraw.Draw(mask)
+                draw_mask.ellipse((0, 0, thumb_size, thumb_size), fill=255)
                 
-                card.paste(thumb, (40, 45))
+                # Criar furo central (CD/Vinil)
+                center = thumb_size // 2
+                hole_radius = 25 # Tamanho do furo
+                draw_mask.ellipse((center - hole_radius, center - hole_radius, center + hole_radius, center + hole_radius), fill=0)
+                
+                # Aplicar máscara
+                thumb.putalpha(mask)
+                
+                # Sombra simples (circular)
+                shadow = Image.new("RGBA", (thumb_size, thumb_size), (0, 0, 0, 0))
+                draw_shadow = ImageDraw.Draw(shadow)
+                draw_shadow.ellipse((5, 5, thumb_size-5, thumb_size-5), fill=(0, 0, 0, 100))
+                
+                # Colar sombra antes (levemente deslocada se quiser, aqui centralizada/trás)
+                # Na verdade, colar sombra no card
+                card.paste(shadow, (45, 50), shadow) # Deslocado para dar efeito
+                
+                # Colar o CD
+                card.paste(thumb, (40, 45), thumb)
             except Exception as e:
                 logging.error(f"Erro ao processar thumbnail: {e}")
 
