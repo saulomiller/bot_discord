@@ -36,6 +36,15 @@ async def ensure_voice(ctx: commands.Context | discord.Interaction) -> discord.V
         raise VoiceConnectionError("Não tenho permissão para conectar ou falar neste canal.")
 
     vc = guild.voice_client
+    
+    # Se existe client mas não está conectado, limpar estado
+    if vc and not vc.is_connected():
+        try:
+            await vc.disconnect(force=True)
+        except Exception as e:
+            logging.warning(f"Erro ao forçar desconexão de cliente morto: {e}")
+        vc = None
+
     if vc is None:
         vc = await channel.connect()
     elif vc.channel != channel:

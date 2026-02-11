@@ -135,8 +135,12 @@ class MusicCog(commands.Cog):
 
     @commands.command()
     async def play(self, ctx: commands.Context, *, search: str):
-        vc = await ensure_voice(ctx)
-        if not vc: return
+        try:
+            vc = await ensure_voice(ctx)
+            if not vc: return
+        except Exception as e:
+            await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), f"Erro de conexão: {str(e)}"))
+            return
         
         player = self.get_player(ctx.guild.id)
         player.dashboard_context = ctx # Vincular canal de texto para dashboard
@@ -203,8 +207,12 @@ class MusicCog(commands.Cog):
             return
 
         await interaction.response.defer()
-        vc = await ensure_voice(interaction)
-        if not vc: return
+        try:
+            vc = await ensure_voice(interaction)
+            if not vc: return
+        except Exception as e:
+            await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), f"Erro de conexão: {str(e)}"))
+            return
 
         player = self.get_player(interaction.guild_id)
         player.dashboard_context = interaction # Vincular canal de texto para dashboard
@@ -574,6 +582,7 @@ class MusicCog(commands.Cog):
             await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), t('radio_not_found')))
             return
             
+        
         url = radio_info.get('url')
         if not url:
             await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), t('invalid_url')))
@@ -585,6 +594,7 @@ class MusicCog(commands.Cog):
         player.stop()
         
         try:
+            # Resolve URL if lazy (radios usually direct stream though)
             # Rádios geralmente são streams diretos, usamos add_to_queue mas com metadados manuais seria melhor
             # O MusicPlayer detecta stream se for URL
             await player.add_to_queue(url, ctx.author)
@@ -594,6 +604,10 @@ class MusicCog(commands.Cog):
                 player.queue[-1]['title'] = radio_info.get('name', radio_id)
                 player.queue[-1]['is_radio'] = True
                 player.queue[-1]['thumbnail'] = radio_info.get('favicon')
+                # Radios não precisam de lazy resolve normalmente, mas o play_next vai lidar com isso
+                player.queue[-1]['is_lazy'] = False 
+                # Cache da URL da rádio
+                player.stream_cache.set(url, url)
             
             await player.play_next()
             await ctx.send(embed=EmbedBuilder.create_radio_embed(radio_info))
@@ -632,6 +646,8 @@ class MusicCog(commands.Cog):
                 player.queue[-1]['title'] = radio_info.get('name', radio_id)
                 player.queue[-1]['is_radio'] = True
                 player.queue[-1]['thumbnail'] = radio_info.get('favicon')
+                player.queue[-1]['is_lazy'] = False
+                player.stream_cache.set(url, url)
 
             await player.play_next()
             await interaction.followup.send(embed=EmbedBuilder.create_radio_embed(radio_info))

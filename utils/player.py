@@ -1,30 +1,99 @@
 import asyncio
 import discord
 import logging
-from collections import deque
+from collections import deque, OrderedDict
 import yt_dlp
 import os
 import time
+import psutil
+import subprocess
 
+# Configuração do yt-dlp
 # Configuração do yt-dlp
 YDL_OPTIONS = {
     'format': 'bestaudio/best',
     'quiet': True,
     'noplaylist': False,  # Permitir playlists
     'playlistend': 100,  # Limitar a 100 músicas por playlist
-    'socket_timeout': 10,
+    'socket_timeout': 10, # TIMEOUT DE 10s (Check 3 - User Feedback)
     'retries': 3,
     'skip_download': True,
-    # REMOVIDO: 'extract_flat' - estava causando URLs inválidas
     'source_address': '0.0.0.0',
-    'cachedir': '/app/.cache',  # Diretório de cache explícito
-    'geo_bypass': True,  # Tenta contornar restrições geográficas
-    'geo_bypass_country': 'US',  # País para bypass (pode ser ajustado)
-    # Correção para warnings de challenge solver e bloqueios
-    # IMPORTANTE: Deve ser uma lista, senão o yt-dlp itera sobre a string (b, :, u...)
+    'cachedir': '/app/.cache',
+    'geo_bypass': True,
+    'geo_bypass_country': 'US',
     'remote_components': ['ejs:github'],
     'impersonate_browser': 'chrome',
 }
+
+MAX_PLAYLIST_SIZE = 100  # Limite rígido (Check 4 - User Feedback)
+
+class StreamCache:
+    """Cache simples para URLs de stream com TTL, limite de tamanho e limpeza ativa."""
+    def __init__(self, ttl=600, max_size=100):
+        self.cache = OrderedDict()
+        self.ttl = ttl # 10 minutos
+        self.max_size = max_size
+        self.insert_count = 0
+
+    def get(self, key):
+        if key in self.cache:
+            data = self.cache[key]
+            if time.time() - data['time'] < self.ttl:
+                # Move para fim (LRU)
+                self.cache.move_to_end(key)
+                return data['url']
+            else:
+                del self.cache[key]
+        return None
+
+    def set(self, key, url):
+        self.insert_count += 1
+        
+        # Limpeza ativa a cada 50 inserções (Higiene)
+        if self.insert_count % 50 == 0:
+            self._sweep()
+
+        if key in self.cache:
+            self.cache.move_to_end(key)
+        self.cache[key] = {'url': url, 'time': time.time()}
+        
+        # Limpar excesso (LRU)
+        if len(self.cache) > self.max_size:
+            self.cache.popitem(last=False)
+
+    def _sweep(self):
+        """Remove itens expirados do cache."""
+        now = time.time()
+        keys_to_remove = [
+            k for k, v in self.cache.items()
+            if now - v['time'] > self.ttl
+        ]
+        
+        for k in keys_to_remove:
+            del self.cache[k]
+        
+        if keys_to_remove:
+            logging.info(f"🧹 Cache Sweep: {len(keys_to_remove)} itens expirados removidos.")
+
+class SafeFFmpegPCMAudio(discord.FFmpegPCMAudio):
+    """FFmpegPCMAudio com cleanup robusto para evitar processos zumbis."""
+    def cleanup(self):
+        proc = self._process
+        if proc:
+            try:
+                logging.info(f"Killing FFmpeg process {proc.pid}...")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    logging.warning(f"FFmpeg {proc.pid} not terminating, forcing kill.")
+                    proc.kill()
+            except Exception as e:
+                logging.error(f"Error killing FFmpeg process: {e}")
+        
+        # Chama o cleanup original para fechar pipes
+        super().cleanup()
 
 class MusicPlayer:
     def __init__(self, guild_id, bot):
@@ -38,6 +107,12 @@ class MusicPlayer:
         self.is_shuffling = False
         self.loop = asyncio.get_event_loop()
         
+        # Cache de Streams
+        self.stream_cache = StreamCache()
+        
+        # Reutilizar instância do YoutubeDL (Otimização)
+        self.ydl = yt_dlp.YoutubeDL(YDL_OPTIONS)
+
         # Progress tracking
         self.song_start_time = None
         self.song_duration = 0
@@ -272,26 +347,20 @@ class MusicPlayer:
         
         Inicia o processamento da playlist em segundo plano imediatamente.
         As músicas são adicionadas à fila conforme são extraídas.
-        
-        Args:
-            search: URL da playlist
-            user: Usuário que solicitou
-            
-        Returns:
-            dict: Informações básicas da playlist
         """
         try:
             logging.info(f"🎵 Iniciando processamento assíncrono de playlist: {search}")
             
             # Processar TODA a playlist em segundo plano (incluindo a primeira)
+            # Usando extract_flat para velocidade (Lazy Loading)
             asyncio.create_task(self._process_remaining_playlist(search, user))
             
             # Retornar imediatamente
             return {
-                'title': 'Playlist',
+                'title': 'Playlist em processamento...',
                 'url': search,
                 'thumbnail': '',
-                'duration': 'Processando...',
+                'duration': '...',
                 'channel': 'Playlist',
                 'user': user
             }
@@ -300,31 +369,27 @@ class MusicPlayer:
             logging.error(f"Erro ao adicionar playlist async: {e}")
             raise e
 
-    
     async def _process_remaining_playlist(self, search, user):
-        """Processa toda a playlist em segundo plano de forma RÁPIDA.
-        
-        Usa extract_flat para obter URLs rapidamente, depois processa individualmente.
-        
-        Args:
-            search: URL da playlist
-            user: Usuário que solicitou
-        """
+        """Processa toda a playlist em segundo plano de forma RÁPIDA (Lazy Loading)."""
         try:
-            logging.info("🎵 Processando playlist em segundo plano...")
+            logging.info("🎵 Processando playlist em segundo plano (LAZY LOADING)...")
             
             # PASSO 1: Extrair URLs RAPIDAMENTE com extract_flat
-            import yt_dlp
             flat_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'extract_flat': True,  # Extração rápida - só URLs
+                'extract_flat': True,  # Extração rápida - só URLs e metadados básicos
                 'skip_download': True,
+                'playlistend': MAX_PLAYLIST_SIZE # Limite rígido
             }
             
-            logging.info("⚡ Extraindo URLs da playlist (modo rápido)...")
-            with yt_dlp.YoutubeDL(flat_opts) as ydl:
-                playlist_info = await asyncio.to_thread(ydl.extract_info, search, download=False)
+            logging.info(f"⚡ Extraindo URLs da playlist (max {MAX_PLAYLIST_SIZE})...")
+            
+            # Executar em thread para não bloquear
+            playlist_info = await self.loop.run_in_executor(
+                None, 
+                lambda: yt_dlp.YoutubeDL(flat_opts).extract_info(search, download=False)
+            )
             
             if not playlist_info:
                 logging.error("Nenhuma informação de playlist encontrada")
@@ -339,72 +404,53 @@ class MusicPlayer:
             total_tracks = len(entries)
             logging.info(f"✓ {total_tracks} músicas encontradas na playlist")
             
-            # PASSO 2: Processar cada música individualmente
-            added_count = 0
             first_song_added = False
-            
-            # Reutilizar instância do YoutubeDL para melhor performance
-            full_opts = YDL_OPTIONS.copy()
-            with yt_dlp.YoutubeDL(full_opts) as ydl:
-                for idx, entry in enumerate(entries):
-                    if not entry:
-                        continue
+            added_count = 0
+
+            # PASSO 2: Adicionar à fila SEM resolver stream (Lazy)
+            for idx, entry in enumerate(entries):
+                if added_count >= MAX_PLAYLIST_SIZE:
+                    break
                     
-                    try:
-                        # Obter URL da entrada
-                        url = entry.get('url') or entry.get('webpage_url') or entry.get('id')
-                        if not url:
-                            logging.warning(f"Entrada {idx+1} sem URL, pulando")
-                            continue
-                        
-                        # Se for apenas um ID, construir URL completa
-                        if not url.startswith('http'):
-                            if 'youtube' in search or 'youtu.be' in search:
-                                url = f"https://www.youtube.com/watch?v={url}"
-                            elif 'soundcloud' in search:
-                                url = entry.get('webpage_url', url)
-                        
-                        # Extrair informações completas desta música
-                        track_info = await asyncio.to_thread(ydl.extract_info, url, download=False)
-                        
-                        if not track_info:
-                            continue
-                        
-                        # Criar objeto de música
-                        song = {
-                            'title': track_info.get('title', entry.get('title', 'Desconhecido')),
-                            'url': track_info.get('url', ''),
-                            'thumbnail': track_info.get('thumbnail', ''),
-                            'duration': self._format_duration(track_info.get('duration', 0)),
-                            'channel': track_info.get('uploader', entry.get('uploader', 'Desconhecido')),
-                            'user': user
-                        }
-                        
-                        if song['url']:
-                            self.queue.append(song)
-                            added_count += 1
-                            
-                            # Iniciar reprodução assim que a primeira música estiver pronta
-                            if not first_song_added:
-                                first_song_added = True
-                                logging.info(f"✓ Primeira música da playlist pronta: {song['title']}")
-                                
-                                if not self.voice_client or not self.voice_client.is_playing():
-                                    logging.info("▶️ Iniciando reprodução da playlist")
-                                    await self.play_next()
-                            
-                            # Log de progresso a cada 10 músicas
-                            if added_count % 10 == 0:
-                                logging.info(f"📊 Progresso: {added_count}/{total_tracks} músicas processadas")
-                        
-                        # Pequeno delay para não sobrecarregar
-                        await asyncio.sleep(0.1)
-                        
-                    except Exception as e:
-                        logging.warning(f"Erro ao processar música {idx+1}: {e}")
-                        continue
-            
-            logging.info(f"✓ Playlist completa: {added_count}/{total_tracks} músicas adicionadas à fila")
+                if not entry:
+                    continue
+                
+                # Construir objeto de música com dados preliminares
+                # A URL de stream será resolvida apenas no play_next!
+                
+                # Tentar pegar URL original
+                url = entry.get('url') or entry.get('webpage_url') or entry.get('id')
+                
+                # Reconstruir URL se for apenas ID (comum no extract_flat do YT)
+                if url and not url.startswith('http'):
+                    if entry.get('ie_key') == 'Youtube':
+                        url = f"https://www.youtube.com/watch?v={url}"
+                    # Outros casos podem precisar de ajuste, mas extract_flat geralmente dá webpage_url
+                
+                title = entry.get('title', 'Desconhecido')
+                duration = entry.get('duration', 0)
+                
+                song = {
+                    'title': title,
+                    'url': url, # URL ORIGINAL, NÃO STREAM
+                    'thumbnail': entry.get('thumbnail', ''), # Pode não ter alta qualidade ainda
+                    'duration': self._format_duration(duration),
+                    'duration_seconds': duration,
+                    'is_lazy': True, # Flag para indicar que precisa resolver
+                    'user': user
+                }
+                
+                self.queue.append(song)
+                added_count += 1
+                
+                # Iniciar reprodução assim que a primeira música estiver pronta
+                if not first_song_added:
+                    first_song_added = True
+                    logging.info(f"✓ Primeira música da playlist pronta (Lazy): {song['title']}")
+                    if not self.voice_client or not self.voice_client.is_playing():
+                        await self.play_next()
+
+            logging.info(f"✓ Playlist completa: {added_count} músicas adicionadas à fila (Lazy)")
             
         except Exception as e:
             logging.error(f"Erro ao processar playlist: {e}")
@@ -417,7 +463,7 @@ class MusicPlayer:
             search: URL ou termo de busca
             max_entries: Número máximo de entradas a extrair (None = todas)
         
-        Retorna lista de tuplas: [(title, url, thumbnail, duration, channel), ...]
+        Retorna lista de tuplas: [(title, url, thumbnail, duration, channel, duration_seconds), ...]
         """
         def run():
             with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
@@ -461,16 +507,16 @@ class MusicPlayer:
                         url = entry.get('url', entry.get('webpage_url', ''))
                         thumbnail = entry.get('thumbnail', '')
                         
-                        duration = entry.get('duration', 0)
-                        if duration:
-                            minutes, seconds = divmod(duration, 60)
+                        duration_seconds = entry.get('duration', 0)
+                        if duration_seconds:
+                            minutes, seconds = divmod(duration_seconds, 60)
                             hours, minutes = divmod(minutes, 60)
                             duration_formatted = f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}" if hours > 0 else f"{int(minutes)}:{int(seconds):02d}"
                         else:
                             duration_formatted = "Desconhecida"
                         
                         channel = entry.get('uploader', entry.get('channel', 'Desconhecido'))
-                        results.append((title, url, thumbnail, duration_formatted, channel))
+                        results.append((title, url, thumbnail, duration_formatted, channel, duration_seconds))
                     except Exception as e:
                         # Log mas não interrompe o processamento
                         logging.warning(f"Erro ao processar entrada da playlist: {e}")
@@ -481,14 +527,20 @@ class MusicPlayer:
         return await self.loop.run_in_executor(None, run)
 
     async def play_next(self):
-        """Toca a próxima música da fila."""
+        """Toca a próxima música da fila com Lazy Resolve e SafeFFmpeg."""
         logging.info(f"[play_next] Chamado. Voice client existe: {self.voice_client is not None}")
-        if not self.voice_client:
-            logging.warning("[play_next] Voice client não existe, abortando")
+        
+        # 1. Verificar conexão de voz
+        if not self.voice_client or not self.voice_client.is_connected():
+            logging.warning("[play_next] Bot desconectado do canal de voz. Limpando fila.")
+            self.stop() # Limpa fila e para tudo
             return
 
         if self.is_shuffling and len(self.queue) > 0:
-            pass # Simplificação por enquanto
+             # Implementar lógica real de shuffle se necessário
+             import random
+             if random.random() > 0.8: # Randomness simples só para não ser estático
+                self.queue.rotate(-random.randint(1, len(self.queue)))
 
         logging.info(f"[play_next] Tamanho da fila: {len(self.queue)}")
         if not self.queue:
@@ -497,22 +549,72 @@ class MusicPlayer:
             return
 
         self.current_song = self.queue.popleft()
-        logging.info(f"[play_next] Tocando: {self.current_song['title']}")
+        logging.info(f"[play_next] Preparando: {self.current_song['title']}")
 
+        # 2. LAZY RESOLVE - Resolver URL de stream AGORA
         source_url = self.current_song['url']
+        
+        # Verificar Cache Primeiro
+        cached_url = self.stream_cache.get(source_url)
+        if cached_url:
+            logging.info("⚡ URL recuperada do Cache!")
+            source_url = cached_url
+        else:
+            # Se não estiver em cache ou for 'is_lazy', resolver via yt-dlp
+            # OU se for stream direta de rádio/arquivo, não precisa resolver
+            requires_resolution = self.current_song.get('is_lazy', False) or 'youtube' in source_url or 'soundcloud' in source_url
+            
+            # Se for link direto (http) e não tiver cara de serviço conhecido, talvez não precise
+            # Mas o yt-dlp lida bem com isso.
+            
+            if requires_resolution:
+                try:
+                    logging.info(f"Resolvendo Stream URL (Lazy)... Cache Miss para {source_url}")
+                    # EXECUTAR EM THREAD para não bloquear!
+                    # Usar self.ydl reutilizado
+                    info = await self.loop.run_in_executor(
+                        None, 
+                        lambda: self.ydl.extract_info(source_url, download=False)
+                    )
+                    
+                    if not info:
+                         raise ValueError("Falha ao extrair info")
+                    
+                    # Atualizar metadados da música atual com infos completas
+                    self.current_song['title'] = info.get('title', self.current_song['title'])
+                    self.current_song['thumbnail'] = info.get('thumbnail', self.current_song['thumbnail'])
+                    
+                    duration = info.get('duration', 0)
+                    self.current_song['duration'] = self._format_duration(duration)
+                    self.current_song['duration_seconds'] = duration
+                    
+                    # Pegar URL real do áudio
+                    source_url = info.get('url')
+                    
+                    # Salvar no cache
+                    if source_url:
+                        self.stream_cache.set(self.current_song['url'], source_url)
+                    
+                except Exception as e:
+                    logging.error(f"Erro ao resolver stream: {e}")
+                    # Tentar próxima
+                    await self.play_next()
+                    return
+
+        # Proteção final contra URL nula
+        if not source_url:
+            logging.error("Source URL é None após resolução. Pulando música.")
+            await self.play_next()
+            return
+
         seek_position = self.current_song.get('seek', 0)
         
-        # Opções do FFmpeg com seek se necessário
         before_options = '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
-        
-        # Opções de saída (após o input)
-        # IMPORTANTE: Usar -ss como output option para evitar corrupção de stream AAC/HLS ao resumir
-        # O input seeking (-ss antes do -i) é mais rápido mas pode pular headers vitais
         output_options = f'-vn -af "aresample=48000,atempo=1.0,volume={self.volume}" -bufsize 10M'
         
         if seek_position > 0:
             output_options += f' -ss {seek_position}'
-            logging.info(f"[play_next] Resumindo de {seek_position}s (Output Seek)")
+            logging.info(f"[play_next] Resumindo de {seek_position}s")
 
         ffmpeg_options = {
             'before_options': before_options,
@@ -525,58 +627,37 @@ class MusicPlayer:
                 if err:
                     logging.error(f"Erro no player: {err}")
                 
-                # Se parou para SFX, não fazer nada (o SFX vai retomar depois)
                 if self.stopped_for_sfx:
-                    logging.info("Música parada para SFX - aguardando retomada via after_sfx")
+                    logging.info("Música parada para SFX - aguardando retomada")
                     return
 
-                # Lógica de Loop
                 if self.is_looping and self.current_song:
-                    # Resetar seek para loop
                     if 'seek' in self.current_song:
                         del self.current_song['seek']
+                    self.current_song['is_lazy'] = True # Re-resolver no próximo loop para garantir link fresco!
                     self.queue.appendleft(self.current_song)
                 
                 # Agendar próxima música
                 future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
-                try:
-                    future.result(timeout=10)
-                except asyncio.TimeoutError:
-                    logging.error("Timeout ao agendar próxima música")
-                except Exception as e:
-                    logging.error(f"Erro ao executar play_next: {e}")
+                # Não esperar result aqui para não travar thread do ffmpeg
+                
             except Exception as e:
                 logging.error(f"Erro crítico no callback after_play: {e}")
-                try:
-                    future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
-                    future.result(timeout=5)
-                except:
-                    logging.error("Falha na recuperação do player")
 
         try:
-            executable = 'ffmpeg' 
-            self.voice_client.play(
-                discord.FFmpegPCMAudio(source_url, executable=executable, **ffmpeg_options),
-                after=after_play
-            )
+            # USAR O NOVO SafeFFmpegPCMAudio
+            executable = 'ffmpeg'
+            
+            source = SafeFFmpegPCMAudio(source_url, executable=executable, **ffmpeg_options)
+            
+            self.voice_client.play(source, after=after_play)
+            
             self.is_paused = False
             self.consecutive_errors = 0
             self.stopped_for_sfx = False
             
-            # Ajustar start_time considerando o seek para o progresso ficar correto
-
             self.song_start_time = time.time() - seek_position
-            
-            # Extrair duração
-            duration_str = self.current_song.get('duration', '0:00')
-            if isinstance(duration_str, str) and ':' in duration_str:
-                parts = duration_str.split(':')
-                if len(parts) == 2:
-                    self.song_duration = int(parts[0]) * 60 + int(parts[1])
-                elif len(parts) == 3:
-                    self.song_duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-            else:
-                self.song_duration = 0
+            self.song_duration = self.current_song.get('duration_seconds', 0)
                 
             # Iniciar Dashboard
             try:
@@ -584,16 +665,49 @@ class MusicPlayer:
             except Exception as e:
                  logging.error(f"Erro ao iniciar dashboard: {e}")
 
+            # 3. PRÉ-RESOLUÇÃO (Pre-Resolve Next)
+            # Tentar resolver a próxima música em background para evitar gap
+            if self.queue:
+                next_song = self.queue[0]
+                if next_song.get('is_lazy') or 'youtube' in next_song['url']:
+                     logging.info(f"🔮 Pré-resolvendo próxima música: {next_song['title']}")
+                     asyncio.create_task(self._pre_resolve_next(next_song))
+
         except Exception as e:
             logging.error(f"Erro ao iniciar playback: {e}")
             self.consecutive_errors += 1
             if self.consecutive_errors > 5:
-                logging.error("Muitos erros consecutivos. Parando playback para evitar loop.")
+                logging.error("Muitos erros consecutivos. Parando.")
                 self.stop()
                 return
 
-            await asyncio.sleep(1) # Delay para evitar hot loop
-            await self.play_next()
+            await asyncio.sleep(1)
+            # Evitar recursão de stack (User Feedback #1)
+            self.loop.create_task(self.play_next())
+
+    async def _pre_resolve_next(self, song):
+        """Resolve a URL da próxima música silenciosamente."""
+        try:
+            source_url = song['url']
+            # Se já estiver em cache, ignora
+            if self.stream_cache.get(source_url):
+                return
+
+            # Resolver
+            info = await self.loop.run_in_executor(
+                None, 
+                lambda: self.ydl.extract_info(source_url, download=False)
+            )
+            
+            if info and info.get('url'):
+                 self.stream_cache.set(source_url, info['url'])
+                 # Atualizar metadados básicos se possível (opcional, cuidado com race condition)
+                 song['title'] = info.get('title', song['title'])
+                 song['thumbnail'] = info.get('thumbnail', song['thumbnail'])
+                 logging.info(f"🔮 Próxima música pré-resolvida com sucesso!")
+                 
+        except Exception as e:
+            logging.debug(f"Falha na pré-resolução (não crítico): {e}")
 
     async def play_soundboard(self, sfx_path: str, volume: float = 1.0):
         """Tocar efeito sonoro do soundboard com interrupção e retomada da música."""
@@ -648,7 +762,8 @@ class MusicPlayer:
 
         try:
             executable = 'ffmpeg'
-            source = discord.FFmpegPCMAudio(sfx_path, executable=executable, **ffmpeg_options)
+            # USAR SafeFFmpegPCMAudio
+            source = SafeFFmpegPCMAudio(sfx_path, executable=executable, **ffmpeg_options)
             self.voice_client.play(source, after=after_sfx)
             logging.info(f"SFX iniciado: {sfx_path}")
         except Exception as e:
