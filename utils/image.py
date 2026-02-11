@@ -121,6 +121,20 @@ def get_dominant_color_from_bytes(content):
         return (30, 30, 30)
 
 
+def get_dominant_color(url):
+    """
+    Wrapper conveniente que aceita uma URL, baixa o conteúdo (com cache)
+    e retorna a cor dominante como tupla (r, g, b).
+    Mantido síncrono de propósito: callers devem executar em executor.
+    """
+    try:
+        content = fetch_image_content(url)
+        return get_dominant_color_from_bytes(content)
+    except Exception as e:
+        logging.error(f"Erro ao obter cor dominante a partir da URL {url}: {e}")
+        return (30, 30, 30)
+
+
 def truncate_text(draw, text, font, max_width, suffix="..."):
     """Trunca texto baseado na largura REAL em pixels usando textbbox."""
     
