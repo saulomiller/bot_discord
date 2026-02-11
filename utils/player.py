@@ -708,12 +708,12 @@ class MusicPlayer:
             self.song_duration = self.current_song.get('duration_seconds', 0)
                 
             # Iniciar Dashboard
-              try:
-                  # Não aguardar o envio do dashboard para não bloquear o início do áudio.
-                  # Executar em background para evitar que falhas de rede afetem o playback.
-                  self.loop.create_task(self.send_dashboard())
-              except Exception as e:
-                  logging.error(f"Erro ao agendar envio do dashboard: {e}")
+            try:
+                # Não aguardar o envio do dashboard para não bloquear o início do áudio.
+                # Executar em background para evitar que falhas de rede afetem o playback.
+                self.loop.create_task(self.send_dashboard())
+            except Exception as e:
+                logging.error(f"Erro ao agendar envio do dashboard: {e}")
 
             # 3. PRÉ-RESOLUÇÃO (Pre-Resolve Next)
             # Tentar resolver a próxima música em background para evitar gap
