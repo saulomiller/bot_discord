@@ -220,7 +220,10 @@ async def api_skip(request: Request):
 
 @router.post("/api/removeplaylist")
 async def api_remove_playlist(request: Request):
-    """Remove da fila todas as músicas que foram adicionadas via playlist (channel == 'Playlist')."""
+    """Remove da fila todas as músicas que foram adicionadas via playlist (channel == 'Playlist').
+    
+    Também pula a música ATUAL se ela fizer parte de uma playlist.
+    """
     bot = request.app.state.bot
 
     # Se não houver players carregados, nada a fazer
@@ -229,15 +232,26 @@ async def api_remove_playlist(request: Request):
 
     total_removed = 0
     any_player = False
+    skipped_current = False
 
     # Iterar por todos os players conhecidos e remover itens marcados como 'Playlist'
     for gid, player in list(bot.players.items()):
         any_player = True
         retained = []
         removed = 0
+        
+        # 1. Verificar música ATUAL
+        if player.current_song and player.current_song.get('channel') == 'Playlist':
+            logging.info(f"Skipping current song from playlist: {player.current_song.get('title')}")
+            player.skip()
+            skipped_current = True
+
+        # 2. Filtrar a FILA
         for song in list(player.queue):
             try:
-                if isinstance(song, dict) and song.get('channel') == 'Playlist':
+                # Verificar channel ou flag is_lazy (que geralmente indica playlist grande)
+                if (isinstance(song, dict) and 
+                   (song.get('channel') == 'Playlist' or song.get('is_lazy', False))):
                     removed += 1
                 else:
                     retained.append(song)
@@ -249,11 +263,21 @@ async def api_remove_playlist(request: Request):
             player.queue.clear()
             for s in retained:
                 player.queue.append(s)
+            logging.info(f"Removed {removed} songs from queue (Playlist cleanup)")
 
     if not any_player:
         return {"status": "success", "message": "Nenhum player encontrado."}
+    
+    msg = []
+    if skipped_current:
+        msg.append("Pulei a música atual (Era playlist).")
+    if total_removed > 0:
+        msg.append(f"Removidas {total_removed} músicas da fila.")
+    
+    if not msg:
+        return {"status": "success", "message": "Nenhuma música de playlist encontrada para remover."}
 
-    return {"status": "success", "message": f"Removidas {total_removed} músicas da fila."}
+    return {"status": "success", "message": " ".join(msg)}
 
 @router.post("/api/pause")
 async def api_pause(request: Request):
