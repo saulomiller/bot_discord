@@ -4,13 +4,11 @@ import discord
 import logging
 from collections import deque, OrderedDict
 import yt_dlp
-import os
 import time
-import psutil
 import subprocess
 from utils.embeds import EmbedBuilder
+from utils.image import create_now_playing_card
 
-# Configuração do yt-dlp
 # Configuração do yt-dlp
 YDL_OPTIONS = {
     'format': 'bestaudio/best',
@@ -274,7 +272,6 @@ class MusicPlayer:
         try:
             # Gerar Imagem (PIL)
             # Rodar em executor para não travar
-            from utils.image import create_now_playing_card
             
             # Converter queue para lista de dicts se nao for
             next_songs = list(self.queue)
@@ -292,7 +289,6 @@ class MusicPlayer:
                 file = discord.File(img_buffer, filename="dashboard.png")
 
             # Gerar Embed Inicial
-            from utils.embeds import EmbedBuilder
             progress = self.get_progress()
             
             embed = EmbedBuilder.create_now_playing_embed(
