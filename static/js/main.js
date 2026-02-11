@@ -204,18 +204,14 @@ function setupEventListeners() {
     const skipPlaylistBtn = document.getElementById('skip-playlist-btn');
     if (skipPlaylistBtn) {
         skipPlaylistBtn.addEventListener('click', async () => {
-            console.log('Botão Pular Playlist clicado.');
             if (!confirm('Deseja remover as músicas da playlist da fila?')) return;
 
-            console.log('Confirmado. Chamando API...');
             try {
                 const res = await API.removePlaylist();
-                console.log('Resposta API:', res);
                 UI.showToast(res.message || 'Playlist removida da fila', 'success');
                 // Atualizar lista e status
                 setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
-                console.error('Erro ao pular playlist:', e);
                 UI.showToast(e.message || 'Erro ao remover playlist', 'error');
             }
         });

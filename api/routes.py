@@ -240,14 +240,6 @@ async def api_remove_playlist(request: Request):
         retained = []
         removed = 0
         
-        # LOG DE DEBUG: Inspecionar estado atual
-        if player.current_song:
-            logging.info(f"DEBUG: Current song: {player.current_song.get('title')} | Channel: {player.current_song.get('channel')}")
-        else:
-            logging.info("DEBUG: No current song playing.")
-            
-        logging.info(f"DEBUG: Queue size before: {len(player.queue)}")
-        
         # 1. Verificar música ATUAL
         if player.current_song and player.current_song.get('channel') == 'Playlist':
             logging.info(f"Skipping current song from playlist: {player.current_song.get('title')}")
@@ -257,21 +249,13 @@ async def api_remove_playlist(request: Request):
         # 2. Filtrar a FILA
         for song in list(player.queue):
             try:
-                # LOG DE DEBUG para cada item (pode ser verboso, mas necessário agora)
-                title = song.get('title', 'Unknown')
-                channel = song.get('channel', 'Unknown')
-                is_lazy = song.get('is_lazy', False)
-                
                 # Verificar channel ou flag is_lazy (que geralmente indica playlist grande)
                 if (isinstance(song, dict) and 
-                   (channel == 'Playlist' or is_lazy)):
-                    logging.info(f"DEBUG: REMOVING {title} | Channel: {channel} | Lazy: {is_lazy}")
+                   (song.get('channel') == 'Playlist' or song.get('is_lazy', False))):
                     removed += 1
                 else:
-                    logging.info(f"DEBUG: KEEPING {title} | Channel: {channel} | Lazy: {is_lazy}")
                     retained.append(song)
-            except Exception as e:
-                logging.error(f"DEBUG: Error processing song in queue: {e}")
+            except Exception:
                 retained.append(song)
 
         if removed > 0:
@@ -280,8 +264,6 @@ async def api_remove_playlist(request: Request):
             for s in retained:
                 player.queue.append(s)
             logging.info(f"Removed {removed} songs from queue (Playlist cleanup)")
-        
-        logging.info(f"DEBUG: Queue size after: {len(player.queue)}")
 
     if not any_player:
         return {"status": "success", "message": "Nenhum player encontrado."}
