@@ -305,9 +305,39 @@ class MusicPlayer:
             channel = self.dashboard_context.channel if hasattr(self.dashboard_context, 'channel') else self.dashboard_context
             
             if channel:
-                self.dashboard_message = await channel.send(embed=embed, file=file)
-                # Iniciar loop se não estiver rodando
-                await self.start_dashboard_task()
+                # Tentar enviar com retries em caso de problemas de conexão/transientes
+                attempts = 0
+                max_attempts = 3
+                while attempts < max_attempts:
+                    try:
+                        if file:
+                            # Garantir ponteiro no início para cada tentativa
+                            try:
+                                img_buffer.seek(0)
+                            except Exception:
+                                pass
+                            send_file = discord.File(img_buffer, filename="dashboard.png")
+                            self.dashboard_message = await channel.send(embed=embed, file=send_file)
+                        else:
+                            self.dashboard_message = await channel.send(embed=embed)
+
+                        # Iniciar loop se não estiver rodando
+                        await self.start_dashboard_task()
+                        break
+
+                    except (discord.Forbidden, discord.HTTPException, ConnectionResetError, OSError) as e:
+                        attempts += 1
+                        logging.warning(f"Falha ao enviar dashboard (tentativa {attempts}/{max_attempts}): {e}")
+                        # Se Forbidden, não adianta tentar de novo
+                        if isinstance(e, discord.Forbidden):
+                            logging.error("Sem permissão para enviar o dashboard no canal.")
+                            break
+                        # Aguarda um pouco antes de tentar novamente
+                        await asyncio.sleep(1 * attempts)
+                        continue
+
+                if attempts >= max_attempts:
+                    logging.error("Não foi possível enviar o dashboard após várias tentativas.")
 
         except Exception as e:
             logging.error(f"Erro ao enviar dashboard: {e}")
@@ -678,10 +708,12 @@ class MusicPlayer:
             self.song_duration = self.current_song.get('duration_seconds', 0)
                 
             # Iniciar Dashboard
-            try:
-                 await self.send_dashboard()
-            except Exception as e:
-                 logging.error(f"Erro ao iniciar dashboard: {e}")
+              try:
+                  # Não aguardar o envio do dashboard para não bloquear o início do áudio.
+                  # Executar em background para evitar que falhas de rede afetem o playback.
+                  self.loop.create_task(self.send_dashboard())
+              except Exception as e:
+                  logging.error(f"Erro ao agendar envio do dashboard: {e}")
 
             # 3. PRÉ-RESOLUÇÃO (Pre-Resolve Next)
             # Tentar resolver a próxima música em background para evitar gap
