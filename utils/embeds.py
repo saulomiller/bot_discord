@@ -44,7 +44,37 @@ class EmbedBuilder:
             description += f"\n📋 {queue_length} {t('in_queue')}"
         
         # Usar cor dominante se fornecida, senão usar padrão
-        embed_color = color if color else EmbedBuilder.COLOR_MUSIC
+        embed_color = EmbedBuilder.COLOR_MUSIC
+        if color:
+            try:
+                # Tuplas/listas iteráveis com 3 valores
+                if isinstance(color, (tuple, list)) and len(color) >= 3:
+                    r, g, b = int(color[0]), int(color[1]), int(color[2])
+                    embed_color = discord.Color.from_rgb(r, g, b)
+                # String hex like '#RRGGBB' or 'RRGGBB'
+                elif isinstance(color, str):
+                    hexc = color.lstrip('#')
+                    if len(hexc) == 6:
+                        r = int(hexc[0:2], 16)
+                        g = int(hexc[2:4], 16)
+                        b = int(hexc[4:6], 16)
+                        embed_color = discord.Color.from_rgb(r, g, b)
+                    else:
+                        embed_color = EmbedBuilder.COLOR_MUSIC
+                elif isinstance(color, discord.Color):
+                    embed_color = color
+                elif isinstance(color, int):
+                    embed_color = color
+                else:
+                    embed_color = EmbedBuilder.COLOR_MUSIC
+            except Exception as e:
+                # Em caso de problema, logar e usar cor padrão
+                try:
+                    logging = __import__('logging')
+                    logging.debug(f"Falha ao converter cor dominante: {e} (valor: {color})")
+                except Exception:
+                    pass
+                embed_color = EmbedBuilder.COLOR_MUSIC
 
         embed = discord.Embed(
             description=description,

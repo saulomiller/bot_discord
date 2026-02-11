@@ -357,11 +357,14 @@ class MusicPlayer:
             
             # Pegar apenas a primeira música
             info = info_list[0]
+            # Garantir duration_seconds disponível (info é tupla retornada por extract_info)
+            duration_seconds = info[5] if len(info) > 5 else 0
             song = {
                 'title': info[0],
                 'url': info[1],
                 'thumbnail': info[2],
                 'duration': info[3],
+                'duration_seconds': duration_seconds,
                 'channel': info[4],
                 'user': user
             }
@@ -470,6 +473,7 @@ class MusicPlayer:
                     'duration': self._format_duration(duration),
                     'duration_seconds': duration,
                     'is_lazy': True, # Flag para indicar que precisa resolver
+                    'channel': 'Playlist',
                     'user': user
                 }
                 
