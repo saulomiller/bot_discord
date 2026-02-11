@@ -201,6 +201,21 @@ function setupEventListeners() {
         });
     }
 
+    const skipPlaylistBtn = document.getElementById('skip-playlist-btn');
+    if (skipPlaylistBtn) {
+        skipPlaylistBtn.addEventListener('click', async () => {
+            if (!confirm('Deseja remover as músicas da playlist da fila?')) return;
+            try {
+                const res = await API.removePlaylist();
+                UI.showToast(res.message || 'Playlist removida da fila', 'success');
+                // Atualizar lista e status
+                setTimeout(() => updateStatusLoop(), 300);
+            } catch (e) {
+                UI.showToast(e.message || 'Erro ao remover playlist', 'error');
+            }
+        });
+    }
+
     // Botão de Atualização Manual
     const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) {

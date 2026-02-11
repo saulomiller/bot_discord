@@ -28,6 +28,7 @@ export const API = {
     pause: () => apiFetch(`${CONFIG.API_BASE}/pause`, { method: 'POST' }),
     resume: () => apiFetch(`${CONFIG.API_BASE}/resume`, { method: 'POST' }),
     skip: () => apiFetch(`${CONFIG.API_BASE}/skip`, { method: 'POST' }),
+    removePlaylist: () => apiFetch(`${CONFIG.API_BASE}/removeplaylist`, { method: 'POST' }),
     setVolume: (level) => apiFetch(`${CONFIG.API_BASE}/volume`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
