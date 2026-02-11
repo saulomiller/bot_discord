@@ -20,6 +20,9 @@ YDL_OPTIONS = {
     'cachedir': '/app/.cache',  # Diretório de cache explícito
     'geo_bypass': True,  # Tenta contornar restrições geográficas
     'geo_bypass_country': 'US',  # País para bypass (pode ser ajustado)
+    # Correção para warnings de challenge solver e bloqueios
+    'remote_components': 'ejs:github',
+    'impersonate_browser': 'chrome',
 }
 
 class MusicPlayer:
