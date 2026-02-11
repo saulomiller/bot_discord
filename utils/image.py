@@ -63,6 +63,8 @@ def generate_thumbnail(image_bytes, size):
     except Exception as e:
         logging.error(f"Erro no cache de thumbnail: {e}")
         return None
+
+def get_dominant_color(image_url):
     """
     Extrai a cor dominante de uma imagem a partir de uma URL.
     Retorna um discord.Color.
