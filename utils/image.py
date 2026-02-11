@@ -8,6 +8,7 @@ from functools import lru_cache
 
 # --- Otimização: Cache de Fontes Global ---
 FONTS = {}
+SESSION = requests.Session()
 
 def get_font(name, size):
     """Carrega e cachea fontes para evitar I/O repetitivo."""
@@ -30,14 +31,25 @@ def fetch_image_content(url):
     if not url:
         return None
     try:
-        response = requests.get(url, timeout=(5, 10)) # connect, read
+        response = SESSION.get(url, timeout=(5, 10)) # connect, read
         response.raise_for_status()
         return response.content
     except Exception as e:
         logging.error(f"Erro ao baixar imagem {url}: {e}")
         return None
 
-        return None
+def cover_resize(img, width, height):
+    """Redimensiona estilo 'cover' (preenche tudo sem distorcer)."""
+    iw, ih = img.size
+    scale = max(width/iw, height/ih)
+
+    new_size = (int(iw*scale), int(ih*scale))
+    img = img.resize(new_size, Image.LANCZOS)
+
+    left = (img.width - width)//2
+    top = (img.height - height)//2
+
+    return img.crop((left, top, left+width, top+height))
 
 @lru_cache(maxsize=80)
 def generate_blurred_background(image_bytes, width, height):
@@ -45,8 +57,13 @@ def generate_blurred_background(image_bytes, width, height):
     if not image_bytes: return None
     try:
         thumb = Image.open(BytesIO(image_bytes)).convert("RGB")
-        bg = thumb.resize((width, height))
-        bg = bg.filter(ImageFilter.GaussianBlur(25))
+        # Usa cover_resize em vez de resize direto
+        bg = cover_resize(thumb, width, height)
+        
+        # Blur adaptativo ao tamanho da imagem
+        blur_radius = int(min(width, height) * 0.06)
+        bg = bg.filter(ImageFilter.GaussianBlur(blur_radius))
+        
         bg = ImageEnhance.Brightness(bg).enhance(0.35)
         return bg
     except Exception as e:
@@ -55,48 +72,53 @@ def generate_blurred_background(image_bytes, width, height):
 
 @lru_cache(maxsize=120)
 def generate_thumbnail(image_bytes, size):
-    """Gera a thumbnail redimensionada (quadrada)."""
+    """Gera a thumbnail com crop central (quadrada) e alta qualidade."""
     if not image_bytes: return None
     try:
-        thumb = Image.open(BytesIO(image_bytes)).convert("RGB")
-        return thumb.resize(size)
+        img = Image.open(BytesIO(image_bytes)).convert("RGB")
+
+        w, h = img.size
+        min_side = min(w, h)
+
+        left = (w - min_side) // 2
+        top = (h - min_side) // 2
+        right = left + min_side
+        bottom = top + min_side
+
+        img = img.crop((left, top, right, bottom))
+        return img.resize(size, Image.LANCZOS)
     except Exception as e:
         logging.error(f"Erro no cache de thumbnail: {e}")
         return None
 
-def get_dominant_color(image_url):
+def is_low_resolution(img, min_size=300):
+    w, h = img.size
+    return w < min_size or h < min_size
+
+def get_dominant_color_from_bytes(content):
     """
-    Extrai a cor dominante de uma imagem a partir de uma URL.
-    Retorna um discord.Color.
+    Extrai a cor dominante de uma imagem a partir de bytes já baixados.
+    Retorna uma tupla (r, g, b).
     """
     try:
-        content = fetch_image_content(image_url)
         if not content:
-            return discord.Color.default()
+             return (30, 30, 30)
 
-        image = Image.open(BytesIO(content))
-        image = image.resize((150, 150))  # Reduzir para processar mais rápido
-        
-        # Converter para RGB se não for
-        if image.mode != "RGB":
-            image = image.convert("RGB")
+        image = Image.open(BytesIO(content)).convert("RGB")
+        image = image.resize((150, 150))
 
-        # Pegar cores mais comuns (limitando a paleta)
         result = image.quantize(colors=10, method=2)
-        
-        # Correção: Usar getcolors() para garantir a cor mais frequente
-        colors = result.convert('RGB').getcolors(maxcolors=256) # convert('RGB') é crucial aqui para getcolors retornar RGB
+        colors = result.convert('RGB').getcolors(maxcolors=256)
+
         if not colors:
-             return discord.Color.default()
+            return (30, 30, 30)
 
         # getcolors retorna lista de (count, pixel)
-        # Ordenar por count decrescente e pegar o pixel da cor mais comum
-        dominant_color = max(colors, key=lambda x: x[0])[1]
-        
-        return discord.Color.from_rgb(dominant_color[0], dominant_color[1], dominant_color[2])
+        return max(colors, key=lambda x: x[0])[1]
+
     except Exception as e:
         logging.error(f"Erro ao extrair cor dominante: {e}")
-        return discord.Color.default()
+        return (30, 30, 30)
 
 
 def truncate_text(draw, text, font, max_width, suffix="..."):
@@ -196,10 +218,25 @@ def create_now_playing_card(song_info, next_songs=None, queue_length=0):
     
     thumb = None
     if content:
-        # Background blur usando cache
-        bg = generate_blurred_background(content, width, height)
-        if bg:
-            card.paste(bg, (0,0))
+        # Background inteligente
+        try:
+            img = Image.open(BytesIO(content)).convert("RGB")
+            
+            if is_low_resolution(img):
+                # fundo sólido + cor dominante (fica MUITO mais bonito para pixel art/low res)
+                r, g, b = get_dominant_color_from_bytes(content)
+                bg = Image.new("RGB", (width, height), (r, g, b))
+            else:
+                bg = generate_blurred_background(content, width, height)
+                
+            if bg:
+                card.paste(bg, (0,0))
+                
+                # Overlay escuro para melhorar legibilidade
+                overlay = Image.new("RGBA", (width, height), (0,0,0,80))
+                card.paste(overlay, (0,0), overlay)
+        except Exception as e:
+            logging.error(f"Erro ao gerar background: {e}")
             
         # Thumbnail usando cache
         thumb = generate_thumbnail(content, (240, 240))  # Tamanho fixo do layout (cover_size)

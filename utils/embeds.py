@@ -13,6 +13,15 @@ class EmbedBuilder:
     COLOR_RADIO = discord.Color.from_rgb(255, 154, 162)    # Rosa
     
     @staticmethod
+    def _format_time(seconds: float) -> str:
+        """Formata segundos para string HH:MM:SS ou MM:SS. Reutilizável e não recriada a cada chamada."""
+        mins, secs = divmod(int(seconds), 60)
+        hours, mins = divmod(mins, 60)
+        if hours > 0:
+            return f"{hours}:{mins:02d}:{secs:02d}"
+        return f"{mins}:{secs:02d}"
+    
+    @staticmethod
     def create_now_playing_embed(song_info, queue_length=0, current_seconds=0, total_seconds=0, color=None):
         """Criar embed compacto para música tocando"""
         title = song_info.get('title', t('unknown'))
@@ -45,35 +54,29 @@ class EmbedBuilder:
         return embed
     
     @staticmethod
-    def create_progress_bar(current_seconds, total_seconds, bar_length=10):
-        """Cria uma barra de progresso visual com Unicode."""
+    def create_progress_bar(current_seconds, total_seconds, bar_length=14):
+        """Cria uma barra de progresso visual estilo Spotify (otimizada)."""
         if total_seconds <= 0:
-            return "▬▬▬▬▬▬▬▬▬▬ 0:00 / 0:00"
+            return f"`{'▱' * bar_length}`  0:00 / 0:00"
         
-        # Calcular posição do indicador
-        percent = min(100, (current_seconds / total_seconds) * 100)
-        filled = int((percent / 100) * bar_length)
+        # Calcular porcentagem (clamped)
+        percent = max(0, min(1, current_seconds / total_seconds))
         
-        # Criar barra visual
-        bar = ""
-        for i in range(bar_length):
-            if i == filled:
-                bar += "🔘"
-            else:
-                bar += "▬"
+        # Construir barra com tratamento especial para 100%
+        if percent >= 1.0:
+            # Totalmente preenchido (concluído)
+            bar = "▰" * bar_length
+        else:
+            # Cálculo do preenchimento com cursor
+            filled = int(percent * (bar_length - 1))
+            bar = "▰" * filled + "●" + "▱" * (bar_length - filled - 1)
         
-        # Formatar tempos
-        def format_time(seconds):
-            mins, secs = divmod(int(seconds), 60)
-            hours, mins = divmod(mins, 60)
-            if hours > 0:
-                return f"{hours}:{mins:02d}:{secs:02d}"
-            return f"{mins}:{secs:02d}"
+        # Formatar tempos usando método estático (sem recreação)
+        current_time = EmbedBuilder._format_time(current_seconds)
+        total_time = EmbedBuilder._format_time(total_seconds)
         
-        current_time = format_time(current_seconds)
-        total_time = format_time(total_seconds)
-        
-        return f"{bar} {current_time} / {total_time}"
+        # Retornar com code block inline + destaque visual (Spotify-style)
+        return f"`{bar}`  **{current_time}** / {total_time}"
     
     @staticmethod
     def create_success_embed(title, description=""):
