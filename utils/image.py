@@ -71,6 +71,33 @@ def get_dominant_color(image_url):
         logging.error(f"Erro ao extrair cor dominante: {e}")
         return discord.Color.default()
 
+
+def truncate_text(draw, text, font, max_width, suffix="..."):
+    """Trunca texto baseado na largura REAL em pixels usando textbbox."""
+    
+    # se já cabe, retorna direto
+    bbox = draw.textbbox((0, 0), text, font=font)
+    width = bbox[2] - bbox[0]
+    if width <= max_width:
+        return text
+
+    # busca binária (muito mais rápido que while char por char)
+    left, right = 0, len(text)
+
+    while left < right:
+        mid = (left + right) // 2
+        candidate = text[:mid] + suffix
+
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        width = bbox[2] - bbox[0]
+
+        if width <= max_width:
+            left = mid + 1
+        else:
+            right = mid
+
+    return text[:left-1] + suffix
+
 def create_now_playing_card(song_info, next_songs=None, queue_length=0):
     """
     Gera uma imagem 'Now Playing' personalizada com lista de próximas músicas.
@@ -146,13 +173,7 @@ def create_now_playing_card(song_info, next_songs=None, queue_length=0):
         max_title_width = 450
         
         try:
-            if font_title.getlength(title) > max_title_width:
-                while font_title.getlength(title + "...") > max_title_width and len(title) > 0:
-                    title = title[:-1]
-                title += "..."
-        except AttributeError:
-             if len(title) > 30:
-                title = title[:27] + "..."
+            title = truncate_text(draw, title, font_title, max_title_width)
         except Exception as e:
             logging.warning(f"Erro na truncagem de texto: {e}")
             if len(title) > 30:
