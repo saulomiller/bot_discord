@@ -222,12 +222,17 @@ async def api_skip(request: Request):
 async def api_remove_playlist(request: Request):
     """Remove da fila todas as músicas que foram adicionadas via playlist (channel == 'Playlist')."""
     bot = request.app.state.bot
-    if not bot.voice_clients:
-        raise HTTPException(status_code=400, detail="Bot não está em um canal de voz.")
 
-    vc = bot.voice_clients[0]
-    if vc.guild.id in bot.players:
-        player = bot.players[vc.guild.id]
+    # Se não houver players carregados, nada a fazer
+    if not getattr(bot, 'players', None):
+        return {"status": "success", "message": "Nenhum player encontrado."}
+
+    total_removed = 0
+    any_player = False
+
+    # Iterar por todos os players conhecidos e remover itens marcados como 'Playlist'
+    for gid, player in list(bot.players.items()):
+        any_player = True
         retained = []
         removed = 0
         for song in list(player.queue):
@@ -239,13 +244,16 @@ async def api_remove_playlist(request: Request):
             except Exception:
                 retained.append(song)
 
-        player.queue.clear()
-        for s in retained:
-            player.queue.append(s)
+        if removed > 0:
+            total_removed += removed
+            player.queue.clear()
+            for s in retained:
+                player.queue.append(s)
 
-        return {"status": "success", "message": f"Removidas {removed} músicas da fila."}
+    if not any_player:
+        return {"status": "success", "message": "Nenhum player encontrado."}
 
-    return {"status": "success", "message": "Nenhum player encontrado."}
+    return {"status": "success", "message": f"Removidas {total_removed} músicas da fila."}
 
 @router.post("/api/pause")
 async def api_pause(request: Request):
