@@ -103,6 +103,26 @@ class MusicCog(commands.Cog):
                 title=t('info'),
                 description=t('not_in_voice'),
                 color=discord.Color.blue()))
+
+    @commands.command(name="removeplaylist")
+    async def removeplaylist(self, ctx: commands.Context):
+        """Remove todas as músicas de playlists (adicionadas via playlist) da fila sem parar a música atual."""
+        player = self.get_player(ctx.guild.id)
+        retained = []
+        removed = 0
+        for song in list(player.queue):
+            if song.get('channel') == 'Playlist':
+                removed += 1
+            else:
+                retained.append(song)
+
+        player.queue.clear()
+        for s in retained:
+            player.queue.append(s)
+
+        await ctx.send(embed=EmbedBuilder.create_success_embed(
+            "Playlist removida",
+            f"Removidas {removed} músicas da fila."))
     
     @app_commands.command(name="sair_todos", description="Disconnects from all voice channels in all servers")
     async def sair_todos_slash(self, interaction: discord.Interaction):
@@ -130,6 +150,26 @@ class MusicCog(commands.Cog):
                 title=t('info'),
                 description=t('not_in_voice'),
                 color=discord.Color.blue()))
+
+    @app_commands.command(name="removeplaylist", description="Removes queued songs added from playlists")
+    async def removeplaylist_slash(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        player = self.get_player(interaction.guild_id)
+        retained = []
+        removed = 0
+        for song in list(player.queue):
+            if song.get('channel') == 'Playlist':
+                removed += 1
+            else:
+                retained.append(song)
+
+        player.queue.clear()
+        for s in retained:
+            player.queue.append(s)
+
+        await interaction.followup.send(embed=EmbedBuilder.create_success_embed(
+            "Playlist removida",
+            f"Removidas {removed} músicas da fila."), ephemeral=True)
 
     # --- Comandos de Reprodução ---
 
@@ -282,11 +322,25 @@ class MusicCog(commands.Cog):
         player.stop()
         await ctx.send("Música parada e fila limpa.")
 
+    @commands.command()
+    async def resume(self, ctx: commands.Context):
+        """Retoma a reprodução (prefix command)."""
+        player = self.get_player(ctx.guild.id)
+        player.resume()
+        await ctx.send("Música retomada.")
+
     @app_commands.command(name="stop", description="Stops playback and clears the queue")
     async def stop_slash(self, interaction: discord.Interaction):
         player = self.get_player(interaction.guild_id)
         player.stop()
         await interaction.response.send_message("Música parada e fila limpa.")
+
+    @app_commands.command(name="resume", description="Resumes playback")
+    async def resume_slash(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        player = self.get_player(interaction.guild_id)
+        player.resume()
+        await interaction.followup.send("Música retomada.", ephemeral=True)
 
     @commands.command()
     async def agora(self, ctx: commands.Context):
