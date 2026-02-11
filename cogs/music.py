@@ -142,7 +142,11 @@ class MusicCog(commands.Cog):
         player.dashboard_context = ctx # Vincular canal de texto para dashboard
         
         # Verificar se é playlist
-        if 'list=' in search:
+        is_playlist = False
+        if 'list=' in search or '/sets/' in search or '/album/' in search or '/playlist/' in search:
+            is_playlist = True
+
+        if is_playlist:
             if self.playlist_processing_task and not self.playlist_processing_task.done():
                 await ctx.send(embed=EmbedBuilder.create_error_embed(t('error'), "Já existe uma playlist sendo processada. Aguarde."))
                 return
@@ -206,7 +210,11 @@ class MusicCog(commands.Cog):
         player.dashboard_context = interaction # Vincular canal de texto para dashboard
 
          # Verificar se é playlist
-        if 'list=' in search:
+        is_playlist = False
+        if 'list=' in search or '/sets/' in search or '/album/' in search or '/playlist/' in search:
+            is_playlist = True
+
+        if is_playlist:
              if self.playlist_processing_task and not self.playlist_processing_task.done():
                 await interaction.followup.send(embed=EmbedBuilder.create_error_embed(t('error'), "Já existe uma playlist sendo processada."))
                 return

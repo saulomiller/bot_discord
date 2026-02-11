@@ -343,65 +343,66 @@ class MusicPlayer:
             added_count = 0
             first_song_added = False
             
-            for idx, entry in enumerate(entries):
-                if not entry:
-                    continue
-                
-                try:
-                    # Obter URL da entrada
-                    url = entry.get('url') or entry.get('webpage_url') or entry.get('id')
-                    if not url:
-                        logging.warning(f"Entrada {idx+1} sem URL, pulando")
+            # Reutilizar instância do YoutubeDL para melhor performance
+            full_opts = YDL_OPTIONS.copy()
+            with yt_dlp.YoutubeDL(full_opts) as ydl:
+                for idx, entry in enumerate(entries):
+                    if not entry:
                         continue
                     
-                    # Se for apenas um ID, construir URL completa
-                    if not url.startswith('http'):
-                        if 'youtube' in search or 'youtu.be' in search:
-                            url = f"https://www.youtube.com/watch?v={url}"
-                        elif 'soundcloud' in search:
-                            url = entry.get('webpage_url', url)
-                    
-                    # Extrair informações completas desta música
-                    full_opts = YDL_OPTIONS.copy()
-                    with yt_dlp.YoutubeDL(full_opts) as ydl:
+                    try:
+                        # Obter URL da entrada
+                        url = entry.get('url') or entry.get('webpage_url') or entry.get('id')
+                        if not url:
+                            logging.warning(f"Entrada {idx+1} sem URL, pulando")
+                            continue
+                        
+                        # Se for apenas um ID, construir URL completa
+                        if not url.startswith('http'):
+                            if 'youtube' in search or 'youtu.be' in search:
+                                url = f"https://www.youtube.com/watch?v={url}"
+                            elif 'soundcloud' in search:
+                                url = entry.get('webpage_url', url)
+                        
+                        # Extrair informações completas desta música
                         track_info = await asyncio.to_thread(ydl.extract_info, url, download=False)
-                    
-                    if not track_info:
-                        continue
-                    
-                    # Criar objeto de música
-                    song = {
-                        'title': track_info.get('title', entry.get('title', 'Desconhecido')),
-                        'url': track_info.get('url', ''),
-                        'thumbnail': track_info.get('thumbnail', ''),
-                        'duration': self._format_duration(track_info.get('duration', 0)),
-                        'channel': track_info.get('uploader', entry.get('uploader', 'Desconhecido')),
-                        'user': user
-                    }
-                    
-                    if song['url']:
-                        self.queue.append(song)
-                        added_count += 1
                         
-                        # Iniciar reprodução assim que a primeira música estiver pronta
-                        if not first_song_added:
-                            first_song_added = True
-                            logging.info(f"✓ Primeira música da playlist pronta: {song['title']}")
+                        if not track_info:
+                            continue
+                        
+                        # Criar objeto de música
+                        song = {
+                            'title': track_info.get('title', entry.get('title', 'Desconhecido')),
+                            'url': track_info.get('url', ''),
+                            'thumbnail': track_info.get('thumbnail', ''),
+                            'duration': self._format_duration(track_info.get('duration', 0)),
+                            'channel': track_info.get('uploader', entry.get('uploader', 'Desconhecido')),
+                            'user': user
+                        }
+                        
+                        if song['url']:
+                            self.queue.append(song)
+                            added_count += 1
                             
-                            if not self.voice_client or not self.voice_client.is_playing():
-                                logging.info("▶️ Iniciando reprodução da playlist")
-                                await self.play_next()
+                            # Iniciar reprodução assim que a primeira música estiver pronta
+                            if not first_song_added:
+                                first_song_added = True
+                                logging.info(f"✓ Primeira música da playlist pronta: {song['title']}")
+                                
+                                if not self.voice_client or not self.voice_client.is_playing():
+                                    logging.info("▶️ Iniciando reprodução da playlist")
+                                    await self.play_next()
+                            
+                            # Log de progresso a cada 10 músicas
+                            if added_count % 10 == 0:
+                                logging.info(f"📊 Progresso: {added_count}/{total_tracks} músicas processadas")
                         
-                        # Log de progresso a cada 10 músicas
-                        if added_count % 10 == 0:
-                            logging.info(f"📊 Progresso: {added_count}/{total_tracks} músicas processadas")
-                    
-                    # Pequeno delay para não sobrecarregar
-                    await asyncio.sleep(0.1)
-                    
-                except Exception as e:
-                    logging.warning(f"Erro ao processar música {idx+1}: {e}")
-                    continue
+                        # Pequeno delay para não sobrecarregar
+                        await asyncio.sleep(0.1)
+                        
+                    except Exception as e:
+                        logging.warning(f"Erro ao processar música {idx+1}: {e}")
+                        continue
             
             logging.info(f"✓ Playlist completa: {added_count}/{total_tracks} músicas adicionadas à fila")
             
