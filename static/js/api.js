@@ -121,3 +121,9 @@ export const API = {
         body: JSON.stringify({ sfx_id: sfxId, volume })
     })
 };
+
+// Provide default export and also attach to window for non-module consumers
+export default API;
+if (typeof window !== 'undefined' && !window.API) {
+    window.API = API;
+}
