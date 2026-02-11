@@ -22,3 +22,4 @@ services:
     volumes:
       # Mapeia a pasta de dados para persistência (token, playlists, radios)
       - ./data:/app/data
+      - ./static:/app/static

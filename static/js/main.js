@@ -1,4 +1,4 @@
-import { API } from './api.js';
+import { API } from './api.js?v=3';
 import { UI } from './ui.js';
 import { AudioReactiveBackground } from './visualizer.js';
 import { RadioManager } from './radios.js';
@@ -177,7 +177,7 @@ function setupEventListeners() {
                         const titleKey = isPaused ? 'resume' : 'paused';
                         playerEl.playBtn.title = translationManager ? translationManager.get(titleKey) : (isPaused ? 'Retomar' : 'Pausar');
                     }
-                } catch (e) {}
+                } catch (e) { }
 
                 // Re-sincronizar com servidor em seguida
                 setTimeout(() => updateStatusLoop(), 300);
