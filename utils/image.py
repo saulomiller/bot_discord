@@ -3,6 +3,7 @@ import requests
 from io import BytesIO
 import discord
 import logging
+import os
 
 def get_dominant_color(image_url):
     """
@@ -90,13 +91,20 @@ def create_now_playing_card(song_info, next_songs=[], queue_length=0):
 
         # Configurar fontes
         try:
-            # Tenta usar Arial se disponível (Windows/Linux comum), senão default
-            font_title = ImageFont.truetype("arial.ttf", 38)
-            font_artist = ImageFont.truetype("arial.ttf", 22)
-            font_list_header = ImageFont.truetype("arial.ttf", 20)
-            font_list_item = ImageFont.truetype("arial.ttf", 18)
-        except IOError:
-            # Fallback para fonte padrão (feia mas funciona)
+            # Caminho para fontes
+            font_dir = os.path.join(os.path.dirname(__file__), 'fonts')
+            # Usar Arial (copiado do sistema)
+            font_regular = os.path.join(font_dir, 'arial.ttf')
+            font_bold = os.path.join(font_dir, 'arialbd.ttf')
+            
+            # Carregar fontes personalizadas
+            font_title = ImageFont.truetype(font_bold, 40)
+            font_artist = ImageFont.truetype(font_regular, 24)
+            font_list_header = ImageFont.truetype(font_bold, 22)
+            font_list_item = ImageFont.truetype(font_regular, 20)
+        except Exception as e:
+            logging.warning(f"Fonte personalizada não encontrada, usando padrão: {e}")
+            # Fallback para fonte padrão
             font_title = ImageFont.load_default()
             font_artist = ImageFont.load_default()
             font_list_header = ImageFont.load_default()
