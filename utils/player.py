@@ -758,6 +758,10 @@ class MusicPlayer:
                  # Atualizar metadados básicos se possível (opcional, cuidado com race condition)
                  song['title'] = info.get('title', song['title'])
                  song['thumbnail'] = info.get('thumbnail', song['thumbnail'])
+                 # Atualizar duração para que a barra de progresso funcione quando for a vez desta música
+                 duration = info.get('duration', 0)
+                 song['duration_seconds'] = duration
+                 song['duration'] = self._format_duration(duration)
                  logging.info(f"🔮 Próxima música pré-resolvida com sucesso!")
                  
         except Exception as e:
