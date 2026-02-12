@@ -215,10 +215,63 @@ def wrap_two_lines(draw, text, font, max_width):
 
     return lines[:2]
 
+def normalize_song_info(song_info):
+    """
+    Normaliza os dados de song_info para garantir compatibilidade
+    entre diferentes fontes (YouTube, SoundCloud, etc.)
+    """
+    normalized = {}
+    
+    # Mapeamento de possíveis chaves alternativas
+    title_keys = ['title', 'name', 'track', 'song']
+    artist_keys = ['channel', 'artist', 'uploader', 'author', 'creator']
+    thumbnail_keys = ['thumbnail', 'artwork_url', 'art', 'image', 'cover']
+    user_keys = ['user', 'requested_by', 'requester']
+    
+    # Tenta encontrar o título
+    normalized['title'] = None
+    for key in title_keys:
+        if key in song_info and song_info[key]:
+            normalized['title'] = song_info[key]
+            break
+    if not normalized['title']:
+        normalized['title'] = "Título Desconhecido"
+    
+    # Tenta encontrar o artista
+    normalized['channel'] = None
+    for key in artist_keys:
+        if key in song_info and song_info[key]:
+            normalized['channel'] = song_info[key]
+            break
+    if not normalized['channel']:
+        normalized['channel'] = "Artista Desconhecido"
+    
+    # Tenta encontrar a thumbnail
+    normalized['thumbnail'] = None
+    for key in thumbnail_keys:
+        if key in song_info and song_info[key]:
+            normalized['thumbnail'] = song_info[key]
+            break
+    
+    # Tenta encontrar o usuário
+    normalized['user'] = None
+    for key in user_keys:
+        if key in song_info and song_info[key]:
+            normalized['user'] = song_info[key]
+            break
+    if not normalized['user']:
+        normalized['user'] = "?"
+    
+    return normalized
+
 def create_now_playing_card(song_info, next_songs=None, queue_length=0):
     """Gera card estilo Spotify com grid e layout moderno."""
     if next_songs is None:
         next_songs = []
+
+    song_info = normalize_song_info(song_info)
+    if next_songs:
+        next_songs = [normalize_song_info(song) for song in next_songs]
 
     width, height = 900, 360
     padding = 30
