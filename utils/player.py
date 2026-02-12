@@ -443,7 +443,7 @@ class MusicPlayer:
             first_song_added = False
             added_count = 0
 
-            # PASSO 2: Adicionar à fila SEM resolver stream (Lazy)
+            # PASSO 2: Adicionar à fila
             for idx, entry in enumerate(entries):
                 if added_count >= MAX_PLAYLIST_SIZE:
                     break
@@ -451,28 +451,46 @@ class MusicPlayer:
                 if not entry:
                     continue
                 
-                # Construir objeto de música com dados preliminares
-                # A URL de stream será resolvida apenas no play_next!
-                
                 # Tentar pegar URL original
                 url = entry.get('url') or entry.get('webpage_url') or entry.get('id')
                 
-                # Reconstruir URL se for apenas ID (comum no extract_flat do YT)
+                # Reconstruir URL se for apenas ID
                 if url and not url.startswith('http'):
                     if entry.get('ie_key') == 'Youtube':
                         url = f"https://www.youtube.com/watch?v={url}"
-                    # Outros casos podem precisar de ajuste, mas extract_flat geralmente dá webpage_url
                 
-                title = entry.get('title', 'Desconhecido')
+                # Tentar pegar título de MÚLTIPLAS chaves
+                title = (
+                    entry.get('title') or 
+                    entry.get('track') or 
+                    entry.get('name') or 
+                    None  # Será resolvido depois se None
+                )
+                
                 duration = entry.get('duration', 0)
+                thumbnail = entry.get('thumbnail', '')
+                
+                # Se NÃO tem título (comum em SoundCloud flat), usar URL como temporário
+                # O título real será obtido quando a música for tocar (lazy resolve)
+                if not title:
+                    # Usar parte da URL como título temporário
+                    if url:
+                        # Extrair algo legível da URL
+                        temp_title = url.split('/')[-1].split('?')[0]
+                        # Limitar tamanho e limpar
+                        temp_title = temp_title.replace('-', ' ').replace('_', ' ')[:40]
+                        title = f"🎵 {temp_title}..."
+                        logging.debug(f"Título temporário criado: {title}")
+                    else:
+                        title = f"🎵 Música #{idx+1}"
                 
                 song = {
                     'title': title,
-                    'url': url, # URL ORIGINAL, NÃO STREAM
-                    'thumbnail': entry.get('thumbnail', ''), # Pode não ter alta qualidade ainda
+                    'url': url,
+                    'thumbnail': thumbnail,
                     'duration': self._format_duration(duration),
                     'duration_seconds': duration,
-                    'is_lazy': True, # Flag para indicar que precisa resolver
+                    'is_lazy': True,  # IMPORTANTE: Será resolvido no play_next
                     'channel': 'Playlist',
                     'user': user
                 }
@@ -483,11 +501,11 @@ class MusicPlayer:
                 # Iniciar reprodução assim que a primeira música estiver pronta
                 if not first_song_added:
                     first_song_added = True
-                    logging.info(f"✓ Primeira música da playlist pronta (Lazy): {song['title']}")
+                    logging.info(f"✓ Primeira música da playlist pronta: {song['title']}")
                     if not self.voice_client or not self.voice_client.is_playing():
                         self.loop.create_task(self.play_next())
 
-            logging.info(f"✓ Playlist completa: {added_count} músicas adicionadas à fila (Lazy)")
+            logging.info(f"✓ Playlist completa: {added_count} músicas adicionadas à fila")
             
         except Exception as e:
             logging.error(f"Erro ao processar playlist: {e}")
