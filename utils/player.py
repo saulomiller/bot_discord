@@ -377,21 +377,68 @@ class MusicPlayer:
 
 
     async def add_playlist_async(self, search, user):
-        """Adiciona playlist de forma assíncrona - processa tudo em background.
+        """Adiciona playlist de forma OTIMIZADA.
         
-        Inicia o processamento da playlist em segundo plano imediatamente.
-        As músicas são adicionadas à fila conforme são extraídas.
+        1. Busca a PRIMEIRA música imediatamente e toca.
+        2. Inicia o processamento do RESTO da playlist em background.
         """
         try:
-            logging.info(f"🎵 Iniciando processamento assíncrono de playlist: {search}")
+            logging.info(f"🎵 Iniciando processamento OTIMIZADO de playlist: {search}")
             
-            # Processar TODA a playlist em segundo plano (incluindo a primeira)
-            # Usando extract_flat para velocidade (Lazy Loading)
-            asyncio.create_task(self._process_remaining_playlist(search, user))
+            # PASSO 1: Pegar APENAS a primeira música rapidamente
+            first_item_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': 'in_playlist',
+                'skip_download': True,
+                'playlistend': 1, # Limite de 1 para ser rápido
+                'ignoreerrors': True,
+            }
             
-            # Retornar imediatamente
+            logging.info("⚡ Buscando primeira música da playlist...")
+            first_info = await self.loop.run_in_executor(
+                None, 
+                lambda: yt_dlp.YoutubeDL(first_item_opts).extract_info(search, download=False)
+            )
+
+            first_song_title = "Playlist em processamento..."
+            
+            # Se conseguiu extrair algo
+            if first_info and 'entries' in first_info:
+                entries = list(first_info['entries'])
+                if entries:
+                    first_entry = entries[0]
+                    if first_entry:
+                        # Adicionar a primeira música à fila IMEDIATAMENTE
+                        # Precisamos resolver a URL real se for flat? 
+                        # Sim, mas o add_to_queue lida com isso se for URL.
+                        # No caso de extract_flat='in_playlist', entries são dicts com url e title.
+                        
+                        # Criar objeto música manual para evitar double-fetch
+                        song = {
+                            'title': first_entry.get('title', 'Desconhecido'),
+                            'url': first_entry.get('url'),
+                            'thumbnail': None, # Resolvemos depois/lazy
+                            'duration': first_entry.get('duration_string'),
+                            'duration_seconds': first_entry.get('duration'),
+                            'channel': 'Playlist',
+                            'user': user,
+                            'is_lazy': True # Indicar que precisa resolver stream
+                        }
+                        self.queue.append(song)
+                        first_song_title = song['title']
+                        logging.info(f"✓ Primeira música adicionada: {first_song_title}")
+                        
+                        # Se não estiver tocando, tocar AGORA
+                        if not self.is_playing:
+                             await self.play_next()
+            
+            # PASSO 2: Processar o RESTO em background (começando do índice 2)
+            asyncio.create_task(self._process_remaining_playlist(search, user, start_index=2))
+            
+            # Retornar info genérica
             return {
-                'title': 'Playlist em processamento...',
+                'title': f"Playlist: {first_song_title}...",
                 'url': search,
                 'thumbnail': '',
                 'duration': '...',
@@ -403,19 +450,20 @@ class MusicPlayer:
             logging.error(f"Erro ao adicionar playlist async: {e}")
             raise e
 
-    async def _process_remaining_playlist(self, search, user):
-        """Processa toda a playlist em segundo plano de forma RÁPIDA (Lazy Loading)."""
+    async def _process_remaining_playlist(self, search, user, start_index=1):
+        """Processa o RESTANTE da playlist em segundo plano."""
         try:
-            logging.info("🎵 Processando playlist em segundo plano (LAZY LOADING)...")
+            logging.info(f"🎵 Processando restante da playlist (iniciando em {start_index})...")
             
             # PASSO 1: Extrair URLs RAPIDAMENTE com extract_flat
             flat_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'extract_flat': 'in_playlist',  # APENAS vídeos da playlist, ignorar mix/recomendações
+                'extract_flat': 'in_playlist',
                 'skip_download': True,
-                'playlistend': MAX_PLAYLIST_SIZE, # Limite rígido
-                'ignoreerrors': True, # Ignorar erros de vídeo privado/removido na extração
+                'playliststart': start_index, # Pular as que já pegamos
+                'playlistend': MAX_PLAYLIST_SIZE,
+                'ignoreerrors': True,
             }
             
             logging.info(f"⚡ Extraindo URLs da playlist (max {MAX_PLAYLIST_SIZE})...")
@@ -441,6 +489,18 @@ class MusicPlayer:
             
             total_tracks = len(valid_entries)
             logging.info(f"✓ {total_tracks} músicas válidas encontradas na playlist")
+            
+            # Debug: Logar primeiras entradas para verificar se parecem corretas
+            if valid_entries:
+                logging.debug(f"Primeira entrada: {valid_entries[0].get('title')} ({valid_entries[0].get('url')})")
+                logging.debug(f"Última entrada: {valid_entries[-1].get('title')}")
+
+            # Detecção de Mix do YouTube (Geralmente começa com RD... e tem muitas músicas)
+            # Se for um Mix e o usuário esperava uma playlist pequena, isso explica os 99 itens.
+            if 'RD' in search or 'list=RD' in search:
+                logging.warning("Detectado YouTube MIX (Lista infinita). Limitando a 25 músicas para evitar spam.")
+                # Opcional: Reduzir limite se for mix
+                # valid_entries = valid_entries[:25]
             
             first_song_added = False
             added_count = 0
