@@ -414,9 +414,10 @@ class MusicPlayer:
             flat_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'extract_flat': True,  # Extração rápida - só URLs e metadados básicos
+                'extract_flat': 'in_playlist',  # APENAS vídeos da playlist, ignorar mix/recomendações
                 'skip_download': True,
-                'playlistend': MAX_PLAYLIST_SIZE # Limite rígido
+                'playlistend': MAX_PLAYLIST_SIZE, # Limite rígido
+                'ignoreerrors': True, # Ignorar erros de vídeo privado/removido na extração
             }
             
             logging.info(f"⚡ Extraindo URLs da playlist (max {MAX_PLAYLIST_SIZE})...")
@@ -437,14 +438,17 @@ class MusicPlayer:
                 logging.error("Playlist vazia")
                 return
             
-            total_tracks = len(entries)
-            logging.info(f"✓ {total_tracks} músicas encontradas na playlist")
+            # Filtrar entradas None ou inválidas antes da contagem real
+            valid_entries = [e for e in entries if e is not None]
+            
+            total_tracks = len(valid_entries)
+            logging.info(f"✓ {total_tracks} músicas válidas encontradas na playlist")
             
             first_song_added = False
             added_count = 0
 
             # PASSO 2: Adicionar à fila
-            for idx, entry in enumerate(entries):
+            for idx, entry in enumerate(valid_entries):
                 if added_count >= MAX_PLAYLIST_SIZE:
                     break
                     

@@ -264,14 +264,9 @@ def normalize_song_info(song_info):
     
     return normalized
 
-def create_now_playing_card(song_info, next_songs=None, queue_length=0):
+def create_now_playing_card(song_info):
     """Gera card estilo Spotify com grid e layout moderno."""
-    if next_songs is None:
-        next_songs = []
-
     song_info = normalize_song_info(song_info)
-    if next_songs:
-        next_songs = [normalize_song_info(song) for song in next_songs]
 
     width, height = 900, 360
     padding = 30
@@ -358,32 +353,6 @@ def create_now_playing_card(song_info, next_songs=None, queue_length=0):
 
     user = song_info.get("user", "?")
     draw_text_shadow(draw, (text_x, y+35), f"Adicionado por {user}", font_small, (170,170,170))
-
-    # ==============================
-    # QUEUE
-    # ==============================
-
-    qy = y + 90
-    
-    if next_songs:
-        draw_text_shadow(draw, (text_x, qy), "Próximas músicas", font_small, (255,215,0))
-        qy += 28
-
-        for i, song in enumerate(next_songs[:3]):
-            t = song.get("title", "")
-            try:
-                t = truncate_text(draw, t, font_small, text_width)
-            except:
-                pass
-            
-            line = f"{i+1}. {t}"
-            draw_text_shadow(draw, (text_x, qy), line, font_small, (220,220,220))
-            qy += 26
-            
-        if queue_length > 3:
-             draw_text_shadow(draw, (text_x, qy), f"...e mais {queue_length - 3} na fila", font_small, (150,150,150))
-    else:
-        draw_text_shadow(draw, (text_x, qy), "Fila vazia...", font_small, (150,150,150))
 
     buffer = BytesIO()
     card.save(buffer, "PNG")

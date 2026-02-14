@@ -569,13 +569,10 @@ class MusicCog(commands.Cog):
 
             # Tentar gerar imagem personalizada (Card)
             # Descomente para usar o CARD em vez do EMBED (ou envie ambos)
-            next_songs = list(player_instance.queue)
             card_buffer = await loop.run_in_executor(
                 None, 
                 create_now_playing_card, 
-                player_instance.current_song, 
-                next_songs,
-                len(player_instance.queue)
+                player_instance.current_song
             )
             if card_buffer:
                 file = discord.File(card_buffer, filename="nowplaying.png")
