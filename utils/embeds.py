@@ -22,8 +22,11 @@ class EmbedBuilder:
         return f"{mins}:{secs:02d}"
     
     @staticmethod
-    def create_now_playing_embed(song_info, queue_length=0, current_seconds=0, total_seconds=0, color=None):
+    def create_now_playing_embed(song_info, queue_list=None, current_seconds=0, total_seconds=0, color=None):
         """Criar embed compacto para música tocando"""
+        if queue_list is None:
+            queue_list = []
+            
         title = song_info.get('title', t('unknown'))
         channel = song_info.get('channel', t('unknown'))
         author = song_info.get('author', t('unknown'))
@@ -40,8 +43,17 @@ class EmbedBuilder:
             progress_bar = EmbedBuilder.create_progress_bar(current_seconds, total_seconds)
             description += f"\n\n{progress_bar}"
         
+        queue_length = len(queue_list)
         if queue_length > 0:
-            description += f"\n📋 {queue_length} {t('in_queue')}"
+            description += f"\n\n**{t('next_songs')}:**"
+            # Mostrar as 5 primeiras músicas
+            for i, song in enumerate(queue_list[:5], 1):
+                s_title = song.get('title', t('unknown'))
+                s_duration = song.get('duration', '?:??')
+                description += f"\n`{i}.` {s_title} `({s_duration})`"
+            
+            if queue_length > 5:
+                description += f"\n*...e mais {queue_length - 5} na fila*"
         
         # Usar cor dominante se fornecida, senão usar padrão
         embed_color = EmbedBuilder.COLOR_MUSIC

@@ -554,7 +554,7 @@ class MusicCog(commands.Cog):
 
             embed = EmbedBuilder.create_now_playing_embed(
                 player_instance.current_song, 
-                len(player_instance.queue),
+                list(player_instance.queue),
                 current_seconds=current_seconds,
                 total_seconds=total_seconds,
                 color=dominant_color

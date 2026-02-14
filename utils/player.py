@@ -238,7 +238,7 @@ class MusicPlayer:
                     # Criar embed apenas quando necessário
                     embed = EmbedBuilder.create_now_playing_embed(
                         self.current_song,
-                        len(self.queue),
+                        list(self.queue),
                         current_seconds=current_second,
                         total_seconds=progress['duration'],
                     )
@@ -279,9 +279,7 @@ class MusicPlayer:
             img_buffer = await self.loop.run_in_executor(
                 None, 
                 create_now_playing_card, 
-                self.current_song, 
-                next_songs, 
-                len(self.queue)
+                self.current_song
             )
             
             file = None
@@ -293,7 +291,7 @@ class MusicPlayer:
             
             embed = EmbedBuilder.create_now_playing_embed(
                 self.current_song, 
-                len(self.queue),
+                list(self.queue),
                 current_seconds=progress['current'],
                 total_seconds=progress['duration']
             )
