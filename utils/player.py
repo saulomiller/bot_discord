@@ -499,8 +499,8 @@ class MusicPlayer:
             # Se for um Mix e o usuário esperava uma playlist pequena, isso explica os 99 itens.
             if 'RD' in search or 'list=RD' in search:
                 logging.warning("Detectado YouTube MIX (Lista infinita). Limitando a 25 músicas para evitar spam.")
-                # Opcional: Reduzir limite se for mix
-                # valid_entries = valid_entries[:25]
+                # Reduzir limite se for mix para não lotar a fila
+                valid_entries = valid_entries[:25]
             
             first_song_added = False
             added_count = 0
