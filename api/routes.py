@@ -502,7 +502,9 @@ async def upload_soundboard_file(file: UploadFile = File(...)):
         if not os.path.exists(SOUNDBOARD_DIR):
             os.makedirs(SOUNDBOARD_DIR)
             
-        if not file.filename.endswith(('.mp3', '.wav', '.ogg', '.m4a')):
+        logging.info(f"Recebendo arquivo para soundboard: {file.filename}")
+        
+        if not file.filename.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a')):
              raise HTTPException(status_code=400, detail="Formato não suportado.")
              
         file_path = os.path.join(SOUNDBOARD_DIR, file.filename)

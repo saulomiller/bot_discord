@@ -201,7 +201,7 @@ export class SoundboardManager {
         }
 
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', file, file.name);
 
         try {
             await this.api.uploadSoundboard(formData);
