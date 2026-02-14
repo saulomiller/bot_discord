@@ -17,6 +17,7 @@ PLAYLIST_DIR = os.path.join(DATA_DIR, "playlist")
 RADIOS_FILE = os.path.join(DATA_DIR, "radios.json")
 SOUNDBOARD_DIR = os.path.join(DATA_DIR, "soundboard")
 SOUNDBOARD_METADATA_FILE = os.path.join(SOUNDBOARD_DIR, "metadata.json")
+ALLOWED_AUDIO_EXTENSIONS = ('.mp3', '.wav', '.ogg', '.m4a', '.webm')
 FFMPEG_PATH = "ffmpeg"
 
 # Garantir que os diretórios existem

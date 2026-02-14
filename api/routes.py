@@ -4,7 +4,7 @@ import logging
 import asyncio
 import os
 import json
-from config import DATA_DIR, TOKEN_FILE, PLAYLIST_DIR, SOUNDBOARD_DIR, SOUNDBOARD_METADATA_FILE, save_token_to_json, load_token_from_json
+from config import DATA_DIR, TOKEN_FILE, PLAYLIST_DIR, SOUNDBOARD_DIR, SOUNDBOARD_METADATA_FILE, ALLOWED_AUDIO_EXTENSIONS, save_token_to_json, load_token_from_json
 from utils.helpers import load_soundboard_metadata, save_soundboard_metadata, get_sfx_metadata, update_sfx_metadata
 from utils.i18n import I18n, t
 
@@ -418,7 +418,7 @@ async def get_soundboard():
         if not os.path.exists(SOUNDBOARD_DIR):
             os.makedirs(SOUNDBOARD_DIR)
             
-        files = [f for f in os.listdir(SOUNDBOARD_DIR) if f.endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
+        files = [f for f in os.listdir(SOUNDBOARD_DIR) if f.lower().endswith(ALLOWED_AUDIO_EXTENSIONS)]
         metadata = load_soundboard_metadata()
         soundboard_list = []
         
@@ -468,7 +468,7 @@ async def play_soundboard(request: Request, body: SoundboardPlayRequest):
 
     # Verificar arquivo
     sfx_path = None
-    for ext in ['.mp3', '.wav', '.ogg', '.m4a']:
+    for ext in ALLOWED_AUDIO_EXTENSIONS:
         path = os.path.join(SOUNDBOARD_DIR, f"{body.sfx_id}{ext}")
         if os.path.exists(path):
             sfx_path = path
@@ -504,7 +504,7 @@ async def upload_soundboard_file(file: UploadFile = File(...)):
             
         logging.info(f"Recebendo arquivo para soundboard: {file.filename}")
         
-        if not file.filename.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a')):
+        if not file.filename.lower().endswith(ALLOWED_AUDIO_EXTENSIONS):
              raise HTTPException(status_code=400, detail="Formato não suportado.")
              
         file_path = os.path.join(SOUNDBOARD_DIR, file.filename)
@@ -527,7 +527,7 @@ async def delete_soundboard(sfx_id: str):
     """Deleta um efeito sonoro."""
     try:
         deleted = False
-        for ext in ['.mp3', '.wav', '.ogg', '.m4a']:
+        for ext in ALLOWED_AUDIO_EXTENSIONS:
             path = os.path.join(SOUNDBOARD_DIR, f"{sfx_id}{ext}")
             if os.path.exists(path):
                 os.remove(path)

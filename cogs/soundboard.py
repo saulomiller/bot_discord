@@ -5,7 +5,7 @@ import logging
 import os
 import asyncio
 from pathlib import Path
-from config import SOUNDBOARD_DIR
+from config import SOUNDBOARD_DIR, ALLOWED_AUDIO_EXTENSIONS
 from utils.helpers import get_sfx_metadata
 from utils.i18n import t
 
@@ -26,7 +26,7 @@ class SoundboardCog(commands.Cog):
         choices = []
         try:
             for file in Path(SOUNDBOARD_DIR).glob("*"):
-                if file.suffix.lower() in ['.mp3', '.wav', '.ogg', '.m4a']:
+                if file.suffix.lower() in ALLOWED_AUDIO_EXTENSIONS:
                     name = file.stem
                     if current.lower() in name.lower():
                         choices.append(app_commands.Choice(name=name, value=name))
@@ -54,7 +54,7 @@ class SoundboardCog(commands.Cog):
             
             # Buscar arquivo
             sfx_path = None
-            for ext in ['.mp3', '.wav', '.ogg', '.m4a']:
+            for ext in ALLOWED_AUDIO_EXTENSIONS:
                 path = Path(SOUNDBOARD_DIR) / f"{nome}{ext}"
                 if path.exists():
                     sfx_path = str(path)
