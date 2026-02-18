@@ -15,8 +15,8 @@ YDL_OPTIONS = {
     'quiet': True,
     'noplaylist': False,  # Permitir playlists
     'playlistend': 100,  # Limitar a 100 músicas por playlist
-    'socket_timeout': 10,
-    'retries': 3,
+    'socket_timeout': 15,
+    'retries': 5,
     'skip_download': True,
     'source_address': '0.0.0.0',
     'cachedir': '/app/.cache',
@@ -24,11 +24,11 @@ YDL_OPTIONS = {
     'geo_bypass_country': 'US',
     'ignoreerrors': True,   # Não abortar em entradas inválidas de playlist
     'extract_flat': False,  # Resolver URLs completas por padrão
-    # Usar clientes que não precisam de JS challenge solving
-    # tv_embedded e mweb não requerem resolução de assinatura JS
+    # ios e android_music não precisam de JS challenge solving (sem Signature errors)
+    # web_creator é fallback estável
     'extractor_args': {
         'youtube': {
-            'player_client': ['tv_embedded', 'mweb'],
+            'player_client': ['ios', 'android_music', 'web_creator'],
         }
     },
 }
