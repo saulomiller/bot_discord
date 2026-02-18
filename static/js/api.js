@@ -1,5 +1,30 @@
 import { CONFIG } from './config.js';
 
+// --- Buscar API Key do backend (apenas clientes locais recebem) ---
+async function initApiKey() {
+    try {
+        const res = await fetch('/api/get_api_key');
+        if (res.ok) {
+            const data = await res.json();
+            CONFIG.API_KEY = data.api_key;
+        }
+    } catch (e) {
+        console.warn('Não foi possível obter a API Key. Rotas protegidas podem falhar.', e);
+    }
+}
+
+// Inicializar a key assim que o módulo carrega
+initApiKey();
+
+// --- Helper para headers autenticados ---
+function buildAuthHeaders(extra = {}) {
+    const headers = { 'Content-Type': 'application/json', ...extra };
+    if (CONFIG.API_KEY) {
+        headers['X-API-Key'] = CONFIG.API_KEY;
+    }
+    return headers;
+}
+
 export async function apiFetch(path, opts = {}) {
     try {
         const res = await fetch(path, opts);
@@ -34,18 +59,25 @@ export const API = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level })
     }),
+    // --- Rotas protegidas (requerem X-API-Key) ---
     setToken: (token) => apiFetch(`${CONFIG.API_BASE}/set_token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildAuthHeaders(),
         body: JSON.stringify({ token })
     }),
     startup: (token) => apiFetch(`${CONFIG.API_BASE}/startup`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildAuthHeaders(),
         body: JSON.stringify({ token })
     }),
-    restart: () => apiFetch(`${CONFIG.API_BASE}/restart`, { method: 'POST' }),
-    shutdown: () => apiFetch(`${CONFIG.API_BASE}/shutdown`, { method: 'POST' }),
+    restart: () => apiFetch(`${CONFIG.API_BASE}/restart`, {
+        method: 'POST',
+        headers: buildAuthHeaders()
+    }),
+    shutdown: () => apiFetch(`${CONFIG.API_BASE}/shutdown`, {
+        method: 'POST',
+        headers: buildAuthHeaders()
+    }),
     uploadPlaylist: async (file) => {
         const reader = new FileReader();
         return new Promise((resolve, reject) => {

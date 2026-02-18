@@ -5,5 +5,6 @@ export const CONFIG = {
         SMOOTHING: 0.2,
         BAR_COUNT: 64
     },
-    TOAST_DURATION: 4000
+    TOAST_DURATION: 4000,
+    API_KEY: null  // Preenchido automaticamente em runtime via /api/get_api_key
 };

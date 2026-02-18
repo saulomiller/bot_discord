@@ -1,15 +1,34 @@
-from fastapi import APIRouter, Request, HTTPException, Body
+from fastapi import APIRouter, Request, HTTPException, Body, UploadFile, File, Depends, Header
 from pydantic import BaseModel
 import logging
 import asyncio
 import os
 import json
-from config import DATA_DIR, TOKEN_FILE, PLAYLIST_DIR, SOUNDBOARD_DIR, SOUNDBOARD_METADATA_FILE, ALLOWED_AUDIO_EXTENSIONS, save_token_to_json, load_token_from_json
+from config import DATA_DIR, TOKEN_FILE, PLAYLIST_DIR, SOUNDBOARD_DIR, SOUNDBOARD_METADATA_FILE, ALLOWED_AUDIO_EXTENSIONS, save_token_to_json, load_token_from_json, API_KEY
 from utils.helpers import load_soundboard_metadata, save_soundboard_metadata, get_sfx_metadata, update_sfx_metadata
 from utils.i18n import I18n, t
 
 
 router = APIRouter()
+
+# --- Autenticação via API Key ---
+
+async def require_api_key(x_api_key: str = Header(None)):
+    """Dependency que valida o header X-API-Key nas rotas protegidas."""
+    if x_api_key != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="API Key inválida ou ausente. Inclua o header X-API-Key."
+        )
+    return x_api_key
+
+@router.get("/api/get_api_key")
+async def get_api_key(request: Request):
+    """Retorna a API Key para o frontend (apenas para clientes locais)."""
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+    return {"api_key": API_KEY}
 
 # --- Modelos Pydantic ---
 class MusicRequest(BaseModel):
@@ -131,7 +150,7 @@ async def get_status(request: Request):
         "language": I18n.get_instance().language
     }
 
-@router.get("/queue")
+@router.get("/api/queue")
 async def get_queue(request: Request):
     """Retorna a fila de músicas atual."""
     bot = request.app.state.bot
@@ -309,8 +328,8 @@ async def api_resume(request: Request):
 async def api_volume(request: Request, body: VolumeRequest):
     """Ajusta o volume do bot."""
     bot = request.app.state.bot
-    if body.level < 0 or body.level > 1:
-        raise HTTPException(status_code=400, detail="O volume deve estar entre 0.0 e 1.0")
+    if body.level < 0 or body.level > 1.5:
+        raise HTTPException(status_code=400, detail="O volume deve estar entre 0.0 e 1.5")
         
     count = 0
     for vc in bot.voice_clients:
@@ -322,8 +341,8 @@ async def api_volume(request: Request, body: VolumeRequest):
     return {"status": "success", "message": f"Volume ajustado para {int(body.level*100)}%"}
 
 @router.post("/api/set_token")
-async def set_token(request: Request, body: dict = Body(...)):
-    """Define o token do Discord (USO RESTRITO E INSEGURO)."""
+async def set_token(request: Request, body: dict = Body(...), _: str = Depends(require_api_key)):
+    """Define o token do Discord. Requer X-API-Key header."""
     bot = request.app.state.bot
     token = body.get("token")
     if not token or len(token) < 50:
@@ -352,8 +371,8 @@ async def set_token(request: Request, body: dict = Body(...)):
         raise HTTPException(status_code=500, detail="Falha ao salvar o token.")
 
 @router.post("/api/restart")
-async def restart_bot(request: Request):
-    """Reinicia o bot."""
+async def restart_bot(request: Request, _: str = Depends(require_api_key)):
+    """Reinicia o bot. Requer X-API-Key header."""
     bot = request.app.state.bot
     try:
         logging.info("Reiniciando bot via API...")
@@ -381,10 +400,10 @@ async def set_language(request: LanguageRequest):
         raise HTTPException(status_code=500, detail="Erro ao salvar idioma.")
 
 @router.post("/api/shutdown")
-async def shutdown(request: Request):
-    """Desliga o bot."""
+async def shutdown(request: Request, _: str = Depends(require_api_key)):
+    """Desliga o bot. Requer X-API-Key header."""
     bot = request.app.state.bot
-    asyncio.create_task(bot.close())
+    asyncio.ensure_future(bot.close())
     return {"status": "success", "message": "Bot desligando..."}
 
 @router.post("/api/upload_playlist")
@@ -393,6 +412,11 @@ async def upload_playlist(file: bytes = Body(...), filename: str = Body(...)):
     try:
         if not filename.endswith('.txt'):
             raise HTTPException(status_code=400, detail="Apenas arquivos .txt são permitidos.")
+        
+        # Sanitizar filename para evitar path traversal
+        filename = os.path.basename(filename)
+        if not filename:
+            raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
         
         if not os.path.exists(PLAYLIST_DIR):
             os.makedirs(PLAYLIST_DIR)
@@ -405,6 +429,8 @@ async def upload_playlist(file: bytes = Body(...), filename: str = Body(...)):
         
         logging.info(f"Playlist '{filename}' salva com sucesso via API")
         return {"status": "success", "message": f"Playlist '{filename}' salva com sucesso."}
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Erro no upload: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -419,7 +445,6 @@ async def get_soundboard():
             os.makedirs(SOUNDBOARD_DIR)
             
         files = [f for f in os.listdir(SOUNDBOARD_DIR) if f.lower().endswith(ALLOWED_AUDIO_EXTENSIONS)]
-        metadata = load_soundboard_metadata()
         soundboard_list = []
         
         for filename in files:
@@ -492,9 +517,6 @@ async def play_soundboard(request: Request, body: SoundboardPlayRequest):
 
 
 
-# Redefinindo rota de upload corretamente para usar UploadFile
-from fastapi import UploadFile, File
-
 @router.post("/api/soundboard/upload")
 async def upload_soundboard_file(file: UploadFile = File(...)):
     """Upload de arquivo para o soundboard."""
@@ -507,14 +529,19 @@ async def upload_soundboard_file(file: UploadFile = File(...)):
         if not file.filename.lower().endswith(ALLOWED_AUDIO_EXTENSIONS):
              raise HTTPException(status_code=400, detail="Formato não suportado.")
              
-        file_path = os.path.join(SOUNDBOARD_DIR, file.filename)
+        # Sanitizar filename para evitar path traversal
+        safe_filename = os.path.basename(file.filename)
+        if not safe_filename or safe_filename != file.filename:
+            raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
+
+        file_path = os.path.join(SOUNDBOARD_DIR, safe_filename)
         
         with open(file_path, "wb") as f:
             content = await file.read()
             f.write(content)
             
         # Adicionar metadata inicial
-        sfx_id = os.path.splitext(file.filename)[0]
+        sfx_id = os.path.splitext(safe_filename)[0]
         update_sfx_metadata(sfx_id, {"favorite": False, "volume": 1.0})
         
         return {"status": "success", "message": "Upload concluído."}
@@ -549,20 +576,24 @@ async def delete_soundboard(sfx_id: str):
         logging.error(f"Erro ao deletar SFX: {e}")
         raise HTTPException(status_code=500, detail="Erro ao deletar arquivo.")
 
-@router.post("/api/soundboard/favorite")
-async def toggle_favorite_soundboard(body: SoundboardFavoriteRequest):
+@router.patch("/api/soundboard/{sfx_id}/favorite")
+async def toggle_favorite_soundboard(sfx_id: str, body: SoundboardFavoriteRequest):
     """Alterna o status de favorito de um efeito."""
     try:
-        update_sfx_metadata(body.sfx_id, {"favorite": body.favorite})
+        update_sfx_metadata(sfx_id, {"favorite": body.favorite})
         return {"status": "success", "message": "Favorito atualizado."}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Erro ao atualizar favorito.")
 
-@router.post("/api/soundboard/volume")
-async def volume_soundboard(body: SoundboardVolumeRequest):
+@router.patch("/api/soundboard/{sfx_id}/volume")
+async def volume_soundboard(sfx_id: str, body: SoundboardVolumeRequest):
     """Define o volume padrão de um efeito."""
     try:
-        update_sfx_metadata(body.sfx_id, {"volume": body.volume})
+        if body.volume < 0 or body.volume > 2.0:
+            raise HTTPException(status_code=400, detail="Volume deve estar entre 0.0 e 2.0")
+        update_sfx_metadata(sfx_id, {"volume": body.volume})
         return {"status": "success", "message": "Volume atualizado."}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail="Erro ao atualizar volume.")

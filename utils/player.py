@@ -15,15 +15,15 @@ YDL_OPTIONS = {
     'quiet': True,
     'noplaylist': False,  # Permitir playlists
     'playlistend': 100,  # Limitar a 100 músicas por playlist
-    'socket_timeout': 10, # TIMEOUT DE 10s (Check 3 - User Feedback)
+    'socket_timeout': 10,
     'retries': 3,
     'skip_download': True,
     'source_address': '0.0.0.0',
     'cachedir': '/app/.cache',
     'geo_bypass': True,
     'geo_bypass_country': 'US',
-    'remote_components': ['ejs:github'],
-    'impersonate_browser': 'chrome',
+    'ignoreerrors': True,   # Não abortar em entradas inválidas de playlist
+    'extract_flat': False,  # Resolver URLs completas por padrão
 }
 
 MAX_PLAYLIST_SIZE = 100  # Limite rígido (Check 4 - User Feedback)
@@ -108,7 +108,7 @@ class MusicPlayer:
         self.is_paused = False
         self.is_looping = False
         self.is_shuffling = False
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_running_loop()
         
         # Cache de Streams
         self.stream_cache = StreamCache()
@@ -145,11 +145,11 @@ class MusicPlayer:
         return self.guild.voice_client if self.guild else None
 
     @property
-    def is_playing(self):
+    def is_playing(self) -> bool:
         """Retorna True se estiver tocando áudio."""
         return bool(self.voice_client and self.voice_client.is_playing())
 
-    def _format_duration(self, duration_seconds):
+    def _format_duration(self, duration_seconds: int) -> str:
         """Formata duração em segundos para string HH:MM:SS ou MM:SS."""
         if not duration_seconds:
             return "Desconhecida"
@@ -162,7 +162,7 @@ class MusicPlayer:
         else:
             return f"{minutes}:{seconds:02d}"
     
-    def get_progress(self):
+    def get_progress(self) -> dict:
         """Calcula o progresso atual da música com precisão monotonic."""
         if not self.current_song or not self.started_at:
             return {"current": 0, "duration": 0, "percent": 0}
@@ -236,11 +236,13 @@ class MusicPlayer:
                     self._last_second = current_second
                     
                     # Criar embed apenas quando necessário
+                    # Usar dominant_color cacheado no player (definido no send_dashboard)
                     embed = EmbedBuilder.create_now_playing_embed(
                         self.current_song,
                         list(self.queue),
                         current_seconds=current_second,
                         total_seconds=progress['duration'],
+                        dominant_color=getattr(self, '_dominant_color', None),
                     )
                     
                     # Editar a mensagem apenas quando o segundo mudou
@@ -270,32 +272,52 @@ class MusicPlayer:
             self.dashboard_message = None
 
         try:
-            # Gerar Imagem (PIL)
-            # Rodar em executor para não travar
-            
-            # Converter queue para lista de dicts se nao for
+            # Converter queue para lista de dicts
             next_songs = list(self.queue)
-            
+            progress   = self.get_progress()
+            pct        = progress.get('percent', 0) / 100.0  # 0.0-1.0
+
+            # Extrair cor dominante da thumbnail (para sincronizar embed e card)
+            dominant_color = None
+            thumb_url = (self.current_song or {}).get('thumbnail')
+            if thumb_url:
+                try:
+                    from utils.image import fetch_image_content, get_dominant_color_from_bytes
+                    content = await self.loop.run_in_executor(None, fetch_image_content, thumb_url)
+                    if content:
+                        dominant_color = await self.loop.run_in_executor(
+                            None, get_dominant_color_from_bytes, content
+                        )
+                except Exception as e:
+                    logging.debug(f"Erro ao extrair cor dominante: {e}")
+            # Cachear no player para o dashboard loop reutilizar sem re-fetch
+            self._dominant_color = dominant_color
+
+            # Gerar Imagem (PIL) em executor para não travar o event loop
+            import functools
             img_buffer = await self.loop.run_in_executor(
-                None, 
-                create_now_playing_card, 
-                self.current_song
+                None,
+                functools.partial(
+                    create_now_playing_card,
+                    self.current_song,
+                    next_songs=next_songs[:3],
+                    progress_percent=pct,
+                )
             )
-            
+
             file = None
             if img_buffer:
                 file = discord.File(img_buffer, filename="dashboard.png")
 
             # Gerar Embed Inicial
-            progress = self.get_progress()
-            
             embed = EmbedBuilder.create_now_playing_embed(
-                self.current_song, 
-                list(self.queue),
+                self.current_song,
+                next_songs,
                 current_seconds=progress['current'],
-                total_seconds=progress['duration']
+                total_seconds=progress['duration'],
+                dominant_color=dominant_color,
             )
-            
+
             if file:
                 embed.set_image(url="attachment://dashboard.png")
                 
@@ -341,7 +363,7 @@ class MusicPlayer:
             logging.error(f"Erro ao enviar dashboard: {e}")
 
 
-    async def add_to_queue(self, search, user):
+    async def add_to_queue(self, search: str, user: discord.Member):
         """Busca e adiciona música à fila (apenas primeira se for playlist)."""
         try:
             logging.info(f"[add_to_queue] Iniciando extração para: {search}")
@@ -376,7 +398,7 @@ class MusicPlayer:
 
 
 
-    async def add_playlist_async(self, search, user):
+    async def add_playlist_async(self, search: str, user: discord.Member) -> dict:
         """Adiciona playlist de forma OTIMIZADA.
         
         1. Busca a PRIMEIRA música imediatamente e toca.
@@ -386,19 +408,17 @@ class MusicPlayer:
             logging.info(f"🎵 Iniciando processamento OTIMIZADO de playlist: {search}")
             
             # PASSO 1: Pegar APENAS a primeira música rapidamente
-            first_item_opts = {
-                'quiet': True,
-                'no_warnings': True,
+            logging.info("⚡ Buscando primeira música da playlist...")
+            # Usar opções temporárias para extração rápida da primeira entrada
+            flat_first_opts = {
+                **YDL_OPTIONS,
                 'extract_flat': 'in_playlist',
-                'skip_download': True,
-                'playlistend': 1, # Limite de 1 para ser rápido
+                'playlistend': 1,
                 'ignoreerrors': True,
             }
-            
-            logging.info("⚡ Buscando primeira música da playlist...")
             first_info = await self.loop.run_in_executor(
-                None, 
-                lambda: yt_dlp.YoutubeDL(first_item_opts).extract_info(search, download=False)
+                None,
+                lambda: yt_dlp.YoutubeDL(flat_first_opts).extract_info(search, download=False)
             )
 
             first_song_title = "Playlist em processamento..."
@@ -433,7 +453,7 @@ class MusicPlayer:
                         if not self.is_playing:
                              await self.play_next()
             
-            # PASSO 2: Processar o RESTO em background (começando do índice 2)
+            # PASSO 2: Processar o RESTO em background (começando do índice 2, pois índice 1 já foi adicionado)
             asyncio.create_task(self._process_remaining_playlist(search, user, start_index=2))
             
             # Retornar info genérica
@@ -456,12 +476,11 @@ class MusicPlayer:
             logging.info(f"🎵 Processando restante da playlist (iniciando em {start_index})...")
             
             # PASSO 1: Extrair URLs RAPIDAMENTE com extract_flat
+            # Herdar YDL_OPTIONS para manter geo_bypass, cachedir, etc.
             flat_opts = {
-                'quiet': True,
-                'no_warnings': True,
+                **YDL_OPTIONS,
                 'extract_flat': 'in_playlist',
-                'skip_download': True,
-                'playliststart': start_index, # Pular as que já pegamos
+                'playliststart': start_index,
                 'playlistend': MAX_PLAYLIST_SIZE,
                 'ignoreerrors': True,
             }
@@ -518,8 +537,11 @@ class MusicPlayer:
                 
                 # Reconstruir URL se for apenas ID
                 if url and not url.startswith('http'):
-                    if entry.get('ie_key') == 'Youtube':
+                    ie_key = entry.get('ie_key', '')
+                    if ie_key == 'Youtube' or 'youtube' in (entry.get('extractor', '') or ''):
                         url = f"https://www.youtube.com/watch?v={url}"
+                    elif ie_key == 'SoundCloud' or 'soundcloud' in (entry.get('extractor', '') or ''):
+                        url = f"https://soundcloud.com/{url}" if not url.startswith('soundcloud') else f"https://{url}"
                 
                 # Tentar pegar título de MÚLTIPLAS chaves
                 title = (
@@ -582,7 +604,7 @@ class MusicPlayer:
         
         Retorna lista de tuplas: [(title, url, thumbnail, duration, channel, duration_seconds), ...]
         """
-        def run():
+        def run() -> list:
             # Reusar self.ydl ao invés de criar nova instância (economiza RAM/tempo)
             info = None
             entries = []
@@ -590,10 +612,11 @@ class MusicPlayer:
             if search.startswith(('http://', 'https://')):
                 # URL direta - pode ser música única ou playlist
                 info = self.ydl.extract_info(search, download=False)
-                
+                if not info:
+                    raise ValueError("yt-dlp retornou None para a URL fornecida.")
                 # Verificar se é playlist
                 if 'entries' in info:
-                    entries = info['entries']
+                    entries = list(info['entries'])
                 else:
                     entries = [info]
                     
@@ -608,6 +631,9 @@ class MusicPlayer:
             
             if not entries:
                 raise ValueError("Nenhum resultado encontrado.")
+            
+            # Filtrar entradas None
+            entries = [e for e in entries if e is not None]
             
             # Limitar número de entradas se especificado
             if max_entries is not None:
@@ -663,11 +689,11 @@ class MusicPlayer:
             self.stop() # Limpa fila e para tudo
             return
 
-        if self.is_shuffling and len(self.queue) > 0:
-             # Implementar lógica real de shuffle se necessário
-             import random
-             if random.random() > 0.8: # Randomness simples só para não ser estático
-                self.queue.rotate(-random.randint(1, len(self.queue)))
+        if self.is_shuffling and len(self.queue) > 1:
+            import random
+            queue_list = list(self.queue)
+            random.shuffle(queue_list)
+            self.queue = deque(queue_list)
 
         logging.info(f"[play_next] Tamanho da fila: {len(self.queue)}")
         if not self.queue:
@@ -839,15 +865,18 @@ class MusicPlayer:
             )
             
             if info and info.get('url'):
-                 self.stream_cache.set(source_url, info['url'])
-                 # Atualizar metadados básicos se possível (opcional, cuidado com race condition)
-                 song['title'] = info.get('title', song['title'])
-                 song['thumbnail'] = info.get('thumbnail', song['thumbnail'])
-                 # Atualizar duração para que a barra de progresso funcione quando for a vez desta música
-                 duration = info.get('duration', 0)
-                 song['duration_seconds'] = duration
-                 song['duration'] = self._format_duration(duration)
-                 logging.info(f"🔮 Próxima música pré-resolvida com sucesso!")
+                self.stream_cache.set(source_url, info['url'])
+                # Atualizar metadados de forma segura (verificar que o song ainda é o mesmo objeto)
+                try:
+                    song['title'] = info.get('title', song['title'])
+                    song['thumbnail'] = info.get('thumbnail', song.get('thumbnail'))
+                    duration = info.get('duration', 0)
+                    song['duration_seconds'] = duration
+                    song['duration'] = self._format_duration(duration)
+                    song['is_lazy'] = False  # Marcar como resolvido
+                except Exception:
+                    pass  # Race condition: song pode ter sido removido da fila
+                logging.info("Próxima música pré-resolvida com sucesso!")
                  
         except Exception as e:
             logging.debug(f"Falha na pré-resolução (não crítico): {e}")
@@ -896,12 +925,8 @@ class MusicPlayer:
                 logging.info("SFX finalizado, retomando música...")
                 self.stopped_for_sfx = False
                 
-                # Retomar música (play_next vai pegar a música que recolocamos na fila com seek)
-                future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
-                try:
-                    future.result(timeout=10)
-                except Exception as e:
-                    logging.error(f"Erro ao retomar música após SFX: {e}")
+                # Retomar música (fire-and-forget — não bloquear a thread do FFmpeg)
+                asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
 
         try:
             executable = 'ffmpeg'
@@ -917,7 +942,9 @@ class MusicPlayer:
                 self.loop.create_task(self.play_next())
 
     def stop(self):
-        asyncio.create_task(self.stop_dashboard_task())
+        # Cancelar dashboard task diretamente (seguro em contexto síncrono)
+        if self.dashboard_task and not self.dashboard_task.done():
+            self.dashboard_task.cancel()
         self.queue.clear()
         self.current_song = None
         self._last_second = -1  # Reset contador de atualização
@@ -946,4 +973,5 @@ class MusicPlayer:
                 self.paused_at = None
 
     def set_volume(self, volume):
-        self.volume = max(0.0, min(1.0, volume))
+        """Define o volume. Aceita 0.0 a 1.5 (acima de 1.0 = amplificação)."""
+        self.volume = max(0.0, min(1.5, volume))

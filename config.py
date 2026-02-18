@@ -49,3 +49,31 @@ def save_token_to_json(token: str):
         os.makedirs(DATA_DIR)
     with open(TOKEN_FILE, "w") as f:
         json.dump({"DISCORD_TOKEN": token}, f)
+
+# --- Gerenciamento de API Key ---
+
+API_KEY_FILE = os.path.join(DATA_DIR, "api_key.json")
+
+def _load_or_generate_api_key() -> str:
+    """Carrega a API key do arquivo ou gera uma nova."""
+    import uuid
+    if os.path.exists(API_KEY_FILE):
+        try:
+            with open(API_KEY_FILE, "r") as f:
+                data = json.load(f)
+                key = data.get("api_key")
+                if key:
+                    return key
+        except (json.JSONDecodeError, IOError) as e:
+            logging.error(f"Erro ao ler {API_KEY_FILE}: {e}")
+    # Gerar nova key
+    new_key = str(uuid.uuid4())
+    try:
+        with open(API_KEY_FILE, "w") as f:
+            json.dump({"api_key": new_key}, f)
+        logging.info(f"Nova API Key gerada e salva em {API_KEY_FILE}")
+    except IOError as e:
+        logging.error(f"Erro ao salvar API Key: {e}")
+    return new_key
+
+API_KEY = _load_or_generate_api_key()

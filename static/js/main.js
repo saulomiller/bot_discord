@@ -1,4 +1,4 @@
-import { API } from './api.js?v=3';
+import { API } from './api.js';
 import { UI } from './ui.js';
 import { AudioReactiveBackground } from './visualizer.js';
 import { RadioManager } from './radios.js';
@@ -19,19 +19,11 @@ let translationManager; // Gerenciador de traduções
 async function updateStatusLoop() {
     try {
         const data = await API.getStatus();
-        // console.log('Status Data:', data); // Debug
         isPaused = !!data.is_paused;
 
         UI.updateStatus(data, isPaused);
 
         if (data.language && translationManager && translationManager.currentLang !== data.language) {
-            // Se o backend diz que o idioma é diferente do frontend (local),
-            // decidimos qual é a fonte da verdade.
-            // Para evitar loops, vamos assumir que o backend persiste a configuração global.
-            // Se o usuário mudou localmente recentemente, o backend deve ser atualizado.
-            // Mas se acabou de carregar, o backend manda.
-
-            // Simples: Se localStorage não existe, usa backend.
             if (!localStorage.getItem('app_language')) {
                 translationManager.setLanguage(data.language);
             }
@@ -41,6 +33,7 @@ async function updateStatusLoop() {
             liquidBg.syncPlayState(!isPaused && data.is_ready, data.volume || 0.5);
         }
 
+        // Sincronizar volume slider com o servidor (apenas se não estiver arrastando)
         if (!isDraggingVolume && typeof data.volume === 'number') {
             UI.setVolumeVisual(data.volume);
         }
@@ -51,7 +44,6 @@ async function updateStatusLoop() {
         }
     } catch (err) {
         console.warn('Connection lost', err);
-        // UI.showToast('Conexão perdida...', 'error');
     }
 }
 
@@ -116,7 +108,7 @@ function setupEventListeners() {
             const tokenInput = document.getElementById('token-input');
             const token = tokenInput.value.trim();
             try {
-                await API.startup(token || undefined); // Envia token se houver, ou a API usa o salvo
+                await API.startup(token || undefined);
                 UI.showToast('Inicializando bot...', 'success');
             } catch (e) {
                 UI.showToast(e.message, 'error');
@@ -154,11 +146,7 @@ function setupEventListeners() {
     const playPauseBtn = document.getElementById('pause-resume-btn');
     if (playPauseBtn) {
         playPauseBtn.addEventListener('click', async () => {
-            // Usa o estado global isPaused
             try {
-                // Otimização UX: alternar estado local imediatamente para feedback visual
-                const prev = isPaused;
-                // Tentar executar a ação no backend
                 if (isPaused) {
                     await API.resume();
                     UI.showToast('Retomado', 'success');
@@ -169,7 +157,6 @@ function setupEventListeners() {
                     isPaused = true;
                 }
 
-                // Atualizar visual do botão imediatamente
                 try {
                     const playerEl = UI.elements.player;
                     if (playerEl && playerEl.playBtn) {
@@ -179,7 +166,6 @@ function setupEventListeners() {
                     }
                 } catch (e) { }
 
-                // Re-sincronizar com servidor em seguida
                 setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
                 UI.showToast(e.message, 'error');
@@ -193,7 +179,6 @@ function setupEventListeners() {
             try {
                 await API.skip();
                 UI.showToast(translationManager.get('skip_toast'), 'success');
-                // Atualizar imediatamente após pular
                 setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
                 UI.showToast(e.message, 'error');
@@ -209,7 +194,6 @@ function setupEventListeners() {
             try {
                 const res = await API.removePlaylist();
                 UI.showToast(res.message || 'Playlist removida da fila', 'success');
-                // Atualizar lista e status
                 setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
                 UI.showToast(e.message || 'Erro ao remover playlist', 'error');
@@ -249,7 +233,6 @@ function setupEventListeners() {
             UI.showToast(translationManager.get('added_to_queue_toast'), 'success');
             musicInput.value = '';
             if (clearSearchBtn) clearSearchBtn.style.display = 'none';
-            // Atualizar imediatamente após adicionar
             setTimeout(() => updateStatusLoop(), 500);
         } catch (e) {
             UI.showToast(e.message, 'error');
@@ -299,7 +282,6 @@ function setupEventListeners() {
             const result = await API.uploadPlaylist(file);
             UI.showToast(result.message || 'Playlist salva!', 'success');
 
-            // Atualizar lista de playlists
             if (result.playlists) {
                 UI.updatePlaylistList(result.playlists);
             }
@@ -309,12 +291,10 @@ function setupEventListeners() {
     }
 
     if (dropZone) {
-        // Click para abrir seletor
         dropZone.addEventListener('click', () => {
             if (playlistUpload) playlistUpload.click();
         });
 
-        // Drag & Drop
         dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             dropZone.classList.add('dragover');
@@ -341,8 +321,34 @@ function setupEventListeners() {
             if (files.length > 0) {
                 handleFileUpload(files[0]);
             }
-            // Limpar input para permitir re-upload do mesmo arquivo
             e.target.value = '';
+        });
+    }
+
+    // Volume Slider — envia setVolume ao soltar o slider
+    const volumeSlider = document.getElementById('volume-slider');
+    if (volumeSlider) {
+        volumeSlider.addEventListener('mousedown', () => { isDraggingVolume = true; });
+        volumeSlider.addEventListener('touchstart', () => { isDraggingVolume = true; }, { passive: true });
+
+        volumeSlider.addEventListener('mouseup', async () => {
+            isDraggingVolume = false;
+            const vol = parseFloat(volumeSlider.value);
+            try {
+                await API.setVolume(vol);
+            } catch (e) {
+                UI.showToast(e.message, 'error');
+            }
+        });
+
+        volumeSlider.addEventListener('touchend', async () => {
+            isDraggingVolume = false;
+            const vol = parseFloat(volumeSlider.value);
+            try {
+                await API.setVolume(vol);
+            } catch (e) {
+                UI.showToast(e.message, 'error');
+            }
         });
     }
 }
@@ -392,8 +398,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inicializar gerenciador de soundboard
     try {
         soundboardManager = new SoundboardManager(API, UI, updateStatusLoop, translationManager);
-        // Guild ID padrão - pode ser configurado dinamicamente
-        soundboardManager.init(CONFIG.GUILD_ID || 0);
+        // Guild ID padrão - será atualizado dinamicamente via /api/status
+        soundboardManager.init(0);
         console.log('SoundboardManager initialized');
     } catch (e) {
         console.error('SoundboardManager init failed:', e);

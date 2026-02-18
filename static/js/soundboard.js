@@ -218,7 +218,10 @@ export class SoundboardManager {
     async testSFX(sfxId) {
         // Tocar localmente no navegador
         try {
-            const audio = new Audio(`/data/soundboard/${sfxId}.mp3`);
+            // Buscar o SFX da lista local para obter a extensão correta
+            const sfx = this.soundboard.find(s => s.id === sfxId);
+            const filename = sfx && sfx.filename ? sfx.filename : `${sfxId}.mp3`;
+            const audio = new Audio(`/data/soundboard/${filename}`);
             audio.play().catch(err => {
                 console.error('Erro ao testar áudio:', err);
                 const errMsg = this.tm ? this.tm.get('sfx_test_error_toast') : 'Erro ao reproduzir áudio';

@@ -39,7 +39,7 @@ intents.reactions = True
 
 class MusicBot(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix='/', intents=intents)
+        super().__init__(command_prefix='!', intents=intents)
         self.players = {} # Dict[guild_id, MusicPlayer]
 
     async def setup_hook(self):
@@ -79,7 +79,7 @@ async def run_bot_and_api():
     # Se ainda não tem token, perguntar no terminal
     if not token or not token.strip():
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             token = await loop.run_in_executor(None, prompt_token_terminal)
         except Exception as e:
             logging.error(f"Erro ao solicitar token: {e}")
