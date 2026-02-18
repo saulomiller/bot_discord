@@ -24,6 +24,13 @@ YDL_OPTIONS = {
     'geo_bypass_country': 'US',
     'ignoreerrors': True,   # Não abortar em entradas inválidas de playlist
     'extract_flat': False,  # Resolver URLs completas por padrão
+    # Usar clientes que não precisam de JS challenge solving
+    # tv_embedded e mweb não requerem resolução de assinatura JS
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['tv_embedded', 'mweb'],
+        }
+    },
 }
 
 MAX_PLAYLIST_SIZE = 100  # Limite rígido (Check 4 - User Feedback)
