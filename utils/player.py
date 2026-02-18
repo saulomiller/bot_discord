@@ -12,7 +12,8 @@ from utils.image import create_now_playing_card
 # Configuração do yt-dlp
 YDL_OPTIONS = {
     'format': 'bestaudio/best',
-    'quiet': True,
+    'quiet': False,  # Habilitar logs para debug
+    'verbose': True, # Verbose explícito
     'noplaylist': False,  # Permitir playlists
     'playlistend': 100,  # Limitar a 100 músicas por playlist
     'socket_timeout': 15,
@@ -24,12 +25,14 @@ YDL_OPTIONS = {
     'geo_bypass_country': 'US',
     'ignoreerrors': True,   # Não abortar em entradas inválidas de playlist
     'extract_flat': False,  # Resolver URLs completas por padrão
-    # mweb: cliente mobile web, não requer PO Token nem login
-    # web: fallback estável para a maioria dos vídeos
-    # tv_embedded: fallback adicional para vídeos com restrições
+    # Permite download automático dos scripts EJS (necessário para web_embedded/web)
+    'remote_components': 'ejs:github',
+    
+    # web_embedded: cliente mais estável com EJS (não requer PO Token para a maioria dos vídeos)
+    # web: fallback padrão
     'extractor_args': {
         'youtube': {
-            'player_client': ['mweb', 'web', 'tv_embedded'],
+            'player_client': ['web_embedded', 'web'],
         }
     },
 }
