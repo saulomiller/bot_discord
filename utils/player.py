@@ -24,11 +24,12 @@ YDL_OPTIONS = {
     'geo_bypass_country': 'US',
     'ignoreerrors': True,   # Não abortar em entradas inválidas de playlist
     'extract_flat': False,  # Resolver URLs completas por padrão
-    # ios e android_music não precisam de JS challenge solving (sem Signature errors)
-    # web_creator é fallback estável
+    # mweb: cliente mobile web, não requer PO Token nem login
+    # web: fallback estável para a maioria dos vídeos
+    # tv_embedded: fallback adicional para vídeos com restrições
     'extractor_args': {
         'youtube': {
-            'player_client': ['ios', 'android_music', 'web_creator'],
+            'player_client': ['mweb', 'web', 'tv_embedded'],
         }
     },
 }
