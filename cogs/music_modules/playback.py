@@ -43,7 +43,7 @@ class MusicPlaybackMixin:
             if not vc:
                 return
         except Exception as e:
-            embed = EmbedBuilder.create_error_embed(t('error'), f"Erro de conexÃ£o: {str(e)}")
+            embed = EmbedBuilder.create_error_embed(t('error'), f"Erro de conexão: {str(e)}")
             if isinstance(ctx_or_interaction, discord.Interaction):
                 await ctx_or_interaction.followup.send(embed=embed)
             else:
@@ -102,7 +102,7 @@ class MusicPlaybackMixin:
                     pos = len(player.queue)
                     embed_added = EmbedBuilder.create_info_embed(
                         t('added_to_queue'),
-                        f"MÃºsica **{song_title}**\n{t('position_in_queue', position=pos)}",
+                        f"Música **{song_title}**\n{t('position_in_queue', position=pos)}",
                     )
                     added_msg = await self._send_embed_message(ctx_or_interaction, embed_added, wait_message=True)
                     self._schedule_message_delete(added_msg)
@@ -252,7 +252,7 @@ class MusicPlaybackMixin:
             deleted_old = 0
             failed_old = 0
             if force_old and old_messages:
-                # Mensagens antigas sÃ³ aceitam delete individual. Fazer throttle para reduzir 429.
+                # Mensagens antigas só aceitam delete individual. Fazer throttle para reduzir 429.
                 for old_msg in old_messages:
                     try:
                         await old_msg.delete(reason=reason)
@@ -305,7 +305,7 @@ class MusicPlaybackMixin:
 
     @commands.command()
     async def resume(self, ctx: commands.Context):
-        """Retoma a reproduÃ§Ã£o (prefix command)."""
+        """Retoma a reprodução (prefix command)."""
         await self._do_resume(ctx)
 
     @app_commands.command(name="resume", description="Resumes playback")
@@ -328,7 +328,7 @@ class MusicPlaybackMixin:
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
-        """Pausa a reproduÃ§Ã£o."""
+        """Pausa a reprodução."""
         await self._do_pause(ctx)
 
     @app_commands.command(name="pause", description="Pauses playback")
@@ -339,7 +339,7 @@ class MusicPlaybackMixin:
     async def _do_nowplaying(self, ctx_or_interaction):
         guild_id = ctx_or_interaction.guild.id
         
-        # Se for interaÃ§Ã£o, deferir
+        # Se for interação, deferir
         if isinstance(ctx_or_interaction, discord.Interaction):
             if not ctx_or_interaction.response.is_done():
                  await ctx_or_interaction.response.defer(ephemeral=False)
@@ -365,7 +365,7 @@ class MusicPlaybackMixin:
             if not player_instance.current_song:
                 embed = EmbedBuilder.create_error_embed(
                     "Nada tocando",
-                    "A fila estÃ¡ vazia."
+                    "A fila está vazia."
                 )
                 if isinstance(ctx_or_interaction, discord.Interaction):
                     await ctx_or_interaction.followup.send(embed=embed)
@@ -431,7 +431,7 @@ class MusicPlaybackMixin:
         else:
              embed = EmbedBuilder.create_error_embed(
                 "Erro",
-                "Player nÃ£o encontrado para este servidor."
+                "Player não encontrado para este servidor."
             )
              if isinstance(ctx_or_interaction, discord.Interaction):
                 await ctx_or_interaction.followup.send(embed=embed)

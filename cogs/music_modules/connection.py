@@ -15,8 +15,8 @@ class MusicConnectionMixin:
     """Mixin de comandos de musica."""
 
     async def _do_join(self, ctx_or_interaction):
-        """LÃ³gica interna de join."""
-        # Se for interaÃ§Ã£o, deferir se ainda nÃ£o foi
+        """Lógica interna de join."""
+        # Se for interação, deferir se ainda não foi
         if isinstance(ctx_or_interaction, discord.Interaction):
             if not ctx_or_interaction.response.is_done():
                  await ctx_or_interaction.response.defer(ephemeral=False)
@@ -46,7 +46,7 @@ class MusicConnectionMixin:
         await self._do_join(interaction)
 
     async def _do_leave(self, ctx_or_interaction):
-        """LÃ³gica interna de leave."""
+        """Lógica interna de leave."""
         # Obter voice client
         guild = ctx_or_interaction.guild
         vc = guild.voice_client if guild else None
@@ -121,7 +121,7 @@ class MusicConnectionMixin:
 
         embed = EmbedBuilder.create_success_embed(
             "Playlist removida",
-            f"Removidas {removed} mÃºsicas da fila."
+            f"Removidas {removed} músicas da fila."
         )
         
         if isinstance(ctx_or_interaction, discord.Interaction):
@@ -131,7 +131,7 @@ class MusicConnectionMixin:
 
     @commands.command(name="removeplaylist")
     async def removeplaylist(self, ctx: commands.Context):
-        """Remove todas as mÃºsicas de playlists (adicionadas via playlist) da fila sem parar a mÃºsica atual."""
+        """Remove todas as músicas de playlists (adicionadas via playlist) da fila sem parar a música atual."""
         await self._do_removeplaylist(ctx)
 
     @app_commands.command(name="removeplaylist", description="Removes queued songs added from playlists")

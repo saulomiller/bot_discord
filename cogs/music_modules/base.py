@@ -46,7 +46,7 @@ class MusicBaseMixin:
         return await ctx_or_interaction.send(embed=embed)
 
     def _schedule_message_delete(self, message, delay: float | None = None):
-        """Agenda remoÃ§Ã£o silenciosa da mensagem para manter o chat limpo."""
+        """Agenda remoção silenciosa da mensagem para manter o chat limpo."""
         if not message:
             return
         ttl = delay if delay is not None else self.FEEDBACK_DELETE_AFTER

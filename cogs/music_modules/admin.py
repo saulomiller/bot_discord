@@ -12,7 +12,7 @@ class MusicAdminMixin:
 
     @commands.command(name="sync")
     async def sync_commands(self, ctx: commands.Context):
-        """ForÃ§a a sincronizaÃ§Ã£o dos comandos slash com o Discord"""
+        """Força a sincronização dos comandos slash com o Discord"""
         try:
             if not ctx.author.guild_permissions.administrator:
                 await ctx.send(embed=discord.Embed(title=t('error'), description=t('need_admin'), color=discord.Color.red()))
