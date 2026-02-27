@@ -39,7 +39,7 @@ async def enqueue_search(player: Any, search: str, user: Any, voice_client: Any 
 
     song = await player.add_to_queue(search, user)
     vc = voice_client or getattr(player, "voice_client", None)
-    if vc and not vc.is_playing() and not player.is_paused:
+    if vc and not player.is_playback_busy and not player.is_paused:
         await player.play_next()
     return {"is_playlist": False, "song": song}
 
@@ -72,4 +72,3 @@ def remove_playlist_entries(player: Any, *, include_lazy: bool, skip_current: bo
             player.queue.append(item)
 
     return removed, skipped_current
-

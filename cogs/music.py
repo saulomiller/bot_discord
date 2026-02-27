@@ -349,6 +349,69 @@ class MusicCog(commands.Cog):
     async def stop_slash(self, interaction: discord.Interaction):
         await self._do_stop(interaction)
 
+    async def _do_clear_chat(self, ctx_or_interaction, quantidade: int = 100):
+        quantidade = max(1, min(int(quantidade), 500))
+
+        if isinstance(ctx_or_interaction, discord.Interaction):
+            user = ctx_or_interaction.user
+            channel = ctx_or_interaction.channel
+            if not ctx_or_interaction.response.is_done():
+                await ctx_or_interaction.response.defer(ephemeral=True)
+        else:
+            user = ctx_or_interaction.author
+            channel = ctx_or_interaction.channel
+
+        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+            msg = t('clear_invalid_channel')
+            if isinstance(ctx_or_interaction, discord.Interaction):
+                await ctx_or_interaction.followup.send(msg, ephemeral=True)
+            else:
+                await ctx_or_interaction.send(msg)
+            return
+
+        if not user.guild_permissions.manage_messages:
+            msg = t('clear_need_manage_messages')
+            if isinstance(ctx_or_interaction, discord.Interaction):
+                await ctx_or_interaction.followup.send(msg, ephemeral=True)
+            else:
+                await ctx_or_interaction.send(msg)
+            return
+
+        bot_member = channel.guild.me or channel.guild.get_member(self.bot.user.id)
+        perms = channel.permissions_for(bot_member) if bot_member else None
+        if not perms or not perms.manage_messages or not perms.read_message_history:
+            msg = t('clear_bot_missing_permissions')
+            if isinstance(ctx_or_interaction, discord.Interaction):
+                await ctx_or_interaction.followup.send(msg, ephemeral=True)
+            else:
+                await ctx_or_interaction.send(msg)
+            return
+
+        bot_id = self.bot.user.id if self.bot.user else None
+
+        def _is_bot_music_message(message: discord.Message) -> bool:
+            return bool(bot_id and message.author.id == bot_id)
+
+        try:
+            deleted_messages = await channel.purge(
+                limit=quantidade,
+                check=_is_bot_music_message,
+                bulk=True,
+                reason=f"Music chat cleanup requested by {user} ({user.id})",
+            )
+            msg = t('clear_success', count=len(deleted_messages))
+        except (discord.Forbidden, discord.HTTPException):
+            msg = t('clear_failed')
+
+        if isinstance(ctx_or_interaction, discord.Interaction):
+            await ctx_or_interaction.followup.send(msg, ephemeral=True)
+        else:
+            await ctx_or_interaction.send(msg)
+
+    @commands.command(name="clear")
+    async def clear_prefix(self, ctx: commands.Context, quantidade: int = 100):
+        await self._do_clear_chat(ctx, quantidade)
+
     async def _do_resume(self, ctx_or_interaction):
         guild_id = ctx_or_interaction.guild.id
         player = self.get_player(guild_id)

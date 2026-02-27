@@ -147,6 +147,19 @@ class MusicPlayer:
         self.dashboard_task = None
         self.last_img_url = None
         self._last_second = -1  # Rastreador para smart updates (evita recria desnecessária)
+        self._queue_empty_cleanup_task = None
+        self._queue_empty_grace_seconds = 8
+
+    @property
+    def is_voice_busy(self) -> bool:
+        """Retorna True quando o voice client já está ocupado (tocando/pausado)."""
+        vc = self.voice_client
+        return bool(vc and (vc.is_playing() or vc.is_paused()))
+
+    @property
+    def is_playback_busy(self) -> bool:
+        """Retorna True quando há reprodução ativa ou transição de play em andamento."""
+        return self._play_lock.locked() or self.is_voice_busy or self.sfx_playing
 
     @property
     def guild(self):
@@ -236,6 +249,46 @@ class MusicPlayer:
             with contextlib.suppress(asyncio.CancelledError):
                 await self.dashboard_task
             self.dashboard_task = None
+
+    async def clear_music_dashboard(self):
+        """Remove o dashboard de música e para atualizações."""
+        await self.stop_dashboard_task()
+
+        if self.dashboard_message:
+            try:
+                await self.dashboard_message.delete()
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+            self.dashboard_message = None
+
+        self._last_second = -1
+        self._dominant_color = None
+
+    def _cancel_queue_empty_cleanup(self):
+        task = self._queue_empty_cleanup_task
+        if task and not task.done():
+            task.cancel()
+        self._queue_empty_cleanup_task = None
+
+    async def _clear_dashboard_after_grace(self):
+        try:
+            await asyncio.sleep(self._queue_empty_grace_seconds)
+
+            # Se algo voltou a tocar/enfileirar, não limpar o dashboard.
+            if self.queue or self.is_voice_busy or self.sfx_playing or self.current_song:
+                return
+
+            await self.clear_music_dashboard()
+            logging.info("[dashboard] Fila permaneceu vazia. Dashboard removido.")
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._queue_empty_cleanup_task = None
+
+    def _schedule_queue_empty_cleanup(self):
+        if self._queue_empty_cleanup_task and not self._queue_empty_cleanup_task.done():
+            return
+        self._queue_empty_cleanup_task = self.loop.create_task(self._clear_dashboard_after_grace())
 
     async def update_dashboard_loop(self):
         """Loop que atualiza a BARRA DE PROGRESSO no embed (texto) a cada segundo (smart update).
@@ -425,6 +478,7 @@ class MusicPlayer:
                 'user': user
             }
             self.queue.append(song)
+            self._cancel_queue_empty_cleanup()
             logging.info(f"[add_to_queue] Música adicionada à fila: {song['title']}")
             logging.info(f"[add_to_queue] Tamanho da fila agora: {len(self.queue)}")
             return song
@@ -482,11 +536,12 @@ class MusicPlayer:
                             'is_lazy': True # Indicar que precisa resolver stream
                         }
                         self.queue.append(song)
+                        self._cancel_queue_empty_cleanup()
                         first_song_title = song['title']
                         logging.info(f"✓ Primeira música adicionada: {first_song_title}")
                         
                         # Se não estiver tocando, tocar AGORA
-                        if not self.is_playing:
+                        if not self.is_playback_busy:
                              await self.play_next()
             
             # PASSO 2: Processar o RESTO em background (começando do índice 2, pois índice 1 já foi adicionado)
@@ -616,13 +671,14 @@ class MusicPlayer:
                 }
                 
                 self.queue.append(song)
+                self._cancel_queue_empty_cleanup()
                 added_count += 1
                 
                 # Iniciar reprodução assim que a primeira música estiver pronta
                 if not first_song_added:
                     first_song_added = True
                     logging.info(f"✓ Primeira música da playlist pronta: {song['title']}")
-                    if not self.voice_client or not self.voice_client.is_playing():
+                    if not self.is_playback_busy:
                         self.loop.create_task(self.play_next())
 
             logging.info(f"✓ Playlist completa: {added_count} músicas adicionadas à fila")
@@ -740,6 +796,16 @@ class MusicPlayer:
             self.stop() # Limpa fila e para tudo
             return
 
+        # Defesa principal contra corrida: se já está reproduzindo/pausado, não iniciar outra faixa.
+        if self.is_voice_busy:
+            logging.info("[play_next] Ignorado: voice client já está ocupado.")
+            return
+
+        # Durante SFX, não devemos consumir a fila normal.
+        if self.sfx_playing:
+            logging.info("[play_next] Ignorado: soundboard em reprodução.")
+            return
+
         if self.is_shuffling and len(self.queue) > 1:
             import random
             queue_list = list(self.queue)
@@ -749,9 +815,11 @@ class MusicPlayer:
         logging.info(f"[play_next] Tamanho da fila: {len(self.queue)}")
         if not self.queue:
             self.current_song = None
-            logging.info("[play_next] Fila vazia, nada para tocar")
+            self._schedule_queue_empty_cleanup()
+            logging.info(f"[play_next] Fila vazia, limpando dashboard em {self._queue_empty_grace_seconds}s se continuar vazia")
             return
 
+        self._cancel_queue_empty_cleanup()
         self.current_song = self.queue.popleft()
         logging.info(f"[play_next] Preparando: {self.current_song['title']}")
         # Log de debug: mostrar duração e flags para investigar ausência de barra de progresso
@@ -821,7 +889,7 @@ class MusicPlayer:
         # Proteção final contra URL nula
         if not source_url:
             logging.error("Source URL é None após resolução. Pulando música.")
-            await self.play_next()
+            self.loop.create_task(self.play_next())
             return
 
         seek_position = self.current_song.get('seek', 0)
@@ -922,6 +990,9 @@ class MusicPlayer:
     async def _pre_resolve_next(self, song):
         """Resolve a URL da próxima música silenciosamente."""
         try:
+            # Se a faixa já virou a atual, não pré-resolver para evitar corrida de extração duplicada.
+            if song is self.current_song:
+                return
             source_url = song['url']
             if self._is_direct_stream_url(source_url):
                 return
@@ -938,6 +1009,8 @@ class MusicPlayer:
             )
             
             if info and info.get('url'):
+                if song is self.current_song:
+                    return
                 self.stream_cache.set(source_url, info['url'])
                 extractor_name = str(info.get('extractor', '')).lower()
                 # Atualizar metadados de forma segura (verificar que o song ainda é o mesmo objeto)
@@ -1017,12 +1090,12 @@ class MusicPlayer:
                 self.loop.create_task(self.play_next())
 
     def stop(self):
-        # Cancelar dashboard task diretamente (seguro em contexto síncrono)
-        if self.dashboard_task and not self.dashboard_task.done():
-            self.dashboard_task.cancel()
+        self._cancel_queue_empty_cleanup()
         self.queue.clear()
         self.current_song = None
         self._last_second = -1  # Reset contador de atualização
+        # Limpar embeds/dashboard em background.
+        self.loop.create_task(self.clear_music_dashboard())
         if self.voice_client and self.voice_client.is_playing():
             self.voice_client.stop()
 
