@@ -26,7 +26,8 @@ YDL_OPTIONS = {
     'ignoreerrors': True,   # Não abortar em entradas inválidas de playlist
     'extract_flat': False,  # Resolver URLs completas por padrão
     # Permite download automático dos scripts EJS (necessário para web_embedded/web)
-    'remote_components': 'ejs:github',
+    # Precisa ser lista/set, não string; string gera warning de componentes por caractere.
+    'remote_components': ['ejs:github'],
     
     # web_embedded: cliente mais estável com EJS (não requer PO Token para a maioria dos vídeos)
     # web: fallback padrão
@@ -172,6 +173,30 @@ class MusicPlayer:
             return f"{hours}:{minutes:02d}:{seconds:02d}"
         else:
             return f"{minutes}:{seconds:02d}"
+
+    @staticmethod
+    def _is_direct_stream_url(url: str) -> bool:
+        """Detecta URLs diretas de mídia (ex.: googlevideo/videoplayback)."""
+        if not url:
+            return False
+        lower = str(url).lower()
+        return (
+            'googlevideo.com/videoplayback' in lower
+            or 'manifest.googlevideo.com' in lower
+        )
+
+    @staticmethod
+    def _is_resolvable_service_url(url: str) -> bool:
+        """Detecta páginas canônicas de serviços que devem passar por resolve."""
+        if not url:
+            return False
+        lower = str(url).lower()
+        return (
+            'youtube.com/watch' in lower
+            or 'youtu.be/' in lower
+            or 'music.youtube.com/' in lower
+            or 'soundcloud.com/' in lower
+        )
     
     def get_progress(self) -> dict:
         """Calcula o progresso atual da música com precisão monotonic."""
@@ -658,7 +683,22 @@ class MusicPlayer:
                 
                 try:
                     title = entry.get('title', 'Desconhecido')
-                    url = entry.get('url', entry.get('webpage_url', ''))
+                    # Priorizar URL canônica para evitar salvar stream efêmero (googlevideo).
+                    webpage_url = entry.get('webpage_url') or entry.get('original_url')
+                    url = webpage_url or entry.get('url', '')
+                    url = str(url) if url else ''
+
+                    if url and not url.startswith('http'):
+                        ie_key = str(entry.get('ie_key', '')).lower()
+                        extractor = str(entry.get('extractor', '')).lower()
+                        if ie_key == 'youtube' or 'youtube' in extractor:
+                            url = f"https://www.youtube.com/watch?v={url}"
+                        elif ie_key == 'soundcloud' or 'soundcloud' in extractor:
+                            url = f"https://soundcloud.com/{url}" if not url.startswith('soundcloud') else f"https://{url}"
+
+                    # Blindagem extra: se ainda vier URL direta de stream e houver webpage_url, usar webpage_url.
+                    if self._is_direct_stream_url(url) and webpage_url:
+                        url = str(webpage_url)
                     thumbnail = entry.get('thumbnail', '')
                     
                     duration_seconds = entry.get('duration', 0)
@@ -731,7 +771,12 @@ class MusicPlayer:
         else:
             # Se não estiver em cache ou for 'is_lazy', resolver via yt-dlp
             # OU se for stream direta de rádio/arquivo, não precisa resolver
-            requires_resolution = self.current_song.get('is_lazy', False) or 'youtube' in source_url or 'soundcloud' in source_url
+            # Resolver apenas quando necessário em URL de serviço canônica.
+            # Evita falso-positivo em stream direto contendo query param "source=youtube".
+            requires_resolution = (
+                (self.current_song.get('is_lazy', False) and not self._is_direct_stream_url(source_url))
+                or self._is_resolvable_service_url(source_url)
+            )
             
             # Se for link direto (http) e não tiver cara de serviço conhecido, talvez não precise
             # Mas o yt-dlp lida bem com isso.
@@ -749,13 +794,16 @@ class MusicPlayer:
                     if not info:
                          raise ValueError("Falha ao extrair info")
                     
-                    # Atualizar metadados da música atual com infos completas
-                    self.current_song['title'] = info.get('title', self.current_song['title'])
-                    self.current_song['thumbnail'] = info.get('thumbnail', self.current_song['thumbnail'])
-                    
-                    duration = info.get('duration', 0)
-                    self.current_song['duration'] = self._format_duration(duration)
-                    self.current_song['duration_seconds'] = duration
+                    extractor_name = str(info.get('extractor', '')).lower()
+                    # Não sobrescrever metadados com extractor genérico (ex.: "videoplayback").
+                    if extractor_name != 'generic':
+                        self.current_song['title'] = info.get('title', self.current_song['title'])
+                        self.current_song['thumbnail'] = info.get('thumbnail', self.current_song['thumbnail'])
+                        duration = info.get('duration', 0)
+                        self.current_song['duration'] = self._format_duration(duration)
+                        self.current_song['duration_seconds'] = duration
+                    else:
+                        logging.debug("[play_next] Extractor 'generic' detectado; preservando metadados atuais.")
                     
                     # Pegar URL real do áudio
                     source_url = info.get('url')
@@ -875,6 +923,10 @@ class MusicPlayer:
         """Resolve a URL da próxima música silenciosamente."""
         try:
             source_url = song['url']
+            if self._is_direct_stream_url(source_url):
+                return
+            if not (song.get('is_lazy') or self._is_resolvable_service_url(source_url)):
+                return
             # Se já estiver em cache, ignora
             if self.stream_cache.get(source_url):
                 return
@@ -887,13 +939,15 @@ class MusicPlayer:
             
             if info and info.get('url'):
                 self.stream_cache.set(source_url, info['url'])
+                extractor_name = str(info.get('extractor', '')).lower()
                 # Atualizar metadados de forma segura (verificar que o song ainda é o mesmo objeto)
                 try:
-                    song['title'] = info.get('title', song['title'])
-                    song['thumbnail'] = info.get('thumbnail', song.get('thumbnail'))
-                    duration = info.get('duration', 0)
-                    song['duration_seconds'] = duration
-                    song['duration'] = self._format_duration(duration)
+                    if extractor_name != 'generic':
+                        song['title'] = info.get('title', song['title'])
+                        song['thumbnail'] = info.get('thumbnail', song.get('thumbnail'))
+                        duration = info.get('duration', 0)
+                        song['duration_seconds'] = duration
+                        song['duration'] = self._format_duration(duration)
                     song['is_lazy'] = False  # Marcar como resolvido
                 except Exception:
                     pass  # Race condition: song pode ter sido removido da fila
