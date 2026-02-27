@@ -4,6 +4,7 @@ from discord import app_commands
 import asyncio
 import logging
 import re
+from datetime import timedelta
 from urllib.parse import urlparse
 
 from services.playback import enqueue_search, is_playlist_query, remove_playlist_entries
@@ -349,7 +350,7 @@ class MusicCog(commands.Cog):
     async def stop_slash(self, interaction: discord.Interaction):
         await self._do_stop(interaction)
 
-    async def _do_clear_chat(self, ctx_or_interaction, quantidade: int = 100):
+    async def _do_clear_chat(self, ctx_or_interaction, quantidade: int = 100, *, force_old: bool = False):
         quantidade = max(1, min(int(quantidade), 500))
 
         if isinstance(ctx_or_interaction, discord.Interaction):
@@ -389,17 +390,55 @@ class MusicCog(commands.Cog):
 
         bot_id = self.bot.user.id if self.bot.user else None
 
-        def _is_bot_music_message(message: discord.Message) -> bool:
-            return bool(bot_id and message.author.id == bot_id)
-
         try:
-            deleted_messages = await channel.purge(
-                limit=quantidade,
-                check=_is_bot_music_message,
-                bulk=True,
-                reason=f"Music chat cleanup requested by {user} ({user.id})",
-            )
-            msg = t('clear_success', count=len(deleted_messages))
+            reason = f"Music chat cleanup requested by {user} ({user.id})"
+            cutoff = discord.utils.utcnow() - timedelta(days=14)
+
+            # Evita 429 em massa: deleta em lote mensagens recentes (<14 dias).
+            recent_messages = []
+            old_messages = []
+            async for message in channel.history(limit=quantidade):
+                if not bot_id or message.author.id != bot_id:
+                    continue
+                if message.created_at and message.created_at < cutoff:
+                    old_messages.append(message)
+                    continue
+                recent_messages.append(message)
+
+            deleted_recent = 0
+            for i in range(0, len(recent_messages), 100):
+                chunk = recent_messages[i:i + 100]
+                if len(chunk) == 1:
+                    await chunk[0].delete(reason=reason)
+                elif chunk:
+                    await channel.delete_messages(chunk, reason=reason)
+                deleted_recent += len(chunk)
+
+                if i + 100 < len(recent_messages):
+                    await asyncio.sleep(0.35)
+
+            deleted_old = 0
+            failed_old = 0
+            if force_old and old_messages:
+                # Mensagens antigas só aceitam delete individual. Fazer throttle para reduzir 429.
+                for old_msg in old_messages:
+                    try:
+                        await old_msg.delete(reason=reason)
+                        deleted_old += 1
+                    except (discord.Forbidden, discord.HTTPException):
+                        failed_old += 1
+                    await asyncio.sleep(0.8)
+
+            deleted_total = deleted_recent + deleted_old
+            msg = t('clear_success', count=deleted_total)
+
+            if force_old:
+                msg += f" (recentes: {deleted_recent}, antigas: {deleted_old}"
+                if failed_old > 0:
+                    msg += f", falhas antigas: {failed_old}"
+                msg += ")"
+            elif old_messages:
+                msg += f" ({len(old_messages)} msg(s) antiga(s) ignorada(s) >14 dias; use !clearforce)"
         except (discord.Forbidden, discord.HTTPException):
             msg = t('clear_failed')
 
@@ -411,6 +450,10 @@ class MusicCog(commands.Cog):
     @commands.command(name="clear")
     async def clear_prefix(self, ctx: commands.Context, quantidade: int = 100):
         await self._do_clear_chat(ctx, quantidade)
+
+    @commands.command(name="clearforce")
+    async def clearforce_prefix(self, ctx: commands.Context, quantidade: int = 100):
+        await self._do_clear_chat(ctx, quantidade, force_old=True)
 
     async def _do_resume(self, ctx_or_interaction):
         guild_id = ctx_or_interaction.guild.id
