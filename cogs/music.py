@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+import asyncio
 import logging
 import re
 from urllib.parse import urlparse
@@ -15,6 +16,8 @@ from utils.i18n import t
 RADIO_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 class MusicCog(commands.Cog):
+    FEEDBACK_DELETE_AFTER = 12
+
     def __init__(self, bot):
         self.bot = bot
         self.RADIOS = load_radios()
@@ -38,6 +41,30 @@ class MusicCog(commands.Cog):
             if str(radio.get("id", "")).strip().lower() == target_id:
                 return radio
         return None
+
+    async def _send_embed_message(self, ctx_or_interaction, embed, *, wait_message: bool = False):
+        """Envia embed e opcionalmente retorna o objeto da mensagem."""
+        if isinstance(ctx_or_interaction, discord.Interaction):
+            if wait_message:
+                return await ctx_or_interaction.followup.send(embed=embed, wait=True)
+            await ctx_or_interaction.followup.send(embed=embed)
+            return None
+        return await ctx_or_interaction.send(embed=embed)
+
+    def _schedule_message_delete(self, message, delay: float | None = None):
+        """Agenda remoção silenciosa da mensagem para manter o chat limpo."""
+        if not message:
+            return
+        ttl = delay if delay is not None else self.FEEDBACK_DELETE_AFTER
+
+        async def _delete_later():
+            await asyncio.sleep(ttl)
+            try:
+                await message.delete()
+            except Exception:
+                pass
+
+        self.bot.loop.create_task(_delete_later())
 
     # --- Comandos de Conexão ---
 
@@ -204,10 +231,7 @@ class MusicCog(commands.Cog):
         search = search.strip()
         if is_playlist_query(search):
             embed_info = EmbedBuilder.create_info_embed(t('processing_playlist'), t('extracting_playlist'))
-            if isinstance(ctx_or_interaction, discord.Interaction):
-                status_msg = await ctx_or_interaction.followup.send(embed=embed_info)
-            else:
-                status_msg = await ctx_or_interaction.send(embed=embed_info)
+            status_msg = await self._send_embed_message(ctx_or_interaction, embed_info, wait_message=True)
 
             try:
                 await enqueue_search(player, search, user, vc)
@@ -215,16 +239,18 @@ class MusicCog(commands.Cog):
                     t('playlist_added'),
                     t('processing_background', title='Playlist'),
                 )
-                if isinstance(ctx_or_interaction, discord.Interaction):
-                    await ctx_or_interaction.followup.send(embed=embed_success)
-                else:
+                if status_msg:
                     await status_msg.edit(embed=embed_success)
+                    self._schedule_message_delete(status_msg)
+                else:
+                    tmp_msg = await self._send_embed_message(ctx_or_interaction, embed_success, wait_message=True)
+                    self._schedule_message_delete(tmp_msg)
             except Exception as e:
                 embed_err = EmbedBuilder.create_error_embed(t('error'), str(e))
-                if isinstance(ctx_or_interaction, discord.Interaction):
-                    await ctx_or_interaction.followup.send(embed=embed_err)
-                else:
+                if status_msg:
                     await status_msg.edit(embed=embed_err)
+                else:
+                    await self._send_embed_message(ctx_or_interaction, embed_err)
             return
 
         # 5. Busca Normal
@@ -234,10 +260,8 @@ class MusicCog(commands.Cog):
 
         if len(searches) > 1:
             embed_multi = EmbedBuilder.create_info_embed(t('adding_songs', count=len(searches)))
-            if isinstance(ctx_or_interaction, discord.Interaction):
-                await ctx_or_interaction.followup.send(embed=embed_multi)
-            else:
-                await ctx_or_interaction.send(embed=embed_multi)
+            multi_msg = await self._send_embed_message(ctx_or_interaction, embed_multi, wait_message=True)
+            self._schedule_message_delete(multi_msg)
 
         added_count = 0
         for query in searches:
@@ -253,10 +277,8 @@ class MusicCog(commands.Cog):
                         t('added_to_queue'),
                         f"Música **{song_title}**\n{t('position_in_queue', position=pos)}",
                     )
-                    if isinstance(ctx_or_interaction, discord.Interaction):
-                        await ctx_or_interaction.followup.send(embed=embed_added)
-                    else:
-                        await ctx_or_interaction.send(embed=embed_added)
+                    added_msg = await self._send_embed_message(ctx_or_interaction, embed_added, wait_message=True)
+                    self._schedule_message_delete(added_msg)
 
             except Exception as e:
                 logging.error(f'Erro no play: {e}')
@@ -271,10 +293,8 @@ class MusicCog(commands.Cog):
                 t('success'),
                 t('added_songs_queue', count=added_count),
             )
-            if isinstance(ctx_or_interaction, discord.Interaction):
-                await ctx_or_interaction.followup.send(embed=embed_final)
-            else:
-                await ctx_or_interaction.send(embed=embed_final)
+            final_msg = await self._send_embed_message(ctx_or_interaction, embed_final, wait_message=True)
+            self._schedule_message_delete(final_msg)
 
     @commands.command()
     async def play(self, ctx: commands.Context, *, search: str):

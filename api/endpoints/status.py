@@ -45,7 +45,7 @@ async def get_guilds(request: Request):
         vc = connected_by_guild.get(guild.id)
         guilds.append(
             {
-                "id": guild.id,
+                "id": str(guild.id),
                 "name": guild.name,
                 "connected": vc is not None and vc.is_connected(),
                 "voice_channel": vc.channel.name if vc and vc.channel else None,
@@ -127,7 +127,7 @@ async def get_status(request: Request, guild_id: int | None = None):
         "bot_user": str(bot.user),
         "is_ready": bot.is_ready(),
         "guilds": len(bot.guilds),
-        "guild_id": vc.guild.id if vc else None,
+        "guild_id": str(vc.guild.id) if vc else None,
         "current_song": current_song_info,
         "queue": queue_info,
         "volume": stat_volume,

@@ -16,8 +16,10 @@ let translationManager; // Gerenciador de traduções
 let selectedGuildId = localStorage.getItem('selected_guild_id') || null;
 
 function normalizeGuildId(value) {
-    const parsed = Number(value);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    if (value === null || value === undefined) return null;
+    const raw = String(value).trim();
+    if (!raw || !/^\d+$/.test(raw)) return null;
+    return raw;
 }
 
 function getCurrentGuildId() {
@@ -26,7 +28,7 @@ function getCurrentGuildId() {
 
 function setCurrentGuildId(guildId) {
     const normalized = normalizeGuildId(guildId);
-    selectedGuildId = normalized ? String(normalized) : null;
+    selectedGuildId = normalized || null;
     if (selectedGuildId) {
         localStorage.setItem('selected_guild_id', selectedGuildId);
     } else {
@@ -44,8 +46,8 @@ function renderGuildSelector(guilds, preferredGuildId = null) {
     const validCurrent = current && knownIds.has(current) ? current : null;
     const normalizedPreferred = normalizeGuildId(preferredGuildId);
     const validPreferred = normalizedPreferred && knownIds.has(normalizedPreferred) ? normalizedPreferred : null;
-    const fallbackConnected = guildList.find(g => g.connected)?.id ?? null;
-    const fallbackFirst = guildList.length ? guildList[0].id : null;
+    const fallbackConnected = normalizeGuildId(guildList.find(g => g.connected)?.id ?? null);
+    const fallbackFirst = guildList.length ? normalizeGuildId(guildList[0].id) : null;
     const nextGuildId = validPreferred || validCurrent || fallbackConnected || fallbackFirst;
 
     setCurrentGuildId(nextGuildId);
@@ -62,7 +64,7 @@ function renderGuildSelector(guilds, preferredGuildId = null) {
 
     guildList.forEach(guild => {
         const option = document.createElement('option');
-        option.value = String(guild.id);
+        option.value = normalizeGuildId(guild.id) || '';
         const connectedTag = guild.connected
             ? (translationManager ? translationManager.get('server_connected_tag') : 'conectado')
             : (translationManager ? translationManager.get('server_idle_tag') : 'offline');
@@ -129,7 +131,7 @@ async function updateStatusLoop() {
             setCurrentGuildId(data.guild_id);
             const selector = document.getElementById('guild-select');
             if (selector) {
-                selector.value = String(data.guild_id);
+                selector.value = normalizeGuildId(data.guild_id) || '';
             }
         }
 

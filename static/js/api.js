@@ -149,7 +149,7 @@ export const API = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             radio_id: radioId,
-            ...(guildId !== null && guildId !== undefined && guildId !== '' ? { guild_id: Number(guildId) } : {}),
+            ...(guildId !== null && guildId !== undefined && guildId !== '' ? { guild_id: String(guildId) } : {}),
         })
     }),
 
