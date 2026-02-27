@@ -381,7 +381,6 @@ def create_now_playing_card(
 
         text_width = width - (padding * 2)
         font_title = get_font("arialbd.ttf", 33)
-        font_artist = get_font("arial.ttf", 22)
         font_small = get_font("arial.ttf", 16)
         font_queue = get_font("arial.ttf", 18)
 
@@ -405,17 +404,14 @@ def create_now_playing_card(
             line_h = line_box[3] - line_box[1]
             y += line_h + 8
 
-        artist = song_info.get("channel", "Desconhecido")
-        draw_centered_line(artist, y + 2, font_artist, (206, 206, 206))
-
         user = song_info.get("user", "?")
         user_str = str(user) if not hasattr(user, 'display_name') else user.display_name
         user_label = f"Adicionado por {user_str}"
-        draw_centered_line(user_label, y + 32, font_small, (175, 175, 175))
+        artist = song_info.get("channel", "Desconhecido")
 
-        # Manter somente a seção de próximas músicas no card.
+        # Manter seção de próximas músicas no card e posicionar metadados no topo do box.
         panel_x = padding
-        panel_y = y + 88
+        panel_y = y + 24
         panel_w = width - (padding * 2)
         panel_h = height - panel_y - padding
 
@@ -427,12 +423,49 @@ def create_now_playing_card(
             width=1,
         )
 
-        queue_y = panel_y + 14
+        meta_pad = 14
+        meta_gap = 12
+        meta_y = panel_y + 12
+        meta_max_w = max(60, (panel_w - (meta_pad * 2) - meta_gap) // 2)
+
+        left_meta = truncate_text(draw, user_label, font_small, meta_max_w)
+        right_meta = truncate_text(draw, str(artist), font_small, meta_max_w)
+        draw_text_shadow(
+            draw,
+            (panel_x + meta_pad, meta_y),
+            left_meta,
+            font_small,
+            (175, 175, 175),
+            offset=1,
+        )
+        right_bbox = draw.textbbox((0, 0), right_meta, font=font_small)
+        right_w = right_bbox[2] - right_bbox[0]
+        right_x = panel_x + panel_w - meta_pad - right_w
+        draw_text_shadow(
+            draw,
+            (right_x, meta_y),
+            right_meta,
+            font_small,
+            (206, 206, 206),
+            offset=1,
+        )
+
+        meta_h = (right_bbox[3] - right_bbox[1]) if (right_bbox[3] - right_bbox[1]) > 0 else 16
+        sep_y = meta_y + meta_h + 10
+        draw.line(
+            [(panel_x + 12, sep_y), (panel_x + panel_w - 12, sep_y)],
+            fill=(60, 60, 60),
+            width=1,
+        )
+
+        queue_y = sep_y + 10
         draw_text_shadow(draw, (panel_x + 14, queue_y), "A seguir", font_small, (154, 154, 154), offset=1)
         queue_y += 26
 
         queue_text_width = panel_w - 28
-        max_lines = max(1, (panel_h - 38) // 24)
+        content_bottom = panel_y + panel_h - 8
+        available_h = max(24, content_bottom - queue_y)
+        max_lines = max(1, available_h // 24)
 
         if next_songs:
             for i, song in enumerate(next_songs[:max_lines], 1):
