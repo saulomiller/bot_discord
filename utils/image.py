@@ -406,7 +406,7 @@ def create_now_playing_card(
 
         user = song_info.get("user", "?")
         user_str = str(user) if not hasattr(user, 'display_name') else user.display_name
-        user_label = f"Adicionado por {user_str}"
+        user_label = f"{user_str}"
         artist = song_info.get("channel", "Desconhecido")
 
         # Manter seção de próximas músicas no card e posicionar metadados no topo do box.

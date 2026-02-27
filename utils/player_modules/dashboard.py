@@ -139,6 +139,12 @@ class DashboardMixin:
                         total_seconds=progress['duration'],
                         dominant_color=getattr(self, '_dominant_color', None),
                     )
+                    # Manter a imagem do card vinculada ao embed durante edições.
+                    try:
+                        if self.dashboard_message and self.dashboard_message.attachments:
+                            embed.set_image(url=self.dashboard_message.attachments[0].url)
+                    except Exception:
+                        pass
                     
                     # Editar a mensagem apenas quando o segundo mudou
                     await self.dashboard_message.edit(embed=embed)
