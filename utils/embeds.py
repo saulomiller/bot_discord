@@ -95,7 +95,7 @@ class EmbedBuilder:
 
     @staticmethod
     def create_now_playing_embed(
-        song_info: dict,
+        song_info: dict | None,
         queue_list: list | None = None,
         current_seconds: float = 0,
         total_seconds: float = 0,
@@ -115,6 +115,8 @@ class EmbedBuilder:
         """
         if queue_list is None:
             queue_list = []
+        if not isinstance(song_info, dict):
+            song_info = {}
 
         title = song_info.get('title', t('unknown'))
         channel = song_info.get('channel', t('unknown'))

@@ -234,11 +234,14 @@ def wrap_two_lines(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -
 # Normalização de dados da música
 # ---------------------------------------------------------------------------
 
-def normalize_song_info(song_info: dict) -> dict:
+def normalize_song_info(song_info: dict | None) -> dict:
     """
     Normaliza os dados de song_info para garantir compatibilidade
     entre diferentes fontes (YouTube, SoundCloud, rádio, etc.)
     """
+    if not isinstance(song_info, dict):
+        song_info = {}
+
     title_keys     = ['title', 'name', 'track', 'song']
     artist_keys    = ['channel', 'artist', 'uploader', 'author', 'creator']
     thumbnail_keys = ['thumbnail', 'artwork_url', 'art', 'image', 'cover']
@@ -268,7 +271,7 @@ def normalize_song_info(song_info: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def create_now_playing_card(
-    song_info: dict,
+    song_info: dict | None,
     next_songs: list | None = None,
     progress_percent: float | None = None,
 ) -> BytesIO | None:

@@ -116,6 +116,10 @@ class DashboardMixin:
 
                 # Otimização: Apenas editar se o segundo mudou (reduz chamadas API em 90%)
                 try:
+                    song_snapshot = self.current_song
+                    if not isinstance(song_snapshot, dict):
+                        continue
+
                     progress = self.get_progress()
                     current_second = progress['current']
                     
@@ -129,7 +133,7 @@ class DashboardMixin:
                     # Criar embed apenas quando necessário
                     # Usar dominant_color cacheado no player (definido no send_dashboard)
                     embed = EmbedBuilder.create_now_playing_embed(
-                        self.current_song,
+                        song_snapshot,
                         list(self.queue),
                         current_seconds=current_second,
                         total_seconds=progress['duration'],
@@ -151,7 +155,8 @@ class DashboardMixin:
 
     async def send_dashboard(self):
         """Envia/Renova a mensagem do dashboard (Imagem + Embed)."""
-        if not self.dashboard_context or not self.current_song:
+        song_snapshot = self.current_song
+        if not self.dashboard_context or not isinstance(song_snapshot, dict):
             return
 
         # Apagar mensagem anterior para não spammar
@@ -170,7 +175,7 @@ class DashboardMixin:
 
             # Extrair cor dominante da thumbnail (para sincronizar embed e card)
             dominant_color = None
-            thumb_url = (self.current_song or {}).get('thumbnail')
+            thumb_url = song_snapshot.get('thumbnail')
             if thumb_url:
                 try:
                     from utils.image import fetch_image_content, get_dominant_color_from_bytes
@@ -190,11 +195,15 @@ class DashboardMixin:
                 None,
                 functools.partial(
                     create_now_playing_card,
-                    self.current_song,
+                    song_snapshot,
                     next_songs=next_songs[:3],
                     progress_percent=pct,
                 )
             )
+
+            # Evitar dashboard stale quando a musica muda durante awaits
+            if self.current_song is not song_snapshot:
+                return
 
             file = None
             if img_buffer:
@@ -202,7 +211,7 @@ class DashboardMixin:
 
             # Gerar Embed Inicial
             embed = EmbedBuilder.create_now_playing_embed(
-                self.current_song,
+                song_snapshot,
                 next_songs,
                 current_seconds=progress['current'],
                 total_seconds=progress['duration'],
