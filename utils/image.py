@@ -413,41 +413,9 @@ def create_now_playing_card(
         user_label = f"Adicionado por {user_str}"
         draw_centered_line(user_label, y + 32, font_small, (175, 175, 175))
 
-        bar_x = padding
-        bar_y = y + 64
-        bar_w = width - (padding * 2)
-        bar_h = 10
-        progress_label_y = bar_y - 22
-        draw_text_shadow(draw, (bar_x, progress_label_y), "Progresso", font_small, (170, 170, 170), offset=1)
-        draw.rounded_rectangle(
-            [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h],
-            radius=5,
-            fill=(86, 86, 86),
-        )
-
-        if progress_percent is not None:
-            pct = max(0.0, min(1.0, progress_percent))
-            fill_w = int(bar_w * pct)
-            pct_text = f"{int(pct * 100)}%"
-            pct_bbox = draw.textbbox((0, 0), pct_text, font=font_small)
-            pct_w = pct_bbox[2] - pct_bbox[0]
-            draw_text_shadow(
-                draw,
-                (bar_x + bar_w - pct_w, progress_label_y),
-                pct_text,
-                font_small,
-                (190, 190, 190),
-                offset=1,
-            )
-            if fill_w > 0:
-                draw.rounded_rectangle(
-                    [bar_x, bar_y, bar_x + fill_w, bar_y + bar_h],
-                    radius=5,
-                    fill=(29, 185, 84),
-                )
-
+        # Manter somente a seção de próximas músicas no card.
         panel_x = padding
-        panel_y = bar_y + 24
+        panel_y = y + 88
         panel_w = width - (padding * 2)
         panel_h = height - panel_y - padding
 
