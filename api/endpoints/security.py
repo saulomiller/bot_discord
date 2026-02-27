@@ -1,3 +1,5 @@
+"""validacao de API key e controles de acesso da API."""
+
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from config import API_KEY

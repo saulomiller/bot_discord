@@ -245,6 +245,7 @@ def normalize_song_info(song_info: dict) -> dict:
     user_keys      = ['user', 'requested_by', 'requester']
 
     def _first(keys):
+        """Executa a rotina de fir t."""
         for k in keys:
             v = song_info.get(k)
             if v:

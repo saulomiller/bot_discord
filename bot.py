@@ -1,3 +1,5 @@
+"""ponto de entrada que inicia o bot Discord e a API FastAPI."""
+
 import discord
 from discord.ext import commands
 import logging
@@ -25,6 +27,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=FileResponse)
 async def read_index():
+    """Retorna a pagina principal do dashboard web."""
     if os.path.exists("static/index.html"):
         return FileResponse("static/index.html")
     return {"message": "Interface web não encontrada. Verifique se o arquivo static/index.html existe."}
@@ -39,10 +42,12 @@ intents.reactions = True
 
 class MusicBot(commands.Bot):
     def __init__(self):
+        """Inicializa o bot e o registro de players por servidor."""
         super().__init__(command_prefix='!', intents=intents)
         self.players = {} # Dict[guild_id, MusicPlayer]
 
     async def setup_hook(self):
+        """Carrega cogs e sincroniza os comandos slash no startup."""
         # Carregar Cogs
         await self.load_extension('cogs.music')
         await self.load_extension('cogs.soundboard')
@@ -55,9 +60,11 @@ class MusicBot(commands.Bot):
             logging.error(f"Erro ao sincronizar comandos: {e}")
 
     async def on_ready(self):
+        """Registra no log quando a conexao com o Discord estiver pronta."""
         logging.info(f'O bot fez login como: {self.user}')
 
     async def on_command_error(self, ctx, error):
+        """Centraliza tratamento de erro para comandos prefixados."""
         if isinstance(error, commands.errors.CommandNotFound):
             pass
         else:

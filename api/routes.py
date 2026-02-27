@@ -1,3 +1,5 @@
+"""agrega e registra todos os routers de endpoints da API."""
+
 from fastapi import APIRouter
 
 from api.endpoints.playback import router as playback_router

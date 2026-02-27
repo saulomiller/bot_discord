@@ -1,3 +1,5 @@
+"""endpoints de controle de reproducao, fila, pausa e volume."""
+
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
@@ -39,6 +41,7 @@ async def api_play(request: Request, body: MusicRequest, guild_id: int | None = 
 
 @router.post("/api/skip")
 async def api_skip(request: Request, guild_id: int | None = None):
+    """Executa o endpoint de skip."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, guild_id)
     player = get_player_for_guild(bot, vc.guild.id)
@@ -100,6 +103,7 @@ async def api_remove_playlist(request: Request, guild_id: int | None = None):
 
 @router.post("/api/pause")
 async def api_pause(request: Request, guild_id: int | None = None):
+    """Executa o endpoint de pause."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, guild_id)
     player = get_player_for_guild(bot, vc.guild.id)
@@ -109,6 +113,7 @@ async def api_pause(request: Request, guild_id: int | None = None):
 
 @router.post("/api/resume")
 async def api_resume(request: Request, guild_id: int | None = None):
+    """Executa o endpoint de resume."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, guild_id)
     player = get_player_for_guild(bot, vc.guild.id)
@@ -118,6 +123,7 @@ async def api_resume(request: Request, guild_id: int | None = None):
 
 @router.post("/api/volume")
 async def api_volume(request: Request, body: VolumeRequest, guild_id: int | None = None):
+    """Executa o endpoint de volume."""
     bot = request.app.state.bot
 
     if guild_id is not None:

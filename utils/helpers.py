@@ -1,3 +1,5 @@
+"""concentra helpers de voz, arquivos e metadados usados no projeto."""
+
 import discord
 from discord.ext import commands
 import logging
@@ -60,6 +62,7 @@ cpu_usage = 0
 memory_usage = 0
 
 async def check_system_resources():
+    """Executa a rotina de check y tem re ource."""
     global last_resource_check, cpu_usage, memory_usage
     
     # Verificar se já passou tempo suficiente desde a última verificação

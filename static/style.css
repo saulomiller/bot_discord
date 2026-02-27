@@ -1,8 +1,17 @@
+/* Modulo: agrega os arquivos CSS da interface web via imports. */
+
+/* ===== Tema e Utilitarios ===== */
 @import './css/variables.css';
 @import './css/utilities.css';
+
+/* ===== Base e Layout ===== */
 @import './css/base.css';
 @import './css/layout.css';
+
+/* ===== Componentes e Player ===== */
 @import './css/components.css';
 @import './css/player.css';
+
+/* ===== Modulos Especificos ===== */
 @import './css/soundboard.css';
 @import './css/progress.css';

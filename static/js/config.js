@@ -1,3 +1,8 @@
+// Modulo: centraliza configuracoes globais do frontend.
+
+/**
+ * Configuracoes globais usadas pelo dashboard web.
+ */
 export const CONFIG = {
     API_BASE: '/api',
     POLLING_INTERVAL: 1500,  // Reduzido de 3000ms para 1500ms para atualização mais rápida

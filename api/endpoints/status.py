@@ -1,3 +1,5 @@
+"""endpoints de status do bot, player e fila atual."""
+
 import logging
 
 from fastapi import APIRouter, HTTPException, Request

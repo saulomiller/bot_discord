@@ -1,7 +1,13 @@
+// Modulo: encapsula chamadas HTTP da interface para a API do bot.
+
 import { CONFIG } from './config.js';
 
 let apiKeyInitPromise = null;
 
+/**
+ * Inicializa e cacheia a API key usada em rotas protegidas.
+ * @returns {Promise<string|null>}
+ */
 async function initApiKey() {
     if (CONFIG.API_KEY) return CONFIG.API_KEY;
     if (apiKeyInitPromise) return apiKeyInitPromise;
@@ -24,6 +30,11 @@ async function initApiKey() {
 
 const apiKeyReady = initApiKey();
 
+/**
+ * Monta headers HTTP padrao incluindo autenticacao quando disponivel.
+ * @param {Record<string, string>} [extra={}]
+ * @returns {Record<string, string>}
+ */
 function buildAuthHeaders(extra = {}) {
     const headers = { 'Content-Type': 'application/json', ...extra };
     if (CONFIG.API_KEY) {
@@ -32,6 +43,12 @@ function buildAuthHeaders(extra = {}) {
     return headers;
 }
 
+/**
+ * Executa uma chamada HTTP e normaliza erros da API.
+ * @param {string} path
+ * @param {RequestInit} [opts={}]
+ * @returns {Promise<any>}
+ */
 export async function apiFetch(path, opts = {}) {
     try {
         const res = await fetch(path, opts);
@@ -50,12 +67,21 @@ export async function apiFetch(path, opts = {}) {
     }
 }
 
+/**
+ * Adiciona o parametro guild_id na URL quando informado.
+ * @param {string} path
+ * @param {string|null|undefined} guildId
+ * @returns {string}
+ */
 function withGuildQuery(path, guildId) {
     if (guildId === null || guildId === undefined || guildId === '') return path;
     const separator = path.includes('?') ? '&' : '?';
     return `${path}${separator}guild_id=${encodeURIComponent(guildId)}`;
 }
 
+/**
+ * Cliente de API consumido pelo dashboard web.
+ */
 export const API = {
     getGuilds: () => apiFetch(`${CONFIG.API_BASE}/guilds`),
     getStatus: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/status`, guildId)),

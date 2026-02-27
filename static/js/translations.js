@@ -1,3 +1,8 @@
+// Modulo: define os dicionarios de traducao usados na interface web.
+
+/**
+ * Dicionario de traducoes disponiveis na interface web.
+ */
 export const translations = {
     "pt": {
         "app_title": "Controlador de Bot de Música",
@@ -155,12 +160,19 @@ export const translations = {
     }
 };
 
+/**
+ * Gerencia idioma atual e aplicacao de traducoes na interface.
+ */
 export class TranslationManager {
     constructor() {
         this.currentLang = localStorage.getItem('app_language') || 'pt'; // Default to PT
         this.applyTranslations(this.currentLang);
     }
 
+    /**
+     * Define o idioma ativo e sincroniza mudanca com o backend.
+     * @param {'pt'|'en'} lang
+     */
     setLanguage(lang) {
         if (translations[lang]) {
             this.currentLang = lang;
@@ -175,6 +187,10 @@ export class TranslationManager {
         }
     }
 
+    /**
+     * Aplica os textos traduzidos em elementos com atributos data-i18n.
+     * @param {'pt'|'en'} lang
+     */
     applyTranslations(lang) {
         const t = translations[lang];
         document.querySelectorAll('[data-i18n]').forEach(element => {
@@ -215,6 +231,11 @@ export class TranslationManager {
         });
     }
 
+    /**
+     * Persiste o idioma escolhido na API.
+     * @param {'pt'|'en'} lang
+     * @returns {Promise<void>}
+     */
     async syncWithBackend(lang) {
         try {
             await fetch('/api/settings/language', {
@@ -227,6 +248,11 @@ export class TranslationManager {
         }
     }
 
+    /**
+     * Retorna a traducao de uma chave no idioma atual.
+     * @param {string} key
+     * @returns {string}
+     */
     get(key) {
         return translations[this.currentLang][key] || key;
     }

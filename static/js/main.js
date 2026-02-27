@@ -1,3 +1,5 @@
+// Modulo: orquestra o app web integrando API, UI e modulos auxiliares.
+
 import { API } from './api.js';
 import { UI } from './ui.js';
 import { AudioReactiveBackground } from './visualizer.js';
@@ -15,6 +17,11 @@ let soundboardManager; // Gerenciador de soundboard
 let translationManager; // Gerenciador de traduções
 let selectedGuildId = localStorage.getItem('selected_guild_id') || null;
 
+/**
+ * Normaliza um guild id para string numerica valida.
+ * @param {unknown} value
+ * @returns {string|null}
+ */
 function normalizeGuildId(value) {
     if (value === null || value === undefined) return null;
     const raw = String(value).trim();
@@ -22,10 +29,18 @@ function normalizeGuildId(value) {
     return raw;
 }
 
+/**
+ * Retorna o guild id selecionado no estado atual.
+ * @returns {string|null}
+ */
 function getCurrentGuildId() {
     return normalizeGuildId(selectedGuildId);
 }
 
+/**
+ * Atualiza o guild ativo e persiste em localStorage.
+ * @param {string|number|null|undefined} guildId
+ */
 function setCurrentGuildId(guildId) {
     const normalized = normalizeGuildId(guildId);
     selectedGuildId = normalized || null;
@@ -36,6 +51,12 @@ function setCurrentGuildId(guildId) {
     }
 }
 
+/**
+ * Renderiza o seletor de servidores e resolve o guild ativo.
+ * @param {Array<{id: string|number, name: string, connected?: boolean}>} guilds
+ * @param {string|number|null} [preferredGuildId=null]
+ * @returns {string|null}
+ */
 function renderGuildSelector(guilds, preferredGuildId = null) {
     const selector = document.getElementById('guild-select');
     if (!selector) return getCurrentGuildId();
@@ -80,6 +101,11 @@ function renderGuildSelector(guilds, preferredGuildId = null) {
     return getCurrentGuildId();
 }
 
+/**
+ * Recarrega a lista de servidores e sincroniza contexto da UI.
+ * @param {string|number|null} [preferredGuildId=null]
+ * @returns {Promise<string|null>}
+ */
 async function refreshGuildContext(preferredGuildId = null) {
     try {
         const data = await API.getGuilds();
@@ -99,6 +125,10 @@ async function refreshGuildContext(preferredGuildId = null) {
 
 // --- Inicialização ---
 
+/**
+ * Atualiza o estado do player e elementos da interface em polling.
+ * @returns {Promise<void>}
+ */
 async function updateStatusLoop() {
     try {
         let guildId = getCurrentGuildId();
@@ -144,6 +174,9 @@ async function updateStatusLoop() {
 }
 
 // --- Event Listeners ---
+/**
+ * Registra todos os event listeners da interface web.
+ */
 function setupEventListeners() {
     // Toggle Sidebar
     const toggleBtn = document.getElementById('sidebar-toggle');
@@ -346,6 +379,10 @@ function setupEventListeners() {
     const playInputBtn = document.getElementById('play-btn');
     const clearSearchBtn = document.getElementById('clear-search-btn');
 
+    /**
+     * Envia a busca digitada para enfileirar musica no servidor selecionado.
+     * @returns {Promise<void>}
+     */
     async function handlePlay() {
         if (!musicInput) return;
         const query = musicInput.value.trim();
@@ -397,6 +434,11 @@ function setupEventListeners() {
     const dropZone = document.getElementById('drop-zone');
     const playlistUpload = document.getElementById('playlist-upload');
 
+    /**
+     * Faz upload de um arquivo de playlist .txt para a API.
+     * @param {File} file
+     * @returns {Promise<void>}
+     */
     async function handleFileUpload(file) {
         if (!file) return;
 

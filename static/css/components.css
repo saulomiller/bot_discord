@@ -1,3 +1,5 @@
+/* Modulo: estilos de componentes compartilhados como cards, botoes e listas. */
+
 /* --- Estilo do Cartão (Widget) --- */
 .card {
     background: var(--card-bg);

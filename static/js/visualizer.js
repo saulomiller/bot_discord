@@ -1,3 +1,8 @@
+// Modulo: renderiza o background reativo ao audio no dashboard web.
+
+/**
+ * Visualizador de fundo reativo ao estado de reproducao do player.
+ */
 export class AudioReactiveBackground {
     constructor() {
         try {
@@ -21,6 +26,9 @@ export class AudioReactiveBackground {
         }
     }
 
+    /**
+     * Ajusta dimensoes do canvas e recalcula barras/particulas.
+     */
     resizeCanvas() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
@@ -239,6 +247,11 @@ export class AudioReactiveBackground {
         }
     }
 
+    /**
+     * Sincroniza estado de reproducao vindo da API com a animacao.
+     * @param {boolean} isPlaying
+     * @param {number} [volume=0.5]
+     */
     syncPlayState(isPlaying, volume = 0.5) {
         this.isPlaying = isPlaying;
         this.currentVolume = Math.max(0, Math.min(1, volume));

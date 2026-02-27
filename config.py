@@ -1,3 +1,5 @@
+"""define configuracoes globais, paths e persistencia de credenciais."""
+
 import os
 import json
 import logging

@@ -1,3 +1,5 @@
+"""endpoints para listar, adicionar, remover e tocar radios."""
+
 import logging
 import uuid
 
@@ -12,6 +14,7 @@ router = APIRouter()
 
 @router.get("/api/radios")
 async def get_radios():
+    """Retorna radios."""
     try:
         radios_data = load_radios()
         return {"status": "success", "radios": radios_data.get("radios", [])}
@@ -22,6 +25,7 @@ async def get_radios():
 
 @router.post("/api/radios/add")
 async def add_radio(request: Request, body: RadioRequest):
+    """Adiciona radio."""
     bot = request.app.state.bot
     try:
         radio_manager = load_radios()
@@ -68,6 +72,7 @@ async def add_radio(request: Request, body: RadioRequest):
 
 @router.post("/api/radios/remove")
 async def remove_radio(request: Request, body: RadioRemoveRequest):
+    """Remove radio."""
     bot = request.app.state.bot
     try:
         radio_manager = load_radios()
@@ -93,6 +98,7 @@ async def remove_radio(request: Request, body: RadioRemoveRequest):
 
 @router.post("/api/radios/play")
 async def play_radio(request: Request, body: RadioPlayRequest):
+    """Inicia reproducao de radio."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, body.guild_id)
     player = get_player_for_guild(bot, vc.guild.id)

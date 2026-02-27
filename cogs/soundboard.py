@@ -1,3 +1,5 @@
+"""implementa comandos de soundboard para tocar efeitos sonoros."""
+
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -10,9 +12,11 @@ from utils.i18n import t
 
 class SoundboardCog(commands.Cog):
     def __init__(self, bot):
+        """Inicializa a instancia da classe."""
         self.bot = bot
 
     def get_player(self, guild_id):
+        """Retorna player."""
         return get_or_create_player(self.bot, guild_id)
 
     async def sfx_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
@@ -85,4 +89,5 @@ class SoundboardCog(commands.Cog):
             )
 
 async def setup(bot):
+    """Configura recursos necessarios para inicializacao."""
     await bot.add_cog(SoundboardCog(bot))

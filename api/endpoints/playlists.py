@@ -1,3 +1,5 @@
+"""endpoints para gerenciar playlists salvas e uploads."""
+
 import base64
 import logging
 import os

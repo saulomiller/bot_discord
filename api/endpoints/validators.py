@@ -1,3 +1,5 @@
+"""validacoes e sanitizacao para payloads e nomes de recursos."""
+
 import os
 import re
 
@@ -13,6 +15,7 @@ def validate_upload_filename(
     allowed_extensions: tuple[str, ...],
     allow_space: bool = True,
 ) -> str:
+    """Valida upload filename."""
     if not filename:
         raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
 
@@ -36,11 +39,13 @@ def validate_upload_filename(
 
 
 def ensure_matching_resource_id(path_id: str, body_id: str, *, label: str) -> None:
+    """Garante matching resource id."""
     if path_id != body_id:
         raise HTTPException(status_code=400, detail=f"{label} do caminho difere do payload.")
 
 
 def validate_resource_id(value: str, *, label: str) -> str:
+    """Valida resource id."""
     if not value or not SAFE_RESOURCE_ID_RE.fullmatch(value):
         raise HTTPException(status_code=400, detail=f"{label} inválido.")
     return value

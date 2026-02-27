@@ -1,3 +1,5 @@
+"""modelos Pydantic e regras de validacao dos payloads da API."""
+
 import re
 from typing import Literal
 from urllib.parse import urlparse
@@ -25,6 +27,7 @@ class MusicRequest(ApiModel):
     @field_validator("search")
     @classmethod
     def validate_search(cls, value: str) -> str:
+        """Valida search."""
         if "\x00" in value:
             raise ValueError("Busca inválida.")
         return value
@@ -49,6 +52,7 @@ class RadioRequest(ApiModel):
     @field_validator("url")
     @classmethod
     def validate_url(cls, value: str) -> str:
+        """Valida url."""
         parsed = urlparse(value)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("URL inválida. Use http(s)://...")
@@ -57,6 +61,7 @@ class RadioRequest(ApiModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, value: str) -> str:
+        """Valida name."""
         if len(value.strip(" .-_")) < 2:
             raise ValueError("Nome da rádio inválido.")
         return value
@@ -68,6 +73,7 @@ class RadioRemoveRequest(ApiModel):
     @field_validator("radio_id")
     @classmethod
     def validate_radio_id(cls, value: str) -> str:
+        """Valida radio id."""
         return _validate_resource_id(value, field_name="radio_id")
 
 
@@ -78,6 +84,7 @@ class RadioPlayRequest(ApiModel):
     @field_validator("radio_id")
     @classmethod
     def validate_radio_id(cls, value: str) -> str:
+        """Valida radio id."""
         return _validate_resource_id(value, field_name="radio_id")
 
 
@@ -88,6 +95,7 @@ class SoundboardPlayRequest(ApiModel):
     @field_validator("sfx_id")
     @classmethod
     def validate_sfx_id(cls, value: str) -> str:
+        """Valida sfx id."""
         return _validate_resource_id(value, field_name="sfx_id")
 
 
@@ -98,6 +106,7 @@ class SoundboardFavoriteRequest(ApiModel):
     @field_validator("sfx_id")
     @classmethod
     def validate_sfx_id(cls, value: str) -> str:
+        """Valida sfx id."""
         return _validate_resource_id(value, field_name="sfx_id")
 
 
@@ -108,6 +117,7 @@ class SoundboardVolumeRequest(ApiModel):
     @field_validator("sfx_id")
     @classmethod
     def validate_sfx_id(cls, value: str) -> str:
+        """Valida sfx id."""
         return _validate_resource_id(value, field_name="sfx_id")
 
 

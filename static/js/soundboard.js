@@ -1,4 +1,9 @@
+// Modulo: gerencia soundboard no frontend, incluindo listagem e acoes.
+
 // soundboard.js - Gerenciador de Soundboard
+/**
+ * Servico de UI para gerenciamento de efeitos da soundboard.
+ */
 export class SoundboardManager {
     constructor(api, ui, updateCallback, translationManager) {
         this.api = api;
@@ -9,12 +14,21 @@ export class SoundboardManager {
         this.currentGuildId = null;
     }
 
+    /**
+     * Inicializa o modulo com o servidor ativo e listeners de tela.
+     * @param {string|null} guildId
+     * @returns {Promise<void>}
+     */
     async init(guildId) {
         this.currentGuildId = guildId;
         await this.loadSoundboard();
         this.setupEventListeners();
     }
 
+    /**
+     * Carrega os efeitos cadastrados e atualiza a grade visual.
+     * @returns {Promise<void>}
+     */
     async loadSoundboard() {
         try {
             const data = await this.api.getSoundboard();
@@ -191,6 +205,10 @@ export class SoundboardManager {
         }
     }
 
+    /**
+     * Envia um novo efeito sonoro para upload.
+     * @returns {Promise<void>}
+     */
     async uploadSFX() {
         const fileInput = document.getElementById('sfx-file');
         const file = fileInput.files[0];
@@ -215,6 +233,11 @@ export class SoundboardManager {
         }
     }
 
+    /**
+     * Reproduz um efeito localmente no navegador para pre-escuta.
+     * @param {string} sfxId
+     * @returns {Promise<void>}
+     */
     async testSFX(sfxId) {
         // Tocar localmente no navegador
         try {
@@ -233,6 +256,11 @@ export class SoundboardManager {
         }
     }
 
+    /**
+     * Solicita reproducao do efeito no Discord.
+     * @param {string} sfxId
+     * @returns {Promise<void>}
+     */
     async playSFX(sfxId) {
         // Tocar no Discord
         if (!this.currentGuildId) {
@@ -252,6 +280,11 @@ export class SoundboardManager {
         }
     }
 
+    /**
+     * Remove um efeito cadastrado apos confirmacao.
+     * @param {string} sfxId
+     * @returns {Promise<void>}
+     */
     async deleteSFX(sfxId) {
         const confirmMsg = this.tm ? this.tm.get('sfx_delete_confirm').replace('{name}', sfxId) : `Deletar "${sfxId}"?`;
         if (!confirm(confirmMsg)) return;
@@ -266,6 +299,12 @@ export class SoundboardManager {
         }
     }
 
+    /**
+     * Marca ou desmarca um efeito como favorito.
+     * @param {string} sfxId
+     * @param {boolean} favorite
+     * @returns {Promise<void>}
+     */
     async toggleFavorite(sfxId, favorite) {
         try {
             await this.api.toggleFavoriteSoundboard(sfxId, favorite);
@@ -276,6 +315,12 @@ export class SoundboardManager {
         }
     }
 
+    /**
+     * Persiste o volume padrao de um efeito sonoro.
+     * @param {string} sfxId
+     * @param {number} volume
+     * @returns {Promise<void>}
+     */
     async updateVolume(sfxId, volume) {
         try {
             await this.api.updateVolumeSoundboard(sfxId, volume);

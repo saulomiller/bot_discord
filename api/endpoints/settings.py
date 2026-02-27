@@ -1,3 +1,5 @@
+"""endpoints de configuracao como token, idioma e inicializacao."""
+
 import asyncio
 import logging
 import os
@@ -42,6 +44,7 @@ async def set_token(request: Request, body: dict = Body(...), _: str = Depends(r
 
 @router.post("/api/restart")
 async def restart_bot(request: Request, _: str = Depends(require_api_key)):
+    """Reinicia bot."""
     bot = request.app.state.bot
     try:
         logging.info("Reiniciando bot via API...")
@@ -54,11 +57,13 @@ async def restart_bot(request: Request, _: str = Depends(require_api_key)):
 
 @router.get("/api/settings/language")
 async def get_language():
+    """Retorna language."""
     return {"language": I18n.get_instance().language}
 
 
 @router.post("/api/settings/language")
 async def set_language(request: LanguageRequest):
+    """Define language."""
     success = I18n.get_instance().save_language(request.language)
     if success:
         return {"status": "success", "message": f"Idioma alterado para {request.language}"}
@@ -67,6 +72,7 @@ async def set_language(request: LanguageRequest):
 
 @router.post("/api/shutdown")
 async def shutdown(request: Request, _: str = Depends(require_api_key)):
+    """Executa a rotina de shutdown."""
     bot = request.app.state.bot
     asyncio.ensure_future(bot.close())
     return {"status": "success", "message": "Bot desligando..."}
@@ -74,6 +80,7 @@ async def shutdown(request: Request, _: str = Depends(require_api_key)):
 
 @router.post("/api/startup")
 async def startup(request: Request, body: dict = Body(default={}), _: str = Depends(require_api_key)):
+    """Executa a rotina de startup."""
     bot = request.app.state.bot
     token = body.get("token") or os.getenv("DISCORD_TOKEN")
     if not token:

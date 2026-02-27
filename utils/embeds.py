@@ -1,3 +1,5 @@
+"""centraliza a montagem de embeds e feedback visual do bot."""
+
 import logging
 import discord
 from utils.i18n import t

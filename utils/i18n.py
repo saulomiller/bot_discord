@@ -1,3 +1,5 @@
+"""gerencia traducoes e persistencia de idioma da aplicacao."""
+
 import json
 import os
 import logging
@@ -145,11 +147,13 @@ class I18n:
 
     @classmethod
     def get_instance(cls):
+        """Obtem in tance."""
         if cls._instance is None:
             cls._instance = I18n()
         return cls._instance
 
     def __init__(self):
+        """Inicializa a instancia da classe."""
         self.load_language()
 
     def load_language(self):
@@ -181,6 +185,7 @@ class I18n:
 
     @property
     def language(self):
+        """Executa a rotina de language."""
         return self._language
 
     def get(self, key, **kwargs):
@@ -196,4 +201,5 @@ class I18n:
 
 # Helper function global
 def t(key, **kwargs):
+    """Executa a rotina de t."""
     return I18n.get_instance().get(key, **kwargs)

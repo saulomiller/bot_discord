@@ -1,3 +1,5 @@
+"""endpoints de soundboard para listar, uploadar e reproduzir SFX."""
+
 import logging
 import os
 import time
@@ -30,6 +32,7 @@ MAX_SFX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 @router.get("/api/soundboard")
 async def get_soundboard():
+    """Retorna soundboard."""
     try:
         if not os.path.exists(SOUNDBOARD_DIR):
             os.makedirs(SOUNDBOARD_DIR)
@@ -59,6 +62,7 @@ async def get_soundboard():
 
 @router.get("/api/soundboard/file/{filename}")
 async def get_soundboard_file(filename: str):
+    """Retorna soundboard file."""
     try:
         safe_filename = validate_upload_filename(
             filename,
@@ -78,6 +82,7 @@ async def get_soundboard_file(filename: str):
 
 @router.post("/api/soundboard/play")
 async def play_soundboard(request: Request, body: SoundboardPlayRequest):
+    """Inicia reproducao de soundboard."""
     bot = request.app.state.bot
     voice_client = get_voice_client(bot, body.guild_id)
     if not voice_client:
@@ -107,6 +112,7 @@ async def play_soundboard(request: Request, body: SoundboardPlayRequest):
 
 @router.post("/api/soundboard/upload")
 async def upload_soundboard_file(file: UploadFile = File(...)):
+    """Faz upload de soundboard file."""
     try:
         if not os.path.exists(SOUNDBOARD_DIR):
             os.makedirs(SOUNDBOARD_DIR)
@@ -143,6 +149,7 @@ async def upload_soundboard_file(file: UploadFile = File(...)):
 
 @router.delete("/api/soundboard/{sfx_id}")
 async def delete_soundboard(sfx_id: str):
+    """Remove soundboard."""
     try:
         safe_sfx_id = validate_resource_id(sfx_id, label="sfx_id")
         deleted = False
@@ -183,6 +190,7 @@ async def delete_soundboard(sfx_id: str):
 
 @router.patch("/api/soundboard/{sfx_id}/favorite")
 async def toggle_favorite_soundboard(sfx_id: str, body: SoundboardFavoriteRequest):
+    """Alterna favorite soundboard."""
     try:
         safe_sfx_id = validate_resource_id(sfx_id, label="sfx_id")
         ensure_matching_resource_id(safe_sfx_id, body.sfx_id, label="sfx_id")
@@ -196,6 +204,7 @@ async def toggle_favorite_soundboard(sfx_id: str, body: SoundboardFavoriteReques
 
 @router.patch("/api/soundboard/{sfx_id}/volume")
 async def volume_soundboard(sfx_id: str, body: SoundboardVolumeRequest):
+    """Executa a rotina de volume soundboard."""
     try:
         safe_sfx_id = validate_resource_id(sfx_id, label="sfx_id")
         ensure_matching_resource_id(safe_sfx_id, body.sfx_id, label="sfx_id")

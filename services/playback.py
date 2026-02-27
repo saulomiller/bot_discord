@@ -1,3 +1,5 @@
+"""regras de dominio para enfileirar buscas e manipular playlists."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -13,6 +15,7 @@ PLAYLIST_INDICATORS = (
 
 
 def is_playlist_query(search: str) -> bool:
+    """Verifica se playlist query."""
     if not search:
         return False
     if not search.startswith(("http://", "https://")):
@@ -22,6 +25,7 @@ def is_playlist_query(search: str) -> bool:
 
 
 def get_or_create_player(bot: Any, guild_id: int):
+    """Retorna or create player."""
     if guild_id in bot.players:
         return bot.players[guild_id]
 
@@ -32,6 +36,7 @@ def get_or_create_player(bot: Any, guild_id: int):
 
 
 async def enqueue_search(player: Any, search: str, user: Any, voice_client: Any = None) -> dict:
+    """Enfileira search."""
     is_playlist = is_playlist_query(search)
     if is_playlist:
         song = await player.add_playlist_async(search, user)
@@ -45,6 +50,7 @@ async def enqueue_search(player: Any, search: str, user: Any, voice_client: Any 
 
 
 def remove_playlist_entries(player: Any, *, include_lazy: bool, skip_current: bool) -> tuple[int, bool]:
+    """Remove playlist entries."""
     skipped_current = False
     if skip_current and isinstance(player.current_song, dict):
         current_is_playlist = player.current_song.get("channel") == "Playlist"

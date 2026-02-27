@@ -1,4 +1,9 @@
+// Modulo: gerencia radios no frontend, incluindo CRUD e reproducao.
+
 // radios.js - Gerenciador de Rádios
+/**
+ * Servico de UI para gerenciamento de radios no dashboard.
+ */
 export class RadioManager {
     constructor(api, ui, updateCallback, translationManager, getGuildId) {
         this.api = api;
@@ -9,11 +14,19 @@ export class RadioManager {
         this.radios = [];
     }
 
+    /**
+     * Inicializa o modulo de radios, carregando dados e listeners.
+     * @returns {Promise<void>}
+     */
     async init() {
         await this.loadRadios();
         this.setupEventListeners();
     }
 
+    /**
+     * Carrega radios cadastradas a partir da API e renderiza a lista.
+     * @returns {Promise<void>}
+     */
     async loadRadios() {
         try {
             const data = await this.api.getRadios();
@@ -101,6 +114,10 @@ export class RadioManager {
         }
     }
 
+    /**
+     * Envia os dados do formulario para criar uma nova radio.
+     * @returns {Promise<void>}
+     */
     async addRadio() {
         const name = document.getElementById('radio-name').value;
         const url = document.getElementById('radio-url').value;
@@ -119,6 +136,11 @@ export class RadioManager {
         }
     }
 
+    /**
+     * Solicita reproducao de uma radio no servidor selecionado.
+     * @param {string} radioId
+     * @returns {Promise<void>}
+     */
     async playRadio(radioId) {
         const guildId = this.getGuildId ? this.getGuildId() : null;
         if (!guildId) {
@@ -139,6 +161,11 @@ export class RadioManager {
         }
     }
 
+    /**
+     * Remove uma radio customizada apos confirmacao do usuario.
+     * @param {string} radioId
+     * @returns {Promise<void>}
+     */
     async deleteRadio(radioId) {
         const confirmMsg = this.tm ? this.tm.get('radio_delete_confirm') : 'Deletar esta rádio?';
         if (!confirm(confirmMsg)) return;

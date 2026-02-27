@@ -1,6 +1,15 @@
+// Modulo: controla componentes e interacoes de interface do dashboard.
+
+/**
+ * API de UI compartilhada para atualizar elementos do dashboard.
+ */
 export const UI = {
     tm: null,
 
+    /**
+     * Define o gerenciador de traducao usado pelos textos dinamicos.
+     * @param {{ get: (key: string) => string } | null} tm
+     */
     setTranslationManager(tm) {
         this.tm = tm;
     },
@@ -31,6 +40,11 @@ export const UI = {
         }
     },
 
+    /**
+     * Exibe uma notificacao temporaria no topo da tela.
+     * @param {string} message
+     * @param {'info'|'success'|'error'} [type='info']
+     */
     showToast(message, type = 'info') {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
@@ -68,6 +82,11 @@ export const UI = {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     },
 
+    /**
+     * Atualiza status, player, progresso e fila com dados da API.
+     * @param {any} data
+     * @param {boolean} isPaused
+     */
     updateStatus(data, isPaused) {
         const { statusInfo, player, queue, progress } = this.elements;
         const ready = !!data.is_ready;
@@ -168,12 +187,20 @@ export const UI = {
         }
     },
 
+    /**
+     * Atualiza o slider de volume sem enviar requisicao para a API.
+     * @param {number} vol
+     */
     setVolumeVisual(vol) {
         if (this.elements.player.volumeSlider) {
             this.elements.player.volumeSlider.value = vol;
         }
     },
 
+    /**
+     * Renderiza a lista de playlists salvas no painel.
+     * @param {string[]} playlists
+     */
     updatePlaylistList(playlists) {
         const listEl = document.getElementById('playlist-history-list');
         if (!listEl) return;
