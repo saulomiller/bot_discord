@@ -8,6 +8,10 @@ export const translations = {
         "token_placeholder": "Cole o token...",
         "save_token": "Salvar Token",
         "bot_control": "Controle do Bot",
+        "server_label": "Servidor",
+        "server_none": "Sem servidor",
+        "server_connected_tag": "conectado",
+        "server_idle_tag": "offline",
         "btn_start": "Iniciar",
         "btn_restart": "Reiniciar",
         "btn_shutdown": "Desligar",
@@ -81,6 +85,10 @@ export const translations = {
         "token_placeholder": "Paste token...",
         "save_token": "Save Token",
         "bot_control": "Bot Control",
+        "server_label": "Server",
+        "server_none": "No server",
+        "server_connected_tag": "connected",
+        "server_idle_tag": "offline",
         "btn_start": "Start",
         "btn_restart": "Restart",
         "btn_shutdown": "Shutdown",
@@ -196,6 +204,13 @@ export class TranslationManager {
                         element.textContent = t[key];
                     }
                 }
+            }
+        });
+
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
+            const key = element.getAttribute('data-i18n-placeholder');
+            if (t[key]) {
+                element.setAttribute('placeholder', t[key]);
             }
         });
     }

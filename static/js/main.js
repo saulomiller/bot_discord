@@ -13,12 +13,98 @@ let liquidBg; // Inicializar depois
 let radioManager; // Gerenciador de rádios
 let soundboardManager; // Gerenciador de soundboard
 let translationManager; // Gerenciador de traduções
+let selectedGuildId = localStorage.getItem('selected_guild_id') || null;
+
+function normalizeGuildId(value) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function getCurrentGuildId() {
+    return normalizeGuildId(selectedGuildId);
+}
+
+function setCurrentGuildId(guildId) {
+    const normalized = normalizeGuildId(guildId);
+    selectedGuildId = normalized ? String(normalized) : null;
+    if (selectedGuildId) {
+        localStorage.setItem('selected_guild_id', selectedGuildId);
+    } else {
+        localStorage.removeItem('selected_guild_id');
+    }
+}
+
+function renderGuildSelector(guilds, preferredGuildId = null) {
+    const selector = document.getElementById('guild-select');
+    if (!selector) return getCurrentGuildId();
+
+    const guildList = Array.isArray(guilds) ? guilds : [];
+    const knownIds = new Set(guildList.map(g => normalizeGuildId(g.id)).filter(Boolean));
+    const current = getCurrentGuildId();
+    const validCurrent = current && knownIds.has(current) ? current : null;
+    const normalizedPreferred = normalizeGuildId(preferredGuildId);
+    const validPreferred = normalizedPreferred && knownIds.has(normalizedPreferred) ? normalizedPreferred : null;
+    const fallbackConnected = guildList.find(g => g.connected)?.id ?? null;
+    const fallbackFirst = guildList.length ? guildList[0].id : null;
+    const nextGuildId = validPreferred || validCurrent || fallbackConnected || fallbackFirst;
+
+    setCurrentGuildId(nextGuildId);
+
+    selector.innerHTML = '';
+    if (!guildList.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = translationManager ? translationManager.get('server_none') : 'Sem servidor';
+        selector.appendChild(option);
+        selector.disabled = true;
+        return null;
+    }
+
+    guildList.forEach(guild => {
+        const option = document.createElement('option');
+        option.value = String(guild.id);
+        const connectedTag = guild.connected
+            ? (translationManager ? translationManager.get('server_connected_tag') : 'conectado')
+            : (translationManager ? translationManager.get('server_idle_tag') : 'offline');
+        option.textContent = `${guild.name} (${connectedTag})`;
+        selector.appendChild(option);
+    });
+
+    selector.disabled = false;
+    if (selectedGuildId) {
+        selector.value = selectedGuildId;
+    }
+
+    return getCurrentGuildId();
+}
+
+async function refreshGuildContext(preferredGuildId = null) {
+    try {
+        const data = await API.getGuilds();
+        const guilds = data.guilds || [];
+        const activeGuildId = normalizeGuildId(preferredGuildId) || normalizeGuildId(data.active_guild_id);
+        const resolvedGuildId = renderGuildSelector(guilds, activeGuildId);
+        if (soundboardManager) {
+            soundboardManager.currentGuildId = resolvedGuildId;
+        }
+        return resolvedGuildId;
+    } catch (error) {
+        console.warn('Falha ao carregar servidores:', error);
+        renderGuildSelector([], null);
+        return null;
+    }
+}
 
 // --- Inicialização ---
 
 async function updateStatusLoop() {
     try {
-        const data = await API.getStatus();
+        let guildId = getCurrentGuildId();
+        if (!guildId) {
+            guildId = await refreshGuildContext();
+        }
+
+        const data = await API.getStatus(guildId);
         isPaused = !!data.is_paused;
 
         UI.updateStatus(data, isPaused);
@@ -38,9 +124,17 @@ async function updateStatusLoop() {
             UI.setVolumeVisual(data.volume);
         }
 
-        // Atualizar Guild ID do soundboard se disponível
-        if (soundboardManager && data.guild_id) {
-            soundboardManager.currentGuildId = data.guild_id;
+        // Sincronizar guild ativa com resposta do backend sem sobrescrever a lista.
+        if (data.guild_id && normalizeGuildId(data.guild_id) !== getCurrentGuildId()) {
+            setCurrentGuildId(data.guild_id);
+            const selector = document.getElementById('guild-select');
+            if (selector) {
+                selector.value = String(data.guild_id);
+            }
+        }
+
+        if (soundboardManager) {
+            soundboardManager.currentGuildId = getCurrentGuildId() || data.guild_id || null;
         }
     } catch (err) {
         console.warn('Connection lost', err);
@@ -57,6 +151,17 @@ function setupEventListeners() {
     if (toggleBtn) toggleBtn.addEventListener('click', () => UI.toggleSidebar());
     if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', () => UI.toggleSidebar());
     if (overlay) overlay.addEventListener('click', () => UI.toggleSidebar());
+
+    const guildSelect = document.getElementById('guild-select');
+    if (guildSelect) {
+        guildSelect.addEventListener('change', async (e) => {
+            setCurrentGuildId(e.target.value);
+            if (soundboardManager) {
+                soundboardManager.currentGuildId = getCurrentGuildId();
+            }
+            await updateStatusLoop();
+        });
+    }
 
     // Language Selector (Novo Design com Botões)
     const langBtns = document.querySelectorAll('.lang-btn');
@@ -146,13 +251,19 @@ function setupEventListeners() {
     const playPauseBtn = document.getElementById('pause-resume-btn');
     if (playPauseBtn) {
         playPauseBtn.addEventListener('click', async () => {
+            const guildId = getCurrentGuildId();
+            if (!guildId) {
+                UI.showToast(translationManager ? translationManager.get('guild_id_error') : 'Guild ID não configurado', 'error');
+                return;
+            }
+
             try {
                 if (isPaused) {
-                    await API.resume();
+                    await API.resume(guildId);
                     UI.showToast('Retomado', 'success');
                     isPaused = false;
                 } else {
-                    await API.pause();
+                    await API.pause(guildId);
                     UI.showToast('Pausado', 'info');
                     isPaused = true;
                 }
@@ -176,8 +287,13 @@ function setupEventListeners() {
     const skipBtn = document.getElementById('skip-btn');
     if (skipBtn) {
         skipBtn.addEventListener('click', async () => {
+            const guildId = getCurrentGuildId();
+            if (!guildId) {
+                UI.showToast(translationManager ? translationManager.get('guild_id_error') : 'Guild ID não configurado', 'error');
+                return;
+            }
             try {
-                await API.skip();
+                await API.skip(guildId);
                 UI.showToast(translationManager.get('skip_toast'), 'success');
                 setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
@@ -190,9 +306,14 @@ function setupEventListeners() {
     if (skipPlaylistBtn) {
         skipPlaylistBtn.addEventListener('click', async () => {
             if (!confirm('Deseja remover as músicas da playlist da fila?')) return;
+            const guildId = getCurrentGuildId();
+            if (!guildId) {
+                UI.showToast(translationManager ? translationManager.get('guild_id_error') : 'Guild ID não configurado', 'error');
+                return;
+            }
 
             try {
-                const res = await API.removePlaylist();
+                const res = await API.removePlaylist(guildId);
                 UI.showToast(res.message || 'Playlist removida da fila', 'success');
                 setTimeout(() => updateStatusLoop(), 300);
             } catch (e) {
@@ -227,9 +348,14 @@ function setupEventListeners() {
         if (!musicInput) return;
         const query = musicInput.value.trim();
         if (!query) return;
+        const guildId = getCurrentGuildId();
+        if (!guildId) {
+            UI.showToast(translationManager ? translationManager.get('guild_id_error') : 'Guild ID não configurado', 'error');
+            return;
+        }
 
         try {
-            await API.play(query);
+            await API.play(query, guildId);
             UI.showToast(translationManager.get('added_to_queue_toast'), 'success');
             musicInput.value = '';
             if (clearSearchBtn) clearSearchBtn.style.display = 'none';
@@ -334,8 +460,13 @@ function setupEventListeners() {
         volumeSlider.addEventListener('mouseup', async () => {
             isDraggingVolume = false;
             const vol = parseFloat(volumeSlider.value);
+            const guildId = getCurrentGuildId();
+            if (!guildId) {
+                UI.showToast(translationManager ? translationManager.get('guild_id_error') : 'Guild ID não configurado', 'error');
+                return;
+            }
             try {
-                await API.setVolume(vol);
+                await API.setVolume(vol, guildId);
             } catch (e) {
                 UI.showToast(e.message, 'error');
             }
@@ -344,17 +475,26 @@ function setupEventListeners() {
         volumeSlider.addEventListener('touchend', async () => {
             isDraggingVolume = false;
             const vol = parseFloat(volumeSlider.value);
+            const guildId = getCurrentGuildId();
+            if (!guildId) {
+                UI.showToast(translationManager ? translationManager.get('guild_id_error') : 'Guild ID não configurado', 'error');
+                return;
+            }
             try {
-                await API.setVolume(vol);
+                await API.setVolume(vol, guildId);
             } catch (e) {
                 UI.showToast(e.message, 'error');
             }
         });
     }
+
+    document.addEventListener('languageChanged', () => {
+        refreshGuildContext(getCurrentGuildId()).catch(() => { });
+    });
 }
 
 // Início
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     // 1. Inicializar traduções imediatamente
     try {
         translationManager = new TranslationManager();
@@ -374,8 +514,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. Setup UI e Handlers
     setupEventListeners();
-    updateStatusLoop();
+    await refreshGuildContext();
+    await updateStatusLoop();
     setInterval(updateStatusLoop, CONFIG.POLLING_INTERVAL);
+    setInterval(() => {
+        refreshGuildContext().catch(() => { });
+    }, 5000);
 
     // Carregar lista de playlists
     API.getPlaylists().then(data => {
@@ -388,7 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Inicializar gerenciador de rádios
     try {
-        radioManager = new RadioManager(API, UI, updateStatusLoop, translationManager);
+        radioManager = new RadioManager(API, UI, updateStatusLoop, translationManager, getCurrentGuildId);
         radioManager.init();
         console.log('RadioManager initialized');
     } catch (e) {
@@ -398,8 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inicializar gerenciador de soundboard
     try {
         soundboardManager = new SoundboardManager(API, UI, updateStatusLoop, translationManager);
-        // Guild ID padrão - será atualizado dinamicamente via /api/status
-        soundboardManager.init(0);
+        soundboardManager.init(getCurrentGuildId());
         console.log('SoundboardManager initialized');
     } catch (e) {
         console.error('SoundboardManager init failed:', e);

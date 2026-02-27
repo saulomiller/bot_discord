@@ -1,10 +1,11 @@
 // radios.js - Gerenciador de Rádios
 export class RadioManager {
-    constructor(api, ui, updateCallback, translationManager) {
+    constructor(api, ui, updateCallback, translationManager, getGuildId) {
         this.api = api;
         this.ui = ui;
         this.updateCallback = updateCallback;
         this.tm = translationManager;
+        this.getGuildId = getGuildId;
         this.radios = [];
     }
 
@@ -119,8 +120,14 @@ export class RadioManager {
     }
 
     async playRadio(radioId) {
+        const guildId = this.getGuildId ? this.getGuildId() : null;
+        if (!guildId) {
+            this.ui.showToast(this.tm ? this.tm.get('guild_id_error') : 'Guild ID não configurado', 'error');
+            return;
+        }
+
         try {
-            await this.api.playRadio(radioId);
+            await this.api.playRadio(radioId, guildId);
             this.ui.showToast(this.tm ? this.tm.get('radio_playing_toast') : `Tocando rádio...`, 'success');
             // Atualizar imediatamente após tocar rádio
             if (this.updateCallback) {

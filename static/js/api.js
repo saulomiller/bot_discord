@@ -1,22 +1,29 @@
 import { CONFIG } from './config.js';
 
-// --- Buscar API Key do backend (apenas clientes locais recebem) ---
+let apiKeyInitPromise = null;
+
 async function initApiKey() {
-    try {
-        const res = await fetch('/api/get_api_key');
-        if (res.ok) {
-            const data = await res.json();
-            CONFIG.API_KEY = data.api_key;
+    if (CONFIG.API_KEY) return CONFIG.API_KEY;
+    if (apiKeyInitPromise) return apiKeyInitPromise;
+
+    apiKeyInitPromise = (async () => {
+        try {
+            const res = await fetch('/api/get_api_key');
+            if (res.ok) {
+                const data = await res.json();
+                CONFIG.API_KEY = data.api_key;
+            }
+        } catch (e) {
+            console.warn('Não foi possível obter a API Key. Rotas protegidas podem falhar.', e);
         }
-    } catch (e) {
-        console.warn('Não foi possível obter a API Key. Rotas protegidas podem falhar.', e);
-    }
+        return CONFIG.API_KEY;
+    })();
+
+    return apiKeyInitPromise;
 }
 
-// Inicializar a key assim que o módulo carrega
-initApiKey();
+const apiKeyReady = initApiKey();
 
-// --- Helper para headers autenticados ---
 function buildAuthHeaders(extra = {}) {
     const headers = { 'Content-Type': 'application/json', ...extra };
     if (CONFIG.API_KEY) {
@@ -43,41 +50,62 @@ export async function apiFetch(path, opts = {}) {
     }
 }
 
+function withGuildQuery(path, guildId) {
+    if (guildId === null || guildId === undefined || guildId === '') return path;
+    const separator = path.includes('?') ? '&' : '?';
+    return `${path}${separator}guild_id=${encodeURIComponent(guildId)}`;
+}
+
 export const API = {
-    getStatus: () => apiFetch(`${CONFIG.API_BASE}/status`),
-    play: (search) => apiFetch(`${CONFIG.API_BASE}/play`, {
+    getGuilds: () => apiFetch(`${CONFIG.API_BASE}/guilds`),
+    getStatus: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/status`, guildId)),
+    play: (search, guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/play`, guildId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ search })
     }),
-    pause: () => apiFetch(`${CONFIG.API_BASE}/pause`, { method: 'POST' }),
-    resume: () => apiFetch(`${CONFIG.API_BASE}/resume`, { method: 'POST' }),
-    skip: () => apiFetch(`${CONFIG.API_BASE}/skip`, { method: 'POST' }),
-    removePlaylist: () => apiFetch(`${CONFIG.API_BASE}/removeplaylist`, { method: 'POST' }),
-    setVolume: (level) => apiFetch(`${CONFIG.API_BASE}/volume`, {
+    pause: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/pause`, guildId), { method: 'POST' }),
+    resume: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/resume`, guildId), { method: 'POST' }),
+    skip: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/skip`, guildId), { method: 'POST' }),
+    removePlaylist: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/removeplaylist`, guildId), { method: 'POST' }),
+    setVolume: (level, guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/volume`, guildId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level })
     }),
-    // --- Rotas protegidas (requerem X-API-Key) ---
-    setToken: (token) => apiFetch(`${CONFIG.API_BASE}/set_token`, {
-        method: 'POST',
-        headers: buildAuthHeaders(),
-        body: JSON.stringify({ token })
-    }),
-    startup: (token) => apiFetch(`${CONFIG.API_BASE}/startup`, {
-        method: 'POST',
-        headers: buildAuthHeaders(),
-        body: JSON.stringify({ token })
-    }),
-    restart: () => apiFetch(`${CONFIG.API_BASE}/restart`, {
-        method: 'POST',
-        headers: buildAuthHeaders()
-    }),
-    shutdown: () => apiFetch(`${CONFIG.API_BASE}/shutdown`, {
-        method: 'POST',
-        headers: buildAuthHeaders()
-    }),
+
+    // Protected routes (require X-API-Key)
+    setToken: async (token) => {
+        await apiKeyReady;
+        return apiFetch(`${CONFIG.API_BASE}/set_token`, {
+            method: 'POST',
+            headers: buildAuthHeaders(),
+            body: JSON.stringify({ token })
+        });
+    },
+    startup: async (token) => {
+        await apiKeyReady;
+        return apiFetch(`${CONFIG.API_BASE}/startup`, {
+            method: 'POST',
+            headers: buildAuthHeaders(),
+            body: JSON.stringify({ token })
+        });
+    },
+    restart: async () => {
+        await apiKeyReady;
+        return apiFetch(`${CONFIG.API_BASE}/restart`, {
+            method: 'POST',
+            headers: buildAuthHeaders()
+        });
+    },
+    shutdown: async () => {
+        await apiKeyReady;
+        return apiFetch(`${CONFIG.API_BASE}/shutdown`, {
+            method: 'POST',
+            headers: buildAuthHeaders()
+        });
+    },
+
     uploadPlaylist: async (file) => {
         const reader = new FileReader();
         return new Promise((resolve, reject) => {
@@ -88,8 +116,9 @@ export const API = {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            file: btoa(unescape(encodeURIComponent(content))),
-                            filename: file.name
+                            file: content,
+                            filename: file.name,
+                            encoding: 'plain'
                         })
                     });
                     resolve(res);
@@ -115,10 +144,13 @@ export const API = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ radio_id: radioId })
     }),
-    playRadio: (radioId) => apiFetch(`${CONFIG.API_BASE}/radios/play`, {
+    playRadio: (radioId, guildId = null) => apiFetch(`${CONFIG.API_BASE}/radios/play`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ radio_id: radioId })
+        body: JSON.stringify({
+            radio_id: radioId,
+            ...(guildId !== null && guildId !== undefined && guildId !== '' ? { guild_id: Number(guildId) } : {}),
+        })
     }),
 
     // Soundboard Management
@@ -154,7 +186,6 @@ export const API = {
     })
 };
 
-// Provide default export and also attach to window for non-module consumers
 export default API;
 if (typeof window !== 'undefined' && !window.API) {
     window.API = API;

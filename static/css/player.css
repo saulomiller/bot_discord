@@ -66,6 +66,46 @@
     justify-content: center;
 }
 
+.volume-control {
+    margin-top: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.volume-control i {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+#volume-slider {
+    width: min(260px, 70vw);
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+    appearance: none;
+}
+
+#volume-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: pointer;
+}
+
+#volume-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    border: none;
+    cursor: pointer;
+}
+
 /* --- Cartão da Fila --- */
 .card-queue {
     min-height: 300px;

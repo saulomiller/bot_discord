@@ -22,8 +22,8 @@ export class SoundboardManager {
             this.render();
         } catch (error) {
             console.error('Erro ao carregar soundboard:', error);
-            const errBtn = this.tm ? this.tm.get('error') : 'Erro';
-            this.ui.showToast(errBtn, 'error');
+            const errMsg = error?.message || 'Erro ao carregar soundboard';
+            this.ui.showToast(errMsg, 'error');
         }
     }
 
@@ -221,7 +221,7 @@ export class SoundboardManager {
             // Buscar o SFX da lista local para obter a extensão correta
             const sfx = this.soundboard.find(s => s.id === sfxId);
             const filename = sfx && sfx.filename ? sfx.filename : `${sfxId}.mp3`;
-            const audio = new Audio(`/data/soundboard/${filename}`);
+            const audio = new Audio(`/api/soundboard/file/${encodeURIComponent(filename)}`);
             audio.play().catch(err => {
                 console.error('Erro ao testar áudio:', err);
                 const errMsg = this.tm ? this.tm.get('sfx_test_error_toast') : 'Erro ao reproduzir áudio';

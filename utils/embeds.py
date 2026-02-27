@@ -63,22 +63,27 @@ class EmbedBuilder:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def create_progress_bar(current_seconds: float, total_seconds: float, bar_length: int = 14) -> str:
-        """Cria uma barra de progresso visual estilo Spotify."""
+    def create_progress_bar(current_seconds: float, total_seconds: float, bar_length: int = 18) -> str:
+        """Cria barra de progresso com caracteres ASCII para evitar problemas de encoding."""
+        bar_length = max(6, int(bar_length))
         current_time = EmbedBuilder._format_time(current_seconds)
 
         if total_seconds <= 0:
-            # Duração desconhecida / stream ao vivo
-            return f"`{'▱' * bar_length}`  **{current_time}** / ??:??"
+            return f"`{'-' * bar_length}`  **{current_time}** / ??:??"
 
         percent = max(0.0, min(1.0, current_seconds / total_seconds))
         total_time = EmbedBuilder._format_time(total_seconds)
+        cursor_pos = min(bar_length - 1, int(round(percent * (bar_length - 1))))
 
-        if percent >= 1.0:
-            bar = "▰" * bar_length
-        else:
-            filled = int(percent * (bar_length - 1))
-            bar = "▰" * filled + "●" + "▱" * (bar_length - filled - 1)
+        bar_chars = []
+        for i in range(bar_length):
+            if i < cursor_pos:
+                bar_chars.append("=")
+            elif i == cursor_pos:
+                bar_chars.append("o")
+            else:
+                bar_chars.append("-")
+        bar = "".join(bar_chars)
 
         return f"`{bar}`  **{current_time}** / {total_time}"
 
@@ -96,49 +101,25 @@ class EmbedBuilder:
         dominant_color=None,
     ) -> discord.Embed:
         """
-        Cria embed compacto para música tocando.
+        Cria embed compacto para musica tocando.
 
         Args:
-            song_info: Dicionário com dados da música.
-            queue_list: Lista de músicas na fila (opcional).
-            current_seconds: Posição atual em segundos.
-            total_seconds: Duração total em segundos.
-            color: Cor explícita (sobrescreve dominant_color).
-            dominant_color: Cor dominante extraída da thumbnail (tuple RGB).
+            song_info: Dicionario com dados da musica.
+            queue_list: Lista de musicas na fila (opcional).
+            current_seconds: Posicao atual em segundos.
+            total_seconds: Duracao total em segundos.
+            color: Cor explicita (sobrescreve dominant_color).
+            dominant_color: Cor dominante extraida da thumbnail (tuple RGB).
         """
         if queue_list is None:
             queue_list = []
 
-        title   = song_info.get('title',   t('unknown'))
+        title = song_info.get('title', t('unknown'))
         channel = song_info.get('channel', t('unknown'))
-        author  = song_info.get('user') or song_info.get('author')
+        author = song_info.get('user') or song_info.get('author')
+        thumbnail_url = song_info.get('thumbnail')
 
-        # Descrição principal
-        description = f"🎵 **{title}**\n🎤 {channel}"
-        if author and hasattr(author, 'mention'):
-            description += f" • 👤 {author.mention}"
-        elif author and str(author) not in ('None', '?', ''):
-            description += f" • 👤 {author}"
-
-        # Barra de progresso
-        progress_bar = EmbedBuilder.create_progress_bar(current_seconds, total_seconds)
-        description += f"\n\n{progress_bar}"
-
-        # Fila (próximas músicas)
-        queue_length = len(queue_list)
-        if queue_length > 0:
-            description += f"\n\n**{t('next_songs')}:**"
-            for i, song in enumerate(queue_list[:5], 1):
-                s_title    = song.get('title', t('unknown')) if isinstance(song, dict) else str(song)
-                s_duration = song.get('duration', '?:??')   if isinstance(song, dict) else '?:??'
-                # Músicas lazy da playlist têm duration 'Desconhecida' até serem resolvidas
-                if s_duration in ('Desconhecida', 'Desconhecido', None, ''):
-                    s_duration = '...'
-                description += f"\n`{i}.` {s_title} `({s_duration})`"
-            if queue_length > 5:
-                description += f"\n*...e mais {queue_length - 5} na fila*"
-
-        # Resolução de cor: color explícita > dominant_color > padrão
+        # Resolucao de cor: color explicita > dominant_color > padrao
         if color is not None:
             embed_color = _parse_color(color)
         elif dominant_color is not None:
@@ -146,7 +127,58 @@ class EmbedBuilder:
         else:
             embed_color = EmbedBuilder.COLOR_MUSIC
 
-        return discord.Embed(description=description, color=embed_color)
+        embed = discord.Embed(
+            title=t('playing_now'),
+            description=f"**{title}**",
+            color=embed_color,
+        )
+        if thumbnail_url:
+            embed.set_thumbnail(url=thumbnail_url)
+
+        author_display = None
+        if author and hasattr(author, 'mention'):
+            author_display = author.mention
+        elif author and str(author) not in ('None', '?', ''):
+            author_display = str(author)
+
+        info_lines = [f"Canal: {channel}"]
+        if author_display:
+            info_lines.append(f"{t('added_by')}: {author_display}")
+        embed.add_field(name="Detalhes", value="\n".join(info_lines), inline=False)
+
+        progress_bar = EmbedBuilder.create_progress_bar(current_seconds, total_seconds)
+        progress_value = progress_bar
+        if total_seconds > 0:
+            pct = int(max(0.0, min(1.0, current_seconds / total_seconds)) * 100)
+            progress_value = f"{progress_bar}\n`{pct}% concluido`"
+        embed.add_field(name="Tempo", value=progress_value, inline=False)
+
+        queue_length = len(queue_list)
+        if queue_length > 0:
+            queue_lines = []
+            for i, song in enumerate(queue_list[:5], 1):
+                s_title = song.get('title', t('unknown')) if isinstance(song, dict) else str(song)
+                s_duration = song.get('duration', '?:??') if isinstance(song, dict) else '?:??'
+                if s_duration in ('Desconhecida', 'Desconhecido', None, ''):
+                    s_duration = '...'
+
+                if len(s_title) > 58:
+                    s_title = s_title[:55] + "..."
+                queue_lines.append(f"`{i}.` {s_title} `({s_duration})`")
+
+            if queue_length > 5:
+                queue_lines.append(f"*...e mais {queue_length - 5} na fila*")
+
+            queue_text = "\n".join(queue_lines)
+            if len(queue_text) > 1000:
+                queue_text = queue_text[:997] + "..."
+            embed.add_field(name=t('next_songs'), value=queue_text, inline=False)
+            embed.set_footer(text=t('next_songs_in_queue', count=queue_length))
+        else:
+            embed.add_field(name=t('next_songs'), value=t('queue_empty'), inline=False)
+            embed.set_footer(text=t('queue_empty'))
+
+        return embed
 
     # ------------------------------------------------------------------ #
     # Embeds simples                                                       #

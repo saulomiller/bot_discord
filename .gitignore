@@ -22,3 +22,6 @@ token.json
 data/
 !data/radios.json
 !data/.gitkeep
+
+# Relatórios locais
+complexity_report*.txt

@@ -2,9 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import logging
-import os
-import asyncio
 from pathlib import Path
+from services.playback import get_or_create_player
 from config import SOUNDBOARD_DIR, ALLOWED_AUDIO_EXTENSIONS
 from utils.helpers import get_sfx_metadata
 from utils.i18n import t
@@ -14,12 +13,7 @@ class SoundboardCog(commands.Cog):
         self.bot = bot
 
     def get_player(self, guild_id):
-        if guild_id not in self.bot.players:
-            # Importar MusicPlayer aqui para evitar import circular se necessário, 
-            # mas como cogs são carregados depois, deve estar ok.
-            from utils.player import MusicPlayer
-            self.bot.players[guild_id] = MusicPlayer(guild_id, self.bot)
-        return self.bot.players[guild_id]
+        return get_or_create_player(self.bot, guild_id)
 
     async def sfx_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Autocomplete para listar SFX disponíveis"""

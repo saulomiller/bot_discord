@@ -90,6 +90,30 @@ h1 {
     gap: 12px;
 }
 
+.guild-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 220px;
+}
+
+.guild-selector label {
+    font-size: 11px;
+    opacity: 0.8;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.guild-selector select {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(15, 15, 20, 0.55);
+    color: #fff;
+    font-size: 13px;
+}
+
 .header-actions .icon-btn {
     transition: transform 0.2s ease;
 }
@@ -128,5 +152,10 @@ h1 {
     .app-header {
         justify-content: center;
         flex-direction: column;
+    }
+
+    .guild-selector {
+        min-width: 0;
+        width: 100%;
     }
 }

@@ -272,11 +272,11 @@ def create_now_playing_card(
     progress_percent: float | None = None,
 ) -> BytesIO | None:
     """
-    Gera card estilo Spotify com layout moderno.
+    Gera card quadrado para "now playing", alinhado ao visual do embed.
 
     Args:
-        song_info: Dados da música atual.
-        next_songs: Lista de próximas músicas (dicts com 'title' e 'duration').
+        song_info: Dados da musica atual.
+        next_songs: Lista de proximas musicas (dicts com 'title' e 'duration').
         progress_percent: Progresso de 0.0 a 1.0 para barra visual (opcional).
 
     Returns:
@@ -287,17 +287,16 @@ def create_now_playing_card(
         if next_songs is None:
             next_songs = []
 
-        width, height = 900, 360
-        padding = 30
+        width, height = 640, 640
+        padding = 28
+        cover_size = 236
 
-        # ── Base escura ──────────────────────────────────────────────────
         card = Image.new("RGB", (width, height), (18, 18, 18))
         draw = ImageDraw.Draw(card)
 
-        # ── Background ───────────────────────────────────────────────────
         thumb_url = song_info.get('thumbnail')
-        content   = fetch_image_content(thumb_url) if thumb_url else None
-        thumb     = None
+        content = fetch_image_content(thumb_url) if thumb_url else None
+        thumb = None
 
         if content:
             try:
@@ -310,105 +309,181 @@ def create_now_playing_card(
 
                 if bg:
                     card.paste(bg, (0, 0))
-                    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 80))
+                    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 96))
                     card.paste(overlay, (0, 0), overlay)
             except Exception as e:
                 log.error(f"Erro ao gerar background: {e}")
 
-            thumb = generate_thumbnail(content, (240, 240))
+            thumb = generate_thumbnail(content, (cover_size, cover_size))
 
-        # ── Gradiente lateral ─────────────────────────────────────────────
-        apply_side_gradient(card, start_x=260)
+        vignette = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        vignette_draw = ImageDraw.Draw(vignette)
+        for y in range(height):
+            alpha = int(15 + 165 * (y / max(1, height - 1)))
+            vignette_draw.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
+        card.paste(vignette, (0, 0), vignette)
 
-        # ── Layout: thumbnail ─────────────────────────────────────────────
-        cover_size = 240
-        cover_x    = padding
-        cover_y    = (height - cover_size) // 2
+        cover_x = (width - cover_size) // 2
+        cover_y = 40
+
+        # Badge superior para reforçar estado "tocando agora"
+        font_badge = get_font("arialbd.ttf", 15)
+        badge_text = "TOCANDO AGORA"
+        badge_bbox = draw.textbbox((0, 0), badge_text, font=font_badge)
+        badge_w = (badge_bbox[2] - badge_bbox[0]) + 22
+        badge_h = (badge_bbox[3] - badge_bbox[1]) + 10
+        badge_x = (width - badge_w) // 2
+        badge_y = 10
+        draw.rounded_rectangle(
+            [badge_x, badge_y, badge_x + badge_w, badge_y + badge_h],
+            radius=12,
+            fill=(29, 185, 84),
+        )
+        draw.text(
+            (badge_x + 11, badge_y + 5),
+            badge_text,
+            font=font_badge,
+            fill=(15, 15, 15),
+        )
+
+        mask = Image.new("L", (cover_size, cover_size), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.rounded_rectangle([0, 0, cover_size - 1, cover_size - 1], radius=24, fill=255)
 
         if thumb:
-            # Borda arredondada simulada com máscara
-            mask = Image.new("L", (cover_size, cover_size), 0)
-            mask_draw = ImageDraw.Draw(mask)
-            radius = 16
-            mask_draw.rounded_rectangle([0, 0, cover_size - 1, cover_size - 1], radius=radius, fill=255)
             card.paste(thumb, (cover_x, cover_y), mask)
+        else:
+            placeholder = Image.new("RGB", (cover_size, cover_size), (42, 42, 42))
+            ph_draw = ImageDraw.Draw(placeholder)
+            ph_font = get_font("arialbd.ttf", 30)
+            ph_text = "NO ART"
+            ph_bbox = ph_draw.textbbox((0, 0), ph_text, font=ph_font)
+            ph_w = ph_bbox[2] - ph_bbox[0]
+            ph_h = ph_bbox[3] - ph_bbox[1]
+            ph_draw.text(
+                ((cover_size - ph_w) // 2, (cover_size - ph_h) // 2),
+                ph_text,
+                font=ph_font,
+                fill=(170, 170, 170),
+            )
+            card.paste(placeholder, (cover_x, cover_y), mask)
 
-        # ── Layout: texto ─────────────────────────────────────────────────
-        text_x     = cover_x + cover_size + 40
-        text_width = width - text_x - padding
+        draw.rounded_rectangle(
+            [cover_x - 2, cover_y - 2, cover_x + cover_size + 1, cover_y + cover_size + 1],
+            radius=26,
+            outline=(230, 230, 230),
+            width=2,
+        )
 
-        font_title  = get_font("arialbd.ttf", 40)
-        font_artist = get_font("arial.ttf",   24)
-        font_small  = get_font("arial.ttf",   19)
-        font_queue  = get_font("arial.ttf",   17)
+        text_width = width - (padding * 2)
+        font_title = get_font("arialbd.ttf", 33)
+        font_artist = get_font("arial.ttf", 22)
+        font_small = get_font("arial.ttf", 16)
+        font_queue = get_font("arial.ttf", 18)
 
-        # Título (até 2 linhas)
+        def draw_centered_line(text: str, y: int, font, fill: tuple[int, int, int]) -> None:
+            safe_text = truncate_text(draw, text, font, text_width)
+            bbox = draw.textbbox((0, 0), safe_text, font=font)
+            line_w = bbox[2] - bbox[0]
+            x = (width - line_w) // 2
+            draw_text_shadow(draw, (x, y), safe_text, font, fill, offset=1)
+
         title = song_info.get("title", "Desconhecido")
         try:
             lines = wrap_two_lines(draw, title, font_title, text_width)
         except Exception:
             lines = [truncate_text(draw, title, font_title, text_width)]
 
-        y = 55
+        y = cover_y + cover_size + 22
         for line in lines:
-            draw_text_shadow(draw, (text_x, y), line, font_title, (255, 255, 255))
-            y += 50
+            draw_centered_line(line, y, font_title, (255, 255, 255))
+            line_box = draw.textbbox((0, 0), line, font=font_title)
+            line_h = line_box[3] - line_box[1]
+            y += line_h + 8
 
-        # Artista
         artist = song_info.get("channel", "Desconhecido")
-        artist_truncated = truncate_text(draw, artist, font_artist, text_width)
-        draw_text_shadow(draw, (text_x, y + 6), artist_truncated, font_artist, (200, 200, 200))
+        draw_centered_line(artist, y + 2, font_artist, (206, 206, 206))
 
-        # Usuário que pediu
         user = song_info.get("user", "?")
         user_str = str(user) if not hasattr(user, 'display_name') else user.display_name
         user_label = f"Adicionado por {user_str}"
-        draw_text_shadow(draw, (text_x, y + 36), user_label, font_small, (160, 160, 160))
+        draw_centered_line(user_label, y + 32, font_small, (175, 175, 175))
 
-        # ── Barra de progresso visual (opcional) ──────────────────────────
-        bar_y = y + 70
+        bar_x = padding
+        bar_y = y + 64
+        bar_w = width - (padding * 2)
+        bar_h = 10
+        progress_label_y = bar_y - 22
+        draw_text_shadow(draw, (bar_x, progress_label_y), "Progresso", font_small, (170, 170, 170), offset=1)
+        draw.rounded_rectangle(
+            [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h],
+            radius=5,
+            fill=(86, 86, 86),
+        )
+
         if progress_percent is not None:
             pct = max(0.0, min(1.0, progress_percent))
-            bar_x      = text_x
-            bar_w      = text_width
-            bar_h      = 6
-            bar_radius = 3
-
-            # Trilha
-            track_draw = ImageDraw.Draw(card)
-            track_draw.rounded_rectangle(
-                [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h],
-                radius=bar_radius, fill=(80, 80, 80)
-            )
-            # Preenchimento
             fill_w = int(bar_w * pct)
+            pct_text = f"{int(pct * 100)}%"
+            pct_bbox = draw.textbbox((0, 0), pct_text, font=font_small)
+            pct_w = pct_bbox[2] - pct_bbox[0]
+            draw_text_shadow(
+                draw,
+                (bar_x + bar_w - pct_w, progress_label_y),
+                pct_text,
+                font_small,
+                (190, 190, 190),
+                offset=1,
+            )
             if fill_w > 0:
-                track_draw.rounded_rectangle(
+                draw.rounded_rectangle(
                     [bar_x, bar_y, bar_x + fill_w, bar_y + bar_h],
-                    radius=bar_radius, fill=(29, 185, 84)  # Verde Spotify
+                    radius=5,
+                    fill=(29, 185, 84),
                 )
-            bar_y += bar_h + 10
 
-        # ── Próximas músicas ──────────────────────────────────────────────
+        panel_x = padding
+        panel_y = bar_y + 24
+        panel_w = width - (padding * 2)
+        panel_h = height - panel_y - padding
+
+        draw.rounded_rectangle(
+            [panel_x, panel_y, panel_x + panel_w, panel_y + panel_h],
+            radius=18,
+            fill=(14, 14, 14),
+            outline=(76, 76, 76),
+            width=1,
+        )
+
+        queue_y = panel_y + 14
+        draw_text_shadow(draw, (panel_x + 14, queue_y), "A seguir", font_small, (154, 154, 154), offset=1)
+        queue_y += 26
+
+        queue_text_width = panel_w - 28
+        max_lines = max(1, (panel_h - 38) // 24)
+
         if next_songs:
-            queue_y = bar_y + 4
-            label_text = "A seguir:"
-            draw_text_shadow(draw, (text_x, queue_y), label_text, font_small, (140, 140, 140))
-            queue_y += 22
-
-            for i, song in enumerate(next_songs[:3], 1):
-                if queue_y + 20 > height - padding:
-                    break
-                s_title    = song.get('title', '?')    if isinstance(song, dict) else str(song)
-                s_duration = song.get('duration', '')  if isinstance(song, dict) else ''
-                line_text  = f"{i}. {s_title}"
+            for i, song in enumerate(next_songs[:max_lines], 1):
+                s_title = song.get('title', '?') if isinstance(song, dict) else str(song)
+                s_duration = song.get('duration', '') if isinstance(song, dict) else ''
+                if s_duration in ('Desconhecida', 'Desconhecido', None):
+                    s_duration = '...'
+                line_text = f"{i}. {s_title}"
                 if s_duration:
-                    line_text += f"  {s_duration}"
-                line_text = truncate_text(draw, line_text, font_queue, text_width)
-                draw_text_shadow(draw, (text_x, queue_y), line_text, font_queue, (180, 180, 180))
-                queue_y += 20
+                    line_text += f" ({s_duration})"
+                line_text = truncate_text(draw, line_text, font_queue, queue_text_width)
+                draw_text_shadow(draw, (panel_x + 14, queue_y), line_text, font_queue, (206, 206, 206), offset=1)
+                queue_y += 24
+        else:
+            draw_text_shadow(
+                draw,
+                (panel_x + 14, queue_y),
+                "Fila vazia no momento",
+                font_queue,
+                (170, 170, 170),
+                offset=1,
+            )
 
-        # ── Salvar ────────────────────────────────────────────────────────
         buffer = BytesIO()
         card.save(buffer, "PNG", optimize=True)
         buffer.seek(0)

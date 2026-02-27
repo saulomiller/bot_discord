@@ -94,13 +94,57 @@ async def check_system_resources():
         return None, None
 
 # --- Funções de Rádio ---
+def normalize_radios_data(radios_data):
+    """Normaliza dados de rádios para o formato canônico {"radios": [...]}.
+
+    Aceita formatos legados:
+    1) {"radios": [{...}]}
+    2) {"id1": {...}, "id2": {...}} (mapa por id)
+    3) [{...}]
+    """
+    normalized = []
+    seen_ids = set()
+
+    def add_radio(raw_id, raw_radio, *, default_custom):
+        if not isinstance(raw_radio, dict):
+            return
+
+        radio_id = str(raw_radio.get("id") or raw_id or "").strip().lower()
+        if not radio_id or radio_id in seen_ids:
+            return
+
+        seen_ids.add(radio_id)
+        normalized.append({
+            "id": radio_id,
+            "name": raw_radio.get("name", radio_id),
+            "url": raw_radio.get("url", ""),
+            "location": raw_radio.get("location", "Desconhecido"),
+            "description": raw_radio.get("description", "Rádio personalizada"),
+            "custom": bool(raw_radio.get("custom", default_custom)),
+        })
+
+    if isinstance(radios_data, dict):
+        radios_list = radios_data.get("radios")
+        if isinstance(radios_list, list):
+            for radio in radios_list:
+                add_radio(None, radio, default_custom=True)
+        else:
+            for radio_id, radio in radios_data.items():
+                add_radio(radio_id, radio, default_custom=False)
+    elif isinstance(radios_data, list):
+        for radio in radios_data:
+            add_radio(None, radio, default_custom=True)
+
+    return {"radios": normalized}
+
+
 def load_radios():
     """Carregar rádios do arquivo JSON"""
     # Tenta carregar do diretório de dados
     if os.path.exists(RADIOS_FILE):
         try:
             with open(RADIOS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                return normalize_radios_data(json.load(f))
         except Exception as e:
             logging.error(f"Erro ao carregar rádios de {RADIOS_FILE}: {e}")
             
@@ -109,7 +153,7 @@ def load_radios():
         try:
             logging.info("Carregando radios.json da raiz e copiando para data/radios.json")
             with open("radios.json", "r", encoding="utf-8") as f:
-                data = json.load(f)
+                data = normalize_radios_data(json.load(f))
             # Salvar no novo local para o futuro
             try:
                 if not os.path.exists(DATA_DIR):
@@ -122,7 +166,20 @@ def load_radios():
         except Exception as e:
             logging.error(f"Erro ao carregar rádios da raiz: {e}")
             
-    return {}
+    return {"radios": []}
+
+def save_radios(radios_data):
+    """Salvar rádios no arquivo JSON"""
+    try:
+        normalized = normalize_radios_data(radios_data)
+        if not os.path.exists(DATA_DIR):
+            os.makedirs(DATA_DIR)
+        with open(RADIOS_FILE, "w", encoding="utf-8") as f:
+            json.dump(normalized, f, indent=4, ensure_ascii=False)
+        return True
+    except Exception as e:
+        logging.error(f"Erro ao salvar rádios: {e}")
+        return False
 
 # --- Funções de Soundboard ---
 def load_soundboard_metadata():

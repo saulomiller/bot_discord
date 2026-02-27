@@ -278,8 +278,8 @@ class MusicPlayer:
         if self.dashboard_message:
             try:
                 await self.dashboard_message.delete()
-            except:
-                pass
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as exc:
+                logging.debug(f"Falha ao deletar dashboard antigo: {exc}")
             self.dashboard_message = None
 
         try:
@@ -807,7 +807,17 @@ class MusicPlayer:
                     self.queue.appendleft(self.current_song)
                 
                 # Agendar próxima música
-                future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
+                next_future = asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
+                def _log_future_error(fut):
+                    try:
+                        exc = fut.exception()
+                    except Exception as callback_exc:
+                        logging.error(f"Falha ao inspecionar tarefa agendada: {callback_exc}")
+                        return
+                    if exc:
+                        logging.error(f"Erro ao agendar proxima musica: {exc}")
+
+                next_future.add_done_callback(_log_future_error)
                 # Não esperar result aqui para não travar thread do ffmpeg
                 
             except Exception as e:

@@ -2,28 +2,42 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import logging
-import asyncio
-import os
-import json
+import re
+from urllib.parse import urlparse
+
+from services.playback import enqueue_search, is_playlist_query, remove_playlist_entries
 from utils.player import MusicPlayer
-from config import RADIOS_FILE, PLAYLIST_DIR, DATA_DIR, FFMPEG_PATH
 from utils.embeds import EmbedBuilder
-from utils.helpers import ensure_voice, check_system_resources, load_radios
+from utils.helpers import ensure_voice, load_radios, save_radios
 from utils.image import get_dominant_color, create_now_playing_card
 from utils.i18n import t
-from io import BytesIO
+
+RADIO_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 class MusicCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.RADIOS = load_radios()
-        self.playlist_processing_task = None
-        self.playlist_cancel_flag = False
+        if not isinstance(self.RADIOS, dict):
+            self.RADIOS = {"radios": []}
 
     def get_player(self, guild_id) -> MusicPlayer:
         if guild_id not in self.bot.players:
             self.bot.players[guild_id] = MusicPlayer(guild_id, self.bot)
         return self.bot.players[guild_id]
+
+    def _radio_items(self):
+        if not isinstance(self.RADIOS, dict):
+            return []
+        radios = self.RADIOS.get("radios", [])
+        return radios if isinstance(radios, list) else []
+
+    def _find_radio(self, radio_id: str):
+        target_id = (radio_id or "").strip().lower()
+        for radio in self._radio_items():
+            if str(radio.get("id", "")).strip().lower() == target_id:
+                return radio
+        return None
 
     # --- Comandos de Conexão ---
 
@@ -122,18 +136,11 @@ class MusicCog(commands.Cog):
     async def _do_removeplaylist(self, ctx_or_interaction):
         guild_id = ctx_or_interaction.guild.id
         player = self.get_player(guild_id)
-        
-        retained = []
-        removed = 0
-        for song in list(player.queue):
-            if song.get('channel') == 'Playlist':
-                removed += 1
-            else:
-                retained.append(song)
-
-        player.queue.clear()
-        for s in retained:
-            player.queue.append(s)
+        removed, _ = remove_playlist_entries(
+            player,
+            include_lazy=True,
+            skip_current=False,
+        )
 
         embed = EmbedBuilder.create_success_embed(
             "Playlist removida",
@@ -162,9 +169,8 @@ class MusicCog(commands.Cog):
         if isinstance(ctx_or_interaction, discord.Interaction):
             user = ctx_or_interaction.user
             guild = ctx_or_interaction.guild
-            # Defer se necessário
             if not ctx_or_interaction.response.is_done():
-                 await ctx_or_interaction.response.defer(ephemeral=False)
+                await ctx_or_interaction.response.defer(ephemeral=False)
         else:
             user = ctx_or_interaction.author
             guild = ctx_or_interaction.guild
@@ -180,42 +186,35 @@ class MusicCog(commands.Cog):
 
         try:
             vc = await ensure_voice(ctx_or_interaction)
-            if not vc: return
+            if not vc:
+                return
         except Exception as e:
             embed = EmbedBuilder.create_error_embed(t('error'), f"Erro de conexão: {str(e)}")
             if isinstance(ctx_or_interaction, discord.Interaction):
-                 await ctx_or_interaction.followup.send(embed=embed)
+                await ctx_or_interaction.followup.send(embed=embed)
             else:
-                 await ctx_or_interaction.send(embed=embed)
+                await ctx_or_interaction.send(embed=embed)
             return
 
         # 3. Obter Player
         player = self.get_player(guild.id)
-        player.dashboard_context = ctx_or_interaction # Vincular canal
-        
+        player.dashboard_context = ctx_or_interaction
+
         # 4. Verificar Playlist
-        is_playlist = False
-        if 'list=' in search or '/sets/' in search or '/album/' in search or '/playlist/' in search:
-            is_playlist = True
-
-        if is_playlist:
-            if self.playlist_processing_task and not self.playlist_processing_task.done():
-                embed = EmbedBuilder.create_error_embed(t('error'), "Já existe uma playlist sendo processada. Aguarde.")
-                if isinstance(ctx_or_interaction, discord.Interaction):
-                    await ctx_or_interaction.followup.send(embed=embed)
-                else:
-                    await ctx_or_interaction.send(embed=embed)
-                return
-
+        search = search.strip()
+        if is_playlist_query(search):
             embed_info = EmbedBuilder.create_info_embed(t('processing_playlist'), t('extracting_playlist'))
             if isinstance(ctx_or_interaction, discord.Interaction):
                 status_msg = await ctx_or_interaction.followup.send(embed=embed_info)
             else:
                 status_msg = await ctx_or_interaction.send(embed=embed_info)
-            
+
             try:
-                await player.add_playlist_async(search, user)
-                embed_success = EmbedBuilder.create_success_embed(t('playlist_added'), t('processing_background', title="Playlist"))
+                await enqueue_search(player, search, user, vc)
+                embed_success = EmbedBuilder.create_success_embed(
+                    t('playlist_added'),
+                    t('processing_background', title='Playlist'),
+                )
                 if isinstance(ctx_or_interaction, discord.Interaction):
                     await ctx_or_interaction.followup.send(embed=embed_success)
                 else:
@@ -223,53 +222,55 @@ class MusicCog(commands.Cog):
             except Exception as e:
                 embed_err = EmbedBuilder.create_error_embed(t('error'), str(e))
                 if isinstance(ctx_or_interaction, discord.Interaction):
-                     await ctx_or_interaction.followup.send(embed=embed_err)
+                    await ctx_or_interaction.followup.send(embed=embed_err)
                 else:
-                     await status_msg.edit(embed=embed_err)
+                    await status_msg.edit(embed=embed_err)
             return
 
         # 5. Busca Normal
-        searches = search.split(";")
+        searches = [query.strip() for query in search.split(';') if query.strip()]
+        if not searches:
+            return
+
         if len(searches) > 1:
             embed_multi = EmbedBuilder.create_info_embed(t('adding_songs', count=len(searches)))
             if isinstance(ctx_or_interaction, discord.Interaction):
                 await ctx_or_interaction.followup.send(embed=embed_multi)
             else:
                 await ctx_or_interaction.send(embed=embed_multi)
-        
+
+        added_count = 0
         for query in searches:
-            query = query.strip()
-            if not query: continue
-            
             try:
-                await player.add_to_queue(query, user)
-                
-                if not player.is_playing:
-                    await player.play_next()
-                else:
-                    # Notificar adição à fila (apenas se for 1 música para não spammar)
-                    if len(searches) == 1:
-                         pos = len(player.queue)
-                         last_song = player.queue[-1]
-                         embed_added = EmbedBuilder.create_info_embed(
-                             t('added_to_queue'), 
-                             f"🎵 **{last_song.get('title')}**\n{t('position_in_queue', position=pos)}"
-                         )
-                         if isinstance(ctx_or_interaction, discord.Interaction):
-                             await ctx_or_interaction.followup.send(embed=embed_added)
-                         else:
-                             await ctx_or_interaction.send(embed=embed_added)
+                result = await enqueue_search(player, query, user, vc)
+                added_count += 1
+
+                if len(searches) == 1 and not result.get('is_playlist', False):
+                    song = result.get('song') if isinstance(result, dict) else None
+                    song_title = song.get('title') if isinstance(song, dict) else query
+                    pos = len(player.queue)
+                    embed_added = EmbedBuilder.create_info_embed(
+                        t('added_to_queue'),
+                        f"Música **{song_title}**\n{t('position_in_queue', position=pos)}",
+                    )
+                    if isinstance(ctx_or_interaction, discord.Interaction):
+                        await ctx_or_interaction.followup.send(embed=embed_added)
+                    else:
+                        await ctx_or_interaction.send(embed=embed_added)
 
             except Exception as e:
-                logging.error(f"Erro no play: {e}")
-                embed_err = EmbedBuilder.create_error_embed(t('error'), f"Erro ao adicionar: {query} - {str(e)}")
+                logging.error(f'Erro no play: {e}')
+                embed_err = EmbedBuilder.create_error_embed(t('error'), f'Erro ao adicionar: {query} - {str(e)}')
                 if isinstance(ctx_or_interaction, discord.Interaction):
                     await ctx_or_interaction.followup.send(embed=embed_err)
                 else:
                     await ctx_or_interaction.send(embed=embed_err)
 
-        if len(searches) > 1:
-            embed_final = EmbedBuilder.create_success_embed(t('success'), t('added_songs_queue', count=len(searches)))
+        if len(searches) > 1 and added_count > 0:
+            embed_final = EmbedBuilder.create_success_embed(
+                t('success'),
+                t('added_songs_queue', count=added_count),
+            )
             if isinstance(ctx_or_interaction, discord.Interaction):
                 await ctx_or_interaction.followup.send(embed=embed_final)
             else:
@@ -507,7 +508,7 @@ class MusicCog(commands.Cog):
         total_time_str = f"{int(total_seconds // 60)}{t('minutes_abbr')}"
 
         embed = discord.Embed(
-            title=f"{t('queue')} ({len(player.queue)} {t('songs')} • {total_time_str})",
+            title=f"{t('queue')} ({len(player.queue)} {t('songs')} - {total_time_str})",
             color=discord.Color.blue()
         )
 
@@ -586,7 +587,8 @@ class MusicCog(commands.Cog):
     # --- Comandos de Rádio ---
 
     async def _do_list_radios(self, ctx_or_interaction):
-        if not self.RADIOS:
+        radios = self._radio_items()
+        if not radios:
             msg = t('no_radios_found')
             if isinstance(ctx_or_interaction, discord.Interaction):
                  await ctx_or_interaction.response.send_message(msg)
@@ -599,12 +601,13 @@ class MusicCog(commands.Cog):
             description=t('use_radio_command'),
             color=discord.Color.gold()
         )
-        
-        for r_id, r_info in self.RADIOS.items():
-            name = r_info.get('name', r_id)
-            location = r_info.get('location', t('unknown'))
-            embed.add_field(name=f"{name} ({r_id})", value=location, inline=True)
-            
+
+        for radio in radios:
+            radio_id = radio.get('id', '?')
+            name = radio.get('name', radio_id)
+            location = radio.get('location', t('unknown'))
+            embed.add_field(name=f"{name} ({radio_id})", value=location, inline=True)
+
         if isinstance(ctx_or_interaction, discord.Interaction):
              await ctx_or_interaction.response.send_message(embed=embed)
         else:
@@ -622,12 +625,12 @@ class MusicCog(commands.Cog):
          # Obter user para check de voz
         if isinstance(ctx_or_interaction, discord.Interaction):
             user = ctx_or_interaction.user
-             # Defer se necessário
+             # Defer se necessario
             if not ctx_or_interaction.response.is_done():
                  await ctx_or_interaction.response.defer(ephemeral=False)
         else:
              user = ctx_or_interaction.author
-        
+
         if not user.voice:
              msg = t('user_must_be_in_voice')
              if isinstance(ctx_or_interaction, discord.Interaction):
@@ -638,8 +641,8 @@ class MusicCog(commands.Cog):
 
         vc = await ensure_voice(ctx_or_interaction)
         if not vc: return
-        
-        radio_info = self.RADIOS.get(radio_id.lower())
+
+        radio_info = self._find_radio(radio_id)
         if not radio_info:
             embed = EmbedBuilder.create_error_embed(t('error'), t('radio_not_found'))
             if isinstance(ctx_or_interaction, discord.Interaction):
@@ -647,7 +650,7 @@ class MusicCog(commands.Cog):
             else:
                 await ctx_or_interaction.send(embed=embed)
             return
-            
+
         url = radio_info.get('url')
         if not url:
             embed = EmbedBuilder.create_error_embed(t('error'), t('invalid_url'))
@@ -656,32 +659,43 @@ class MusicCog(commands.Cog):
             else:
                 await ctx_or_interaction.send(embed=embed)
             return
-            
+
         guild_id = ctx_or_interaction.guild.id
         player = self.get_player(guild_id)
-        
+
         try:
-            # 1. Adicionar à fila ANTES de parar (evita estado sem música se falhar)
-            await player.add_to_queue(url, user)
-            
-            # 2. Forçar update de metadados para parecer rádio
-            if player.queue:
-                player.queue[-1]['title'] = radio_info.get('name', radio_id)
-                player.queue[-1]['is_radio'] = True
-                player.queue[-1]['thumbnail'] = radio_info.get('favicon')
-                player.queue[-1]['is_lazy'] = False 
-                player.stream_cache.set(url, url)
-            
-            # 3. Parar música atual (agora seguro, rádio já está na fila)
-            player.stop()
-            
-            await player.play_next()
+            # Trocar a fila atual para tocar a radio imediatamente.
+            radio_song = {
+                'title': radio_info.get('name', radio_id),
+                'url': url,
+                'thumbnail': radio_info.get('favicon'),
+                'duration': t('live'),
+                'duration_seconds': 0,
+                'channel': 'Radio',
+                'user': user,
+                'is_radio': True,
+                'is_lazy': False,
+            }
+            player.queue.clear()
+            player.queue.append(radio_song)
+            player.stream_cache.set(url, url)
+
+            # Evita que callback de loop re-enfileire a musica anterior no switch.
+            player.current_song = None
+
+            # Se ja estiver tocando/pausado, stop dispara o callback after_play.
+            # O callback chama play_next e inicia a radio que acabou de entrar na fila.
+            if player.voice_client and (player.voice_client.is_playing() or player.voice_client.is_paused()):
+                player.voice_client.stop()
+            else:
+                await player.play_next()
+
             embed_radio = EmbedBuilder.create_radio_embed(radio_info)
             if isinstance(ctx_or_interaction, discord.Interaction):
                 await ctx_or_interaction.followup.send(embed=embed_radio)
             else:
                 await ctx_or_interaction.send(embed=embed_radio)
-            
+
         except Exception as e:
              embed_err = EmbedBuilder.create_error_embed(t('error'), str(e))
              if isinstance(ctx_or_interaction, discord.Interaction):
@@ -713,32 +727,103 @@ class MusicCog(commands.Cog):
                  await ctx_or_interaction.send(msg)
             return
 
-        if id in self.RADIOS:
+        radio_id = (id or '').strip().lower()
+        nome = (nome or '').strip()
+        url = (url or '').strip()
+        localizacao = (localizacao or 'Desconhecido').strip() or 'Desconhecido'
+
+        if not RADIO_ID_RE.fullmatch(radio_id):
+            embed = EmbedBuilder.create_error_embed(
+                t('error'),
+                "ID invalido. Use apenas letras, numeros, '_' e '-', ate 64 caracteres.",
+            )
+            if isinstance(ctx_or_interaction, discord.Interaction):
+                 await ctx_or_interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                 await ctx_or_interaction.send(embed=embed)
+            return
+
+        if len(nome.strip(" .-_")) < 2 or len(nome) > 80:
+            embed = EmbedBuilder.create_error_embed(
+                t('error'),
+                "Nome invalido. Use de 2 a 80 caracteres.",
+            )
+            if isinstance(ctx_or_interaction, discord.Interaction):
+                 await ctx_or_interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                 await ctx_or_interaction.send(embed=embed)
+            return
+
+        parsed = urlparse(url)
+        if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+            embed = EmbedBuilder.create_error_embed(t('error'), t('invalid_url'))
+            if isinstance(ctx_or_interaction, discord.Interaction):
+                 await ctx_or_interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                 await ctx_or_interaction.send(embed=embed)
+            return
+
+        if len(localizacao) > 120:
+            embed = EmbedBuilder.create_error_embed(
+                t('error'),
+                "Localizacao invalida. Maximo de 120 caracteres.",
+            )
+            if isinstance(ctx_or_interaction, discord.Interaction):
+                 await ctx_or_interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                 await ctx_or_interaction.send(embed=embed)
+            return
+
+        if self._find_radio(radio_id):
             embed = EmbedBuilder.create_error_embed(t('error'), t('radio_exists', name=nome))
             if isinstance(ctx_or_interaction, discord.Interaction):
                  await ctx_or_interaction.response.send_message(embed=embed, ephemeral=True)
             else:
                  await ctx_or_interaction.send(embed=embed)
             return
-            
-        self.RADIOS[id] = {
-            "name": nome,
-            "url": url,
-            "location": localizacao
-        }
-        
+
+        duplicate = next(
+            (
+                radio for radio in self._radio_items()
+                if str(radio.get('name', '')).casefold() == nome.casefold()
+                or str(radio.get('url', '')).strip() == url
+            ),
+            None,
+        )
+        if duplicate:
+            embed = EmbedBuilder.create_error_embed(
+                t('error'),
+                "Ja existe uma radio com o mesmo nome ou URL.",
+            )
+            if isinstance(ctx_or_interaction, discord.Interaction):
+                 await ctx_or_interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                 await ctx_or_interaction.send(embed=embed)
+            return
+
+        radios = self._radio_items()
+        radios.append({
+            'id': radio_id,
+            'name': nome,
+            'url': url,
+            'location': localizacao,
+            'description': 'Radio personalizada',
+            'custom': True,
+        })
+        self.RADIOS['radios'] = radios
+
         try:
-            with open(RADIOS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(self.RADIOS, f, indent=4)
-            
-            embed = EmbedBuilder.create_success_embed(t('radio_added'), t('radio_added_success', name=nome, id=id))
+            if not save_radios(self.RADIOS):
+                raise RuntimeError('Falha ao persistir radios.')
+
+            embed = EmbedBuilder.create_success_embed(t('radio_added'), t('radio_added_success', name=nome, id=radio_id))
             if isinstance(ctx_or_interaction, discord.Interaction):
                 await ctx_or_interaction.response.send_message(embed=embed)
             else:
                 await ctx_or_interaction.send(embed=embed)
-                
+
         except Exception as e:
-            logging.error(f"Erro ao salvar rádio: {e}")
+            logging.error(f'Erro ao salvar radio: {e}')
             embed_err = EmbedBuilder.create_error_embed(t('error'), t('error_saving_radio'))
             if isinstance(ctx_or_interaction, discord.Interaction):
                 await ctx_or_interaction.response.send_message(embed=embed_err, ephemeral=True)
@@ -769,28 +854,49 @@ class MusicCog(commands.Cog):
                  await ctx_or_interaction.send(msg)
             return
 
-        if id not in self.RADIOS:
+        radio_id = (id or '').strip().lower()
+        if not RADIO_ID_RE.fullmatch(radio_id):
+            embed = EmbedBuilder.create_error_embed(
+                t('error'),
+                "ID invalido. Use apenas letras, numeros, '_' e '-', ate 64 caracteres.",
+            )
+            if isinstance(ctx_or_interaction, discord.Interaction):
+                 await ctx_or_interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                 await ctx_or_interaction.send(embed=embed)
+            return
+        radios = self._radio_items()
+        target_radio = None
+        for radio in radios:
+            if str(radio.get('id', '')).strip().lower() == radio_id:
+                target_radio = radio
+                break
+
+        if not target_radio:
             embed = EmbedBuilder.create_error_embed(t('error'), t('radio_not_found'))
             if isinstance(ctx_or_interaction, discord.Interaction):
                  await ctx_or_interaction.response.send_message(embed=embed, ephemeral=True)
             else:
                  await ctx_or_interaction.send(embed=embed)
             return
-            
-        name = self.RADIOS[id].get('name', id)
-        del self.RADIOS[id]
-        
+
+        name = target_radio.get('name', radio_id)
+        self.RADIOS['radios'] = [
+            radio for radio in radios
+            if str(radio.get('id', '')).strip().lower() != radio_id
+        ]
+
         try:
-            with open(RADIOS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(self.RADIOS, f, indent=4)
-            
+            if not save_radios(self.RADIOS):
+                raise RuntimeError('Falha ao persistir radios.')
+
             embed = EmbedBuilder.create_success_embed(t('radio_removed'), t('radio_removed_success', name=name))
             if isinstance(ctx_or_interaction, discord.Interaction):
                  await ctx_or_interaction.response.send_message(embed=embed)
             else:
                  await ctx_or_interaction.send(embed=embed)
         except Exception as e:
-            logging.error(f"Erro ao remover rádio: {e}")
+            logging.error(f'Erro ao remover radio: {e}')
             embed_err = EmbedBuilder.create_error_embed(t('error'), t('error_removing_radio'))
             if isinstance(ctx_or_interaction, discord.Interaction):
                  await ctx_or_interaction.response.send_message(embed=embed_err, ephemeral=True)
