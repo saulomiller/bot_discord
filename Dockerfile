@@ -10,6 +10,7 @@ RUN apt-get update && \
     python3-pip \
     ffmpeg \
     gosu \
+    git \
     curl \
     nodejs \
     npm \
