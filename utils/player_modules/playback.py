@@ -10,6 +10,30 @@ from .core import SafeFFmpegPCMAudio
 class PlaybackMixin:
     """Comportamentos de playback do MusicPlayer."""
 
+    @staticmethod
+    def _ffmpeg_escape(value: str) -> str:
+        """Escapa aspas para montagem segura de opções do ffmpeg."""
+        return str(value).replace('"', r'\"')
+
+    def _build_ffmpeg_request_options(self, headers: dict | None) -> str:
+        """Monta opções HTTP para ffmpeg com base em headers retornados pelo yt-dlp."""
+        if not headers:
+            return ""
+
+        user_agent = headers.get('User-Agent') or headers.get('user-agent')
+        referer = headers.get('Referer') or headers.get('referer')
+        origin = headers.get('Origin') or headers.get('origin')
+
+        options = []
+        if user_agent:
+            options.append(f'-user_agent "{self._ffmpeg_escape(user_agent)}"')
+        if referer:
+            options.append(f'-referer "{self._ffmpeg_escape(referer)}"')
+        elif origin:
+            options.append(f'-referer "{self._ffmpeg_escape(origin)}"')
+
+        return " ".join(options)
+
     async def play_next(self):
         """Toca a próxima música da fila com Lazy Resolve e SafeFFmpeg.
         
@@ -64,12 +88,17 @@ class PlaybackMixin:
 
         # 2. LAZY RESOLVE - Resolver URL de stream AGORA
         source_url = self.current_song['url']
+        source_headers = dict(self.current_song.get('stream_headers') or {})
         
         # Verificar Cache Primeiro
-        cached_url = self.stream_cache.get(source_url)
-        if cached_url:
+        cached_entry = self.stream_cache.get(source_url)
+        if cached_entry:
             logging.info("⚡ URL recuperada do Cache!")
-            source_url = cached_url
+            if isinstance(cached_entry, dict):
+                source_url = cached_entry.get('url') or source_url
+                source_headers = dict(cached_entry.get('headers') or source_headers)
+            else:
+                source_url = cached_entry
         else:
             # Se não estiver em cache ou for 'is_lazy', resolver via yt-dlp
             # OU se for stream direta de rádio/arquivo, não precisa resolver
@@ -109,10 +138,16 @@ class PlaybackMixin:
                     
                     # Pegar URL real do áudio
                     source_url = info.get('url')
+                    source_headers = dict(info.get('http_headers') or {})
+                    if source_headers:
+                        self.current_song['stream_headers'] = source_headers
                     
                     # Salvar no cache
                     if source_url:
-                        self.stream_cache.set(self.current_song['url'], source_url)
+                        self.stream_cache.set(
+                            self.current_song['url'],
+                            {'url': source_url, 'headers': source_headers}
+                        )
                     
                 except Exception as e:
                     logging.error(f"Erro ao resolver stream: {e}")
@@ -129,6 +164,9 @@ class PlaybackMixin:
         seek_position = self.current_song.get('seek', 0)
         
         before_options = '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+        request_options = self._build_ffmpeg_request_options(source_headers)
+        if request_options:
+            before_options = f"{before_options} {request_options}"
         output_options = f'-vn -af "aresample=48000,atempo=1.0,volume={self.volume}" -bufsize 10M'
         
         if seek_position > 0:
@@ -245,7 +283,11 @@ class PlaybackMixin:
             if info and info.get('url'):
                 if song is self.current_song:
                     return
-                self.stream_cache.set(source_url, info['url'])
+                stream_headers = dict(info.get('http_headers') or {})
+                self.stream_cache.set(
+                    source_url,
+                    {'url': info['url'], 'headers': stream_headers}
+                )
                 extractor_name = str(info.get('extractor', '')).lower()
                 # Atualizar metadados de forma segura (verificar que o song ainda é o mesmo objeto)
                 try:
@@ -255,6 +297,8 @@ class PlaybackMixin:
                         duration = info.get('duration', 0)
                         song['duration_seconds'] = duration
                         song['duration'] = self._format_duration(duration)
+                    if stream_headers:
+                        song['stream_headers'] = stream_headers
                     song['is_lazy'] = False  # Marcar como resolvido
                 except Exception:
                     pass  # Race condition: song pode ter sido removido da fila

@@ -11,19 +11,16 @@ YDL_OPTIONS = {
     'skip_download': True,
     'source_address': '0.0.0.0',
     'cachedir': '/app/.cache',
-    'geo_bypass': True,
-    'geo_bypass_country': 'US',
     'ignoreerrors': True,   # Não abortar em entradas inválidas de playlist
     'extract_flat': False,  # Resolver URLs completas por padrão
     # Permite download automático dos scripts EJS (necessário para web_embedded/web)
     # Precisa ser lista/set, não string; string gera warning de componentes por caractere.
     'remote_components': ['ejs:github'],
     
-    # web_embedded: cliente mais estável com EJS (não requer PO Token para a maioria dos vídeos)
-    # web: fallback padrão
+    # Evita cliente web puro (SABR + PO token), priorizando clientes mais estáveis para stream de áudio.
     'extractor_args': {
         'youtube': {
-            'player_client': ['web_embedded', 'web'],
+            'player_client': ['tv', 'android_sdkless', 'web_embedded'],
         }
     },
 }
