@@ -1,7 +1,8 @@
 """Constantes e opcoes usadas pelo sistema de playback."""
 
 YDL_OPTIONS = {
-    'format': 'bestaudio/best',
+    # Prioriza HLS (m3u8) quando disponível, reduzindo chances de 403 por GVS/PO-token.
+    'format': 'bestaudio[protocol*=m3u8]/bestaudio/best',
     'quiet': False,  # Habilitar logs para debug
     'verbose': True, # Verbose explícito
     'noplaylist': False,  # Permitir playlists
@@ -17,10 +18,11 @@ YDL_OPTIONS = {
     # Precisa ser lista/set, não string; string gera warning de componentes por caractere.
     'remote_components': ['ejs:github'],
     
-    # Evita cliente web puro (SABR + PO token), priorizando clientes mais estáveis para stream de áudio.
+    # Evita cliente tv (pode cair em DRM total) e prioriza web_safari (HLS),
+    # que costuma funcionar melhor sem PO Token.
     'extractor_args': {
         'youtube': {
-            'player_client': ['tv', 'android_sdkless', 'web_embedded'],
+            'player_client': ['web_safari', 'web', 'mweb'],
         }
     },
 }
