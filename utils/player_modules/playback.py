@@ -3,17 +3,18 @@
 import asyncio
 import logging
 import time
-from collections import deque
-
 import yt_dlp
+from collections import deque
 
 from .constants import YDL_FALLBACK_CLIENTS, YDL_OPTIONS
 from .core import SafeFFmpegPCMAudio
+
 
 def _extract_video_id(url: str) -> str | None:
     """Extrai o video_id de uma URL do YouTube para o cache de falhas."""
     if not url:
         return None
+    # youtube.com/watch?v=XXXX  ou  youtu.be/XXXX
     if 'v=' in url:
         return url.split('v=')[-1].split('&')[0]
     if 'youtu.be/' in url:
@@ -22,7 +23,11 @@ def _extract_video_id(url: str) -> str | None:
 
 
 def _try_extract_with_clients(ydl_base_params: dict, url: str, clients: list) -> dict | None:
-    """Tenta extrair info usando uma lista específica de player_clients."""
+    """Tenta extrair info usando uma lista específica de player_clients.
+    
+    Cria uma instância temporária do YoutubeDL com os clientes indicados
+    para não modificar a instância global (self.ydl).
+    """
     override = {
         **ydl_base_params,
         'extractor_args': {
@@ -34,40 +39,9 @@ def _try_extract_with_clients(ydl_base_params: dict, url: str, clients: list) ->
     with yt_dlp.YoutubeDL(override) as ydl_tmp:
         return ydl_tmp.extract_info(url, download=False)
 
+
 class PlaybackMixin:
     """Comportamentos de playback do MusicPlayer."""
-
-    def _resolve_stream_url(self, source_url: str) -> tuple:
-        """Resolve a URL de stream com fallback automático de player_clients.
-        Retorna: (stream_url, http_headers, info_dict)
-        """
-        last_error = None
-
-        # Tentativa 1: cliente primário (self.ydl já configurado)
-        try:
-            info = self.ydl.extract_info(source_url, download=False)
-            if info and info.get('url'):
-                return info['url'], dict(info.get('http_headers') or {}), info
-        except Exception as e:
-            last_error = e
-            logging.warning(f"[resolve] Clientes primários falharam para {source_url}: {e}")
-
-        # Tentativas de Fallback
-        base_params = dict(self.ydl.params)
-        base_params.pop('logger', None)
-
-        for idx, clients in enumerate(YDL_FALLBACK_CLIENTS):
-            try:
-                logging.info(f"[resolve] Fallback {idx + 1}/{len(YDL_FALLBACK_CLIENTS)} com clientes: {clients}")
-                info = _try_extract_with_clients(base_params, source_url, clients)
-                if info and info.get('url'):
-                    logging.info(f"[resolve] ✓ Sucesso com clientes: {clients}")
-                    return info['url'], dict(info.get('http_headers') or {}), info
-            except Exception as e:
-                last_error = e
-                logging.warning(f"[resolve] Fallback {clients} falhou: {e}")
-
-        raise ValueError(f"Todos os clientes falharam para {source_url}: {last_error}")
 
     @staticmethod
     def _ffmpeg_escape(value: str) -> str:
@@ -92,6 +66,45 @@ class PlaybackMixin:
             options.append(f'-referer "{self._ffmpeg_escape(origin)}"')
 
         return " ".join(options)
+
+    def _resolve_stream_url(self, source_url: str) -> tuple[str, dict]:
+        """Resolve a URL de stream com fallback automático de player_clients.
+
+        Estratégia:
+        1. Tenta com self.ydl (clientes primários: ios, android, tv_embedded).
+        2. Se falhar, itera pelos YDL_FALLBACK_CLIENTS em ordem.
+        3. Se todos falharem, lança exceção.
+
+        Retorna: (stream_url, http_headers)
+        """
+        last_error: Exception | None = None
+
+        # --- Tentativa 1: cliente primário (self.ydl já configurado) ---
+        try:
+            info = self.ydl.extract_info(source_url, download=False)
+            if info and info.get('url'):
+                return info['url'], dict(info.get('http_headers') or {}), info
+        except Exception as e:
+            last_error = e
+            logging.warning(f"[resolve] Clientes primários falharam para {source_url}: {e}")
+
+        # --- Tentativas de Fallback ---
+        base_params = dict(self.ydl.params)
+        # Remover chaves que causam conflito ao criar instância temporária
+        base_params.pop('logger', None)
+
+        for idx, clients in enumerate(YDL_FALLBACK_CLIENTS):
+            try:
+                logging.info(f"[resolve] Fallback {idx + 1}/{len(YDL_FALLBACK_CLIENTS)} com clientes: {clients}")
+                info = _try_extract_with_clients(base_params, source_url, clients)
+                if info and info.get('url'):
+                    logging.info(f"[resolve] ✓ Sucesso com clientes: {clients}")
+                    return info['url'], dict(info.get('http_headers') or {}), info
+            except Exception as e:
+                last_error = e
+                logging.warning(f"[resolve] Fallback {clients} falhou: {e}")
+
+        raise ValueError(f"Todos os clientes falharam para {source_url}: {last_error}")
 
     async def play_next(self):
         """Toca a próxima música da fila com Lazy Resolve e SafeFFmpeg.
@@ -139,7 +152,6 @@ class PlaybackMixin:
         self._cancel_queue_empty_cleanup()
         self.current_song = self.queue.popleft()
         logging.info(f"[play_next] Preparando: {self.current_song['title']}")
-        # Log de debug: mostrar duração e flags para investigar ausência de barra de progresso
         try:
             logging.debug(f"[play_next] current_song metadata: title={self.current_song.get('title')}, duration_seconds={self.current_song.get('duration_seconds')}, is_lazy={self.current_song.get('is_lazy')}")
         except Exception:
@@ -149,14 +161,14 @@ class PlaybackMixin:
         source_url = self.current_song['url']
         source_headers = dict(self.current_song.get('stream_headers') or {})
         
-        # Cache de falhas: pular vídeos que já falharam nesta sessão
+        # --- Cache de falhas: pular vídeos que já falharam nesta sessão ---
         video_id = _extract_video_id(source_url)
         if video_id and video_id in self._failed_ids:
             logging.warning(f"[play_next] Pulando {source_url} — marcado como falho nesta sessão.")
             self.loop.create_task(self.play_next())
             return
-        
-        # Verificar Cache Primeiro
+
+        # Verificar Cache de Streams Primeiro
         cached_entry = self.stream_cache.get(source_url)
         if cached_entry:
             logging.info("⚡ URL recuperada do Cache!")
@@ -166,21 +178,15 @@ class PlaybackMixin:
             else:
                 source_url = cached_entry
         else:
-            # Se não estiver em cache ou for 'is_lazy', resolver via yt-dlp
-            # OU se for stream direta de rádio/arquivo, não precisa resolver
-            # Resolver apenas quando necessário em URL de serviço canônica.
-            # Evita falso-positivo em stream direto contendo query param "source=youtube".
             requires_resolution = (
                 (self.current_song.get('is_lazy', False) and not self._is_direct_stream_url(source_url))
                 or self._is_resolvable_service_url(source_url)
             )
             
-            # Se for link direto (http) e não tiver cara de serviço conhecido, talvez não precise
-            # Mas o yt-dlp lida bem com isso.
-            
             if requires_resolution:
                 try:
                     logging.info(f"Resolvendo Stream URL (Lazy)... Cache Miss para {source_url}")
+                    # _resolve_stream_url tenta primário + fallbacks automaticamente
                     stream_url, stream_headers, info = await self.loop.run_in_executor(
                         None,
                         lambda: self._resolve_stream_url(source_url)
@@ -201,6 +207,7 @@ class PlaybackMixin:
                     if source_headers:
                         self.current_song['stream_headers'] = source_headers
 
+                    # Salvar no cache de streams
                     if source_url:
                         self.stream_cache.set(
                             self.current_song['url'],
@@ -209,15 +216,18 @@ class PlaybackMixin:
 
                 except Exception as e:
                     logging.error(f"Erro ao resolver stream: {e}")
-                    video_id = _extract_video_id(self.current_song.get('url', ''))
+                    # Marcar video_id como falho para não tentar de novo nesta sessão
                     if video_id:
                         self._failed_ids.add(video_id)
                         logging.info(f"[play_next] video_id '{video_id}' adicionado ao cache de falhas.")
                     self.loop.create_task(self.play_next())
                     return
+
         # Proteção final contra URL nula
         if not source_url:
             logging.error("Source URL é None após resolução. Pulando música.")
+            if video_id:
+                self._failed_ids.add(video_id)
             self.loop.create_task(self.play_next())
             return
 
@@ -266,15 +276,12 @@ class PlaybackMixin:
                         logging.error(f"Erro ao agendar proxima musica: {exc}")
 
                 next_future.add_done_callback(_log_future_error)
-                # Não esperar result aqui para não travar thread do ffmpeg
                 
             except Exception as e:
                 logging.error(f"Erro crítico no callback after_play: {e}")
 
         try:
-            # USAR O NOVO SafeFFmpegPCMAudio
             executable = 'ffmpeg'
-            
             source = SafeFFmpegPCMAudio(source_url, executable=executable, **ffmpeg_options)
             
             self.voice_client.play(source, after=after_play)
@@ -287,20 +294,17 @@ class PlaybackMixin:
             self.started_at = time.monotonic() - seek_position
             self.paused_at = None
             self.total_paused = 0
-            self._last_second = -1  # Reset dashboard update counter para nova música
-            
+            self._last_second = -1
+
             self.song_duration = self.current_song.get('duration_seconds', 0)
                 
             # Iniciar Dashboard
             try:
-                # Não aguardar o envio do dashboard para não bloquear o início do áudio.
-                # Executar em background para evitar que falhas de rede afetem o playback.
                 self.loop.create_task(self.send_dashboard())
             except Exception as e:
                 logging.error(f"Erro ao agendar envio do dashboard: {e}")
 
             # 3. PRÉ-RESOLUÇÃO (Pre-Resolve Next)
-            # Tentar resolver a próxima música em background para evitar gap
             if self.queue:
                 next_song = self.queue[0]
                 if next_song.get('is_lazy') or 'youtube' in next_song['url']:
@@ -316,13 +320,11 @@ class PlaybackMixin:
                 return
 
             await asyncio.sleep(1)
-            # Evitar recursão de stack (User Feedback #1)
             self.loop.create_task(self.play_next())
 
     async def _pre_resolve_next(self, song):
         """Resolve a URL da próxima música silenciosamente."""
         try:
-            # Se a faixa já virou a atual, não pré-resolver para evitar corrida de extração duplicada.
             if song is self.current_song:
                 return
             source_url = song['url']
@@ -330,15 +332,20 @@ class PlaybackMixin:
                 return
             if not (song.get('is_lazy') or self._is_resolvable_service_url(source_url)):
                 return
-            # Se já estiver em cache, ignora
             if self.stream_cache.get(source_url):
+                return
+
+            # Verificar cache de falhas antes de tentar
+            video_id = _extract_video_id(source_url)
+            if video_id and video_id in self._failed_ids:
+                logging.info(f"[pre_resolve] Pulando {source_url} — no cache de falhas.")
                 return
 
             stream_url, stream_headers, info = await self.loop.run_in_executor(
                 None,
                 lambda: self._resolve_stream_url(source_url)
             )
-
+            
             if stream_url:
                 if song is self.current_song:
                     return
@@ -359,9 +366,11 @@ class PlaybackMixin:
                     song['is_lazy'] = False
                 except Exception:
                     pass
-                logging.info("Pr�xima m�sica pr�-resolvida com sucesso!")
+                logging.info("Próxima música pré-resolvida com sucesso!")
+                 
         except Exception as e:
-            logging.debug(f"Falha na pr�-resolu��o (n�o cr�tico): {e}")
+            logging.debug(f"Falha na pré-resolução (não crítico): {e}")
+            # Marcar como falha para não re-tentar desnecessariamente
             video_id = _extract_video_id(song.get('url', ''))
             if video_id:
                 self._failed_ids.add(video_id)
