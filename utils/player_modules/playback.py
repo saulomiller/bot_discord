@@ -5,10 +5,69 @@ import logging
 import time
 from collections import deque
 
+import yt_dlp
+
+from .constants import YDL_FALLBACK_CLIENTS, YDL_OPTIONS
 from .core import SafeFFmpegPCMAudio
+
+def _extract_video_id(url: str) -> str | None:
+    """Extrai o video_id de uma URL do YouTube para o cache de falhas."""
+    if not url:
+        return None
+    if 'v=' in url:
+        return url.split('v=')[-1].split('&')[0]
+    if 'youtu.be/' in url:
+        return url.split('youtu.be/')[-1].split('?')[0]
+    return None
+
+
+def _try_extract_with_clients(ydl_base_params: dict, url: str, clients: list) -> dict | None:
+    """Tenta extrair info usando uma lista específica de player_clients."""
+    override = {
+        **ydl_base_params,
+        'extractor_args': {
+            'youtube': {
+                'player_client': clients,
+            }
+        },
+    }
+    with yt_dlp.YoutubeDL(override) as ydl_tmp:
+        return ydl_tmp.extract_info(url, download=False)
 
 class PlaybackMixin:
     """Comportamentos de playback do MusicPlayer."""
+
+    def _resolve_stream_url(self, source_url: str) -> tuple:
+        """Resolve a URL de stream com fallback automático de player_clients.
+        Retorna: (stream_url, http_headers, info_dict)
+        """
+        last_error = None
+
+        # Tentativa 1: cliente primário (self.ydl já configurado)
+        try:
+            info = self.ydl.extract_info(source_url, download=False)
+            if info and info.get('url'):
+                return info['url'], dict(info.get('http_headers') or {}), info
+        except Exception as e:
+            last_error = e
+            logging.warning(f"[resolve] Clientes primários falharam para {source_url}: {e}")
+
+        # Tentativas de Fallback
+        base_params = dict(self.ydl.params)
+        base_params.pop('logger', None)
+
+        for idx, clients in enumerate(YDL_FALLBACK_CLIENTS):
+            try:
+                logging.info(f"[resolve] Fallback {idx + 1}/{len(YDL_FALLBACK_CLIENTS)} com clientes: {clients}")
+                info = _try_extract_with_clients(base_params, source_url, clients)
+                if info and info.get('url'):
+                    logging.info(f"[resolve] ✓ Sucesso com clientes: {clients}")
+                    return info['url'], dict(info.get('http_headers') or {}), info
+            except Exception as e:
+                last_error = e
+                logging.warning(f"[resolve] Fallback {clients} falhou: {e}")
+
+        raise ValueError(f"Todos os clientes falharam para {source_url}: {last_error}")
 
     @staticmethod
     def _ffmpeg_escape(value: str) -> str:
@@ -90,6 +149,13 @@ class PlaybackMixin:
         source_url = self.current_song['url']
         source_headers = dict(self.current_song.get('stream_headers') or {})
         
+        # Cache de falhas: pular vídeos que já falharam nesta sessão
+        video_id = _extract_video_id(source_url)
+        if video_id and video_id in self._failed_ids:
+            logging.warning(f"[play_next] Pulando {source_url} — marcado como falho nesta sessão.")
+            self.loop.create_task(self.play_next())
+            return
+        
         # Verificar Cache Primeiro
         cached_entry = self.stream_cache.get(source_url)
         if cached_entry:
@@ -115,18 +181,12 @@ class PlaybackMixin:
             if requires_resolution:
                 try:
                     logging.info(f"Resolvendo Stream URL (Lazy)... Cache Miss para {source_url}")
-                    # EXECUTAR EM THREAD para não bloquear!
-                    # Usar self.ydl reutilizado
-                    info = await self.loop.run_in_executor(
-                        None, 
-                        lambda: self.ydl.extract_info(source_url, download=False)
+                    stream_url, stream_headers, info = await self.loop.run_in_executor(
+                        None,
+                        lambda: self._resolve_stream_url(source_url)
                     )
-                    
-                    if not info:
-                         raise ValueError("Falha ao extrair info")
-                    
+
                     extractor_name = str(info.get('extractor', '')).lower()
-                    # Não sobrescrever metadados com extractor genérico (ex.: "videoplayback").
                     if extractor_name != 'generic':
                         self.current_song['title'] = info.get('title', self.current_song['title'])
                         self.current_song['thumbnail'] = info.get('thumbnail', self.current_song['thumbnail'])
@@ -135,26 +195,26 @@ class PlaybackMixin:
                         self.current_song['duration_seconds'] = duration
                     else:
                         logging.debug("[play_next] Extractor 'generic' detectado; preservando metadados atuais.")
-                    
-                    # Pegar URL real do áudio
-                    source_url = info.get('url')
-                    source_headers = dict(info.get('http_headers') or {})
+
+                    source_url = stream_url
+                    source_headers = stream_headers
                     if source_headers:
                         self.current_song['stream_headers'] = source_headers
-                    
-                    # Salvar no cache
+
                     if source_url:
                         self.stream_cache.set(
                             self.current_song['url'],
                             {'url': source_url, 'headers': source_headers}
                         )
-                    
+
                 except Exception as e:
                     logging.error(f"Erro ao resolver stream: {e}")
-                    # Tentar próxima
+                    video_id = _extract_video_id(self.current_song.get('url', ''))
+                    if video_id:
+                        self._failed_ids.add(video_id)
+                        logging.info(f"[play_next] video_id '{video_id}' adicionado ao cache de falhas.")
                     self.loop.create_task(self.play_next())
                     return
-
         # Proteção final contra URL nula
         if not source_url:
             logging.error("Source URL é None após resolução. Pulando música.")
@@ -274,22 +334,19 @@ class PlaybackMixin:
             if self.stream_cache.get(source_url):
                 return
 
-            # Resolver
-            info = await self.loop.run_in_executor(
-                None, 
-                lambda: self.ydl.extract_info(source_url, download=False)
+            stream_url, stream_headers, info = await self.loop.run_in_executor(
+                None,
+                lambda: self._resolve_stream_url(source_url)
             )
-            
-            if info and info.get('url'):
+
+            if stream_url:
                 if song is self.current_song:
                     return
-                stream_headers = dict(info.get('http_headers') or {})
                 self.stream_cache.set(
                     source_url,
-                    {'url': info['url'], 'headers': stream_headers}
+                    {'url': stream_url, 'headers': stream_headers}
                 )
                 extractor_name = str(info.get('extractor', '')).lower()
-                # Atualizar metadados de forma segura (verificar que o song ainda é o mesmo objeto)
                 try:
                     if extractor_name != 'generic':
                         song['title'] = info.get('title', song['title'])
@@ -299,10 +356,12 @@ class PlaybackMixin:
                         song['duration'] = self._format_duration(duration)
                     if stream_headers:
                         song['stream_headers'] = stream_headers
-                    song['is_lazy'] = False  # Marcar como resolvido
+                    song['is_lazy'] = False
                 except Exception:
-                    pass  # Race condition: song pode ter sido removido da fila
-                logging.info("Próxima música pré-resolvida com sucesso!")
-                 
+                    pass
+                logging.info("Pr�xima m�sica pr�-resolvida com sucesso!")
         except Exception as e:
-            logging.debug(f"Falha na pré-resolução (não crítico): {e}")
+            logging.debug(f"Falha na pr�-resolu��o (n�o cr�tico): {e}")
+            video_id = _extract_video_id(song.get('url', ''))
+            if video_id:
+                self._failed_ids.add(video_id)
