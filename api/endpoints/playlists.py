@@ -22,11 +22,15 @@ async def get_playlists():
     try:
         if not os.path.exists(PLAYLIST_DIR):
             os.makedirs(PLAYLIST_DIR)
-        files = [name for name in os.listdir(PLAYLIST_DIR) if name.endswith(".txt")]
+        files = [
+            name for name in os.listdir(PLAYLIST_DIR) if name.endswith(".txt")
+        ]
         return {"status": "success", "playlists": files}
     except Exception as exc:
         logging.error(f"Erro ao obter playlists: {exc}")
-        raise HTTPException(status_code=500, detail="Erro ao obter playlists.") from exc
+        raise HTTPException(
+            status_code=500, detail="Erro ao obter playlists."
+        ) from exc
 
 
 @router.post("/api/upload_playlist")
@@ -46,7 +50,9 @@ async def upload_playlist(payload: PlaylistUploadRequest):
                 decoded = base64.b64decode(payload.file, validate=True)
                 content = decoded.decode("utf-8")
             except Exception as exc:
-                raise HTTPException(status_code=400, detail="Conteúdo de playlist inválido.") from exc
+                raise HTTPException(
+                    status_code=400, detail="Conteúdo de playlist inválido."
+                ) from exc
         else:
             content = payload.file
 
@@ -57,7 +63,9 @@ async def upload_playlist(payload: PlaylistUploadRequest):
                 detail=f"Playlist excede o limite de {MAX_PLAYLIST_BYTES} bytes.",
             )
         if "\x00" in content:
-            raise HTTPException(status_code=400, detail="Conteúdo de playlist inválido.")
+            raise HTTPException(
+                status_code=400, detail="Conteúdo de playlist inválido."
+            )
 
         lines = content.splitlines()
         if len(lines) > MAX_PLAYLIST_LINES:
@@ -86,4 +94,3 @@ async def upload_playlist(payload: PlaylistUploadRequest):
     except Exception as exc:
         logging.error(f"Erro no upload de playlist: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-

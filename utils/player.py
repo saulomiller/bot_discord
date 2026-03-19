@@ -18,6 +18,7 @@ from utils.player_modules import (
     StreamCache,
 )
 
+
 class MusicPlayer(
     PlaybackMixin,
     SoundboardMixin,
@@ -39,36 +40,38 @@ class MusicPlayer(
         self.is_looping = False
         self.is_shuffling = False
         self.loop = asyncio.get_running_loop()
-        
+
         # Cache de Streams
         self.stream_cache = StreamCache()
-        
+
         # Cache de vídeos que falharam com UNPLAYABLE — evita re-tentativas
         # redundantes na mesma sessão. Resetado quando o player é recriado.
         self._failed_ids: set = set()
-        
+
         # Reutilizar instância do YoutubeDL (Otimização)
         self.ydl = yt_dlp.YoutubeDL(YDL_OPTIONS)
 
         # Progress tracking
         self.started_at = None
-        self.paused_at = None 
+        self.paused_at = None
         self.total_paused = 0
-        
+
         # Soundboard state
         self.sfx_playing = False
         self.stopped_for_sfx = False
         self.consecutive_errors = 0
-        
+
         # Concurrency safety: Lock para evitar múltiplos play_next simultâneos
         self._play_lock = asyncio.Lock()
 
         # Dashboard (Card Vivo)
         self.dashboard_message = None
-        self.dashboard_context = None # ctx ou interaction
+        self.dashboard_context = None  # ctx ou interaction
         self.dashboard_task = None
         self.last_img_url = None
-        self._last_second = -1  # Rastreador para smart updates (evita recria desnecessária)
+        self._last_second = (
+            -1
+        )  # Rastreador para smart updates (evita recria desnecessária)
         self._queue_empty_cleanup_task = None
         self._queue_empty_grace_seconds = 8
 
@@ -81,7 +84,9 @@ class MusicPlayer(
     @property
     def is_playback_busy(self) -> bool:
         """Retorna True quando há reprodução ativa ou transição de play em andamento."""
-        return self._play_lock.locked() or self.is_voice_busy or self.sfx_playing
+        return (
+            self._play_lock.locked() or self.is_voice_busy or self.sfx_playing
+        )
 
     @property
     def guild(self):
@@ -102,10 +107,10 @@ class MusicPlayer(
         """Formata duração em segundos para string HH:MM:SS ou MM:SS."""
         if not duration_seconds:
             return "Desconhecida"
-        
+
         minutes, seconds = divmod(int(duration_seconds), 60)
         hours, minutes = divmod(minutes, 60)
-        
+
         if hours > 0:
             return f"{hours}:{minutes:02d}:{seconds:02d}"
         else:
@@ -118,8 +123,8 @@ class MusicPlayer(
             return False
         lower = str(url).lower()
         return (
-            'googlevideo.com/videoplayback' in lower
-            or 'manifest.googlevideo.com' in lower
+            "googlevideo.com/videoplayback" in lower
+            or "manifest.googlevideo.com" in lower
         )
 
     @staticmethod
@@ -129,16 +134,17 @@ class MusicPlayer(
             return False
         lower = str(url).lower()
         return (
-            'youtube.com/watch' in lower
-            or 'youtu.be/' in lower
-            or 'music.youtube.com/' in lower
-            or 'soundcloud.com/' in lower
+            "youtube.com/watch" in lower
+            or "youtu.be/" in lower
+            or "music.youtube.com/" in lower
+            or "soundcloud.com/" in lower
         )
 
+
 __all__ = [
-    'MAX_PLAYLIST_SIZE',
-    'YDL_OPTIONS',
-    'MusicPlayer',
-    'SafeFFmpegPCMAudio',
-    'StreamCache',
+    "MAX_PLAYLIST_SIZE",
+    "YDL_OPTIONS",
+    "MusicPlayer",
+    "SafeFFmpegPCMAudio",
+    "StreamCache",
 ]

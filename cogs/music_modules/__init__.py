@@ -7,9 +7,9 @@ from .playback import MusicPlaybackMixin
 from .radio import MusicRadioMixin
 
 __all__ = [
-    'MusicAdminMixin',
-    'MusicBaseMixin',
-    'MusicConnectionMixin',
-    'MusicPlaybackMixin',
-    'MusicRadioMixin',
+    "MusicAdminMixin",
+    "MusicBaseMixin",
+    "MusicConnectionMixin",
+    "MusicPlaybackMixin",
+    "MusicRadioMixin",
 ]

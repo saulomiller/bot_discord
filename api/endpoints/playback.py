@@ -12,7 +12,9 @@ router = APIRouter()
 
 
 @router.post("/api/play")
-async def api_play(request: Request, body: MusicRequest, guild_id: int | None = None):
+async def api_play(
+    request: Request, body: MusicRequest, guild_id: int | None = None
+):
     """Add a track or playlist to queue and start playback when needed."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, guild_id)
@@ -69,7 +71,10 @@ async def api_remove_playlist(request: Request, guild_id: int | None = None):
         if removed > 0:
             message_parts.append(f"Removidas {removed} músicas da fila.")
         if not message_parts:
-            return {"status": "success", "message": "Nenhuma música de playlist encontrada para remover."}
+            return {
+                "status": "success",
+                "message": "Nenhuma música de playlist encontrada para remover.",
+            }
         return {"status": "success", "message": " ".join(message_parts)}
 
     total_removed = 0
@@ -96,7 +101,10 @@ async def api_remove_playlist(request: Request, guild_id: int | None = None):
         message_parts.append(f"Removidas {total_removed} músicas da fila.")
 
     if not message_parts:
-        return {"status": "success", "message": "Nenhuma música de playlist encontrada para remover."}
+        return {
+            "status": "success",
+            "message": "Nenhuma música de playlist encontrada para remover.",
+        }
 
     return {"status": "success", "message": " ".join(message_parts)}
 
@@ -122,7 +130,9 @@ async def api_resume(request: Request, guild_id: int | None = None):
 
 
 @router.post("/api/volume")
-async def api_volume(request: Request, body: VolumeRequest, guild_id: int | None = None):
+async def api_volume(
+    request: Request, body: VolumeRequest, guild_id: int | None = None
+):
     """Executa o endpoint de volume."""
     bot = request.app.state.bot
 

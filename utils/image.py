@@ -24,9 +24,9 @@ log = logging.getLogger(__name__)
 
 FONTS: dict = {}
 SESSION = requests.Session()
-SESSION.headers.update({'User-Agent': 'Mozilla/5.0 (bot)'})
+SESSION.headers.update({"User-Agent": "Mozilla/5.0 (bot)"})
 
-_FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
+_FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 
 
 def get_font(name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -46,6 +46,7 @@ def get_font(name: str, size: int) -> ImageFont.FreeTypeFont:
 # Download e cache de imagens
 # ---------------------------------------------------------------------------
 
+
 @lru_cache(maxsize=80)
 def fetch_image_content(url: str) -> bytes | None:
     """Baixa e cacheia conteúdo de imagens por URL."""
@@ -64,6 +65,7 @@ def fetch_image_content(url: str) -> bytes | None:
 # Processamento de imagens (com cache)
 # ---------------------------------------------------------------------------
 
+
 def cover_resize(img: Image.Image, width: int, height: int) -> Image.Image:
     """Redimensiona estilo 'cover' (preenche tudo sem distorcer)."""
     iw, ih = img.size
@@ -71,12 +73,14 @@ def cover_resize(img: Image.Image, width: int, height: int) -> Image.Image:
     new_size = (int(iw * scale), int(ih * scale))
     img = img.resize(new_size, Image.LANCZOS)
     left = (img.width - width) // 2
-    top  = (img.height - height) // 2
+    top = (img.height - height) // 2
     return img.crop((left, top, left + width, top + height))
 
 
 @lru_cache(maxsize=80)
-def generate_blurred_background(image_bytes: bytes, width: int, height: int) -> Image.Image | None:
+def generate_blurred_background(
+    image_bytes: bytes, width: int, height: int
+) -> Image.Image | None:
     """Gera o background desfocado a partir dos bytes da imagem original."""
     if not image_bytes:
         return None
@@ -101,9 +105,9 @@ def generate_thumbnail(image_bytes: bytes, size: tuple) -> Image.Image | None:
         img = Image.open(BytesIO(image_bytes)).convert("RGB")
         w, h = img.size
         min_side = min(w, h)
-        left   = (w - min_side) // 2
-        top    = (h - min_side) // 2
-        img    = img.crop((left, top, left + min_side, top + min_side))
+        left = (w - min_side) // 2
+        top = (h - min_side) // 2
+        img = img.crop((left, top, left + min_side, top + min_side))
         return img.resize(size, Image.LANCZOS)
     except Exception as e:
         log.error(f"Erro ao gerar thumbnail: {e}")
@@ -120,6 +124,7 @@ def is_low_resolution(img: Image.Image, min_size: int = 300) -> bool:
 # Extração de cor dominante
 # ---------------------------------------------------------------------------
 
+
 def get_dominant_color_from_bytes(content: bytes) -> tuple[int, int, int]:
     """
     Extrai a cor dominante de uma imagem a partir de bytes.
@@ -131,7 +136,7 @@ def get_dominant_color_from_bytes(content: bytes) -> tuple[int, int, int]:
         image = Image.open(BytesIO(content)).convert("RGB")
         image = image.resize((100, 100))  # Reduzido para maior velocidade
         result = image.quantize(colors=8, method=2)
-        colors = result.convert('RGB').getcolors(maxcolors=256)
+        colors = result.convert("RGB").getcolors(maxcolors=256)
         if not colors:
             return (30, 30, 30)
         # Retorna a cor mais frequente
@@ -158,7 +163,14 @@ def get_dominant_color(url: str) -> tuple[int, int, int]:
 # Utilitários de desenho
 # ---------------------------------------------------------------------------
 
-def truncate_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int, suffix: str = "...") -> str:
+
+def truncate_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font,
+    max_width: int,
+    suffix: str = "...",
+) -> str:
     """Trunca texto baseado na largura real em pixels (busca binária)."""
     bbox = draw.textbbox((0, 0), text, font=font)
     if bbox[2] - bbox[0] <= max_width:
@@ -174,7 +186,7 @@ def truncate_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int, su
         else:
             right = mid
 
-    return text[:max(0, left - 1)] + suffix
+    return text[: max(0, left - 1)] + suffix
 
 
 def apply_side_gradient(base_img: Image.Image, start_x: int) -> None:
@@ -196,14 +208,23 @@ def apply_side_gradient(base_img: Image.Image, start_x: int) -> None:
     base_img.paste(base_rgba.convert("RGB"))
 
 
-def draw_text_shadow(draw: ImageDraw.ImageDraw, pos: tuple, text: str, font, fill: tuple, offset: int = 2) -> None:
+def draw_text_shadow(
+    draw: ImageDraw.ImageDraw,
+    pos: tuple,
+    text: str,
+    font,
+    fill: tuple,
+    offset: int = 2,
+) -> None:
     """Desenha texto com sombra para melhor legibilidade."""
     x, y = pos
     draw.text((x + offset, y + offset), text, font=font, fill=(0, 0, 0, 180))
     draw.text((x, y), text, font=font, fill=fill)
 
 
-def wrap_two_lines(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
+def wrap_two_lines(
+    draw: ImageDraw.ImageDraw, text: str, font, max_width: int
+) -> list[str]:
     """Quebra o texto em no máximo 2 linhas."""
     words = text.split()
     lines = []
@@ -234,6 +255,7 @@ def wrap_two_lines(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -
 # Normalização de dados da música
 # ---------------------------------------------------------------------------
 
+
 def normalize_song_info(song_info: dict | None) -> dict:
     """
     Normaliza os dados de song_info para garantir compatibilidade
@@ -242,10 +264,10 @@ def normalize_song_info(song_info: dict | None) -> dict:
     if not isinstance(song_info, dict):
         song_info = {}
 
-    title_keys     = ['title', 'name', 'track', 'song']
-    artist_keys    = ['channel', 'artist', 'uploader', 'author', 'creator']
-    thumbnail_keys = ['thumbnail', 'artwork_url', 'art', 'image', 'cover']
-    user_keys      = ['user', 'requested_by', 'requester']
+    title_keys = ["title", "name", "track", "song"]
+    artist_keys = ["channel", "artist", "uploader", "author", "creator"]
+    thumbnail_keys = ["thumbnail", "artwork_url", "art", "image", "cover"]
+    user_keys = ["user", "requested_by", "requester"]
 
     def _first(keys):
         """Executa a rotina de fir t."""
@@ -256,12 +278,14 @@ def normalize_song_info(song_info: dict | None) -> dict:
         return None
 
     normalized = {
-        'title':            _first(title_keys)     or "Título Desconhecido",
-        'channel':          _first(artist_keys)    or "Artista Desconhecido",
-        'thumbnail':        _first(thumbnail_keys),
-        'user':             _first(user_keys)      or "?",
-        'duration':         song_info.get('duration', '?:??'),
-        'duration_seconds': song_info.get('duration_seconds', 0),  # Preservar para barra de progresso
+        "title": _first(title_keys) or "Título Desconhecido",
+        "channel": _first(artist_keys) or "Artista Desconhecido",
+        "thumbnail": _first(thumbnail_keys),
+        "user": _first(user_keys) or "?",
+        "duration": song_info.get("duration", "?:??"),
+        "duration_seconds": song_info.get(
+            "duration_seconds", 0
+        ),  # Preservar para barra de progresso
     }
     return normalized
 
@@ -269,6 +293,7 @@ def normalize_song_info(song_info: dict | None) -> dict:
 # ---------------------------------------------------------------------------
 # Card visual principal
 # ---------------------------------------------------------------------------
+
 
 def create_now_playing_card(
     song_info: dict | None,
@@ -298,7 +323,7 @@ def create_now_playing_card(
         card = Image.new("RGB", (width, height), (18, 18, 18))
         draw = ImageDraw.Draw(card)
 
-        thumb_url = song_info.get('thumbnail')
+        thumb_url = song_info.get("thumbnail")
         content = fetch_image_content(thumb_url) if thumb_url else None
         thumb = None
 
@@ -352,12 +377,16 @@ def create_now_playing_card(
 
         mask = Image.new("L", (cover_size, cover_size), 0)
         mask_draw = ImageDraw.Draw(mask)
-        mask_draw.rounded_rectangle([0, 0, cover_size - 1, cover_size - 1], radius=24, fill=255)
+        mask_draw.rounded_rectangle(
+            [0, 0, cover_size - 1, cover_size - 1], radius=24, fill=255
+        )
 
         if thumb:
             card.paste(thumb, (cover_x, cover_y), mask)
         else:
-            placeholder = Image.new("RGB", (cover_size, cover_size), (42, 42, 42))
+            placeholder = Image.new(
+                "RGB", (cover_size, cover_size), (42, 42, 42)
+            )
             ph_draw = ImageDraw.Draw(placeholder)
             ph_font = get_font("arialbd.ttf", 30)
             ph_text = "NO ART"
@@ -373,7 +402,12 @@ def create_now_playing_card(
             card.paste(placeholder, (cover_x, cover_y), mask)
 
         draw.rounded_rectangle(
-            [cover_x - 2, cover_y - 2, cover_x + cover_size + 1, cover_y + cover_size + 1],
+            [
+                cover_x - 2,
+                cover_y - 2,
+                cover_x + cover_size + 1,
+                cover_y + cover_size + 1,
+            ],
             radius=26,
             outline=(230, 230, 230),
             width=2,
@@ -384,7 +418,10 @@ def create_now_playing_card(
         font_small = get_font("arial.ttf", 16)
         font_queue = get_font("arial.ttf", 18)
 
-        def draw_centered_line(text: str, y: int, font, fill: tuple[int, int, int]) -> None:
+        def draw_centered_line(
+            text: str, y: int, font, fill: tuple[int, int, int]
+        ) -> None:
+            """Desenha uma linha centralizada com truncamento e sombra."""
             safe_text = truncate_text(draw, text, font, text_width)
             bbox = draw.textbbox((0, 0), safe_text, font=font)
             line_w = bbox[2] - bbox[0]
@@ -405,7 +442,11 @@ def create_now_playing_card(
             y += line_h + 8
 
         user = song_info.get("user", "?")
-        user_str = str(user) if not hasattr(user, 'display_name') else user.display_name
+        user_str = (
+            str(user)
+            if not hasattr(user, "display_name")
+            else user.display_name
+        )
         user_label = f"{user_str}"
         artist = song_info.get("channel", "Desconhecido")
 
@@ -450,7 +491,11 @@ def create_now_playing_card(
             offset=1,
         )
 
-        meta_h = (right_bbox[3] - right_bbox[1]) if (right_bbox[3] - right_bbox[1]) > 0 else 16
+        meta_h = (
+            (right_bbox[3] - right_bbox[1])
+            if (right_bbox[3] - right_bbox[1]) > 0
+            else 16
+        )
         sep_y = meta_y + meta_h + 10
         draw.line(
             [(panel_x + 12, sep_y), (panel_x + panel_w - 12, sep_y)],
@@ -459,7 +504,14 @@ def create_now_playing_card(
         )
 
         queue_y = sep_y + 10
-        draw_text_shadow(draw, (panel_x + 14, queue_y), "A seguir", font_small, (154, 154, 154), offset=1)
+        draw_text_shadow(
+            draw,
+            (panel_x + 14, queue_y),
+            "A seguir",
+            font_small,
+            (154, 154, 154),
+            offset=1,
+        )
         queue_y += 26
 
         queue_text_width = panel_w - 28
@@ -469,15 +521,30 @@ def create_now_playing_card(
 
         if next_songs:
             for i, song in enumerate(next_songs[:max_lines], 1):
-                s_title = song.get('title', '?') if isinstance(song, dict) else str(song)
-                s_duration = song.get('duration', '') if isinstance(song, dict) else ''
-                if s_duration in ('Desconhecida', 'Desconhecido', None):
-                    s_duration = '...'
+                s_title = (
+                    song.get("title", "?")
+                    if isinstance(song, dict)
+                    else str(song)
+                )
+                s_duration = (
+                    song.get("duration", "") if isinstance(song, dict) else ""
+                )
+                if s_duration in ("Desconhecida", "Desconhecido", None):
+                    s_duration = "..."
                 line_text = f"{i}. {s_title}"
                 if s_duration:
                     line_text += f" ({s_duration})"
-                line_text = truncate_text(draw, line_text, font_queue, queue_text_width)
-                draw_text_shadow(draw, (panel_x + 14, queue_y), line_text, font_queue, (206, 206, 206), offset=1)
+                line_text = truncate_text(
+                    draw, line_text, font_queue, queue_text_width
+                )
+                draw_text_shadow(
+                    draw,
+                    (panel_x + 14, queue_y),
+                    line_text,
+                    font_queue,
+                    (206, 206, 206),
+                    offset=1,
+                )
                 queue_y += 24
         else:
             draw_text_shadow(

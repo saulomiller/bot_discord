@@ -7,6 +7,7 @@ import discord
 from utils.helpers import load_radios
 from utils.player import MusicPlayer
 
+
 class MusicBaseMixin:
     """Mixin de comandos de musica."""
 
@@ -36,11 +37,15 @@ class MusicBaseMixin:
                 return radio
         return None
 
-    async def _send_embed_message(self, ctx_or_interaction, embed, *, wait_message: bool = False):
+    async def _send_embed_message(
+        self, ctx_or_interaction, embed, *, wait_message: bool = False
+    ):
         """Envia embed e opcionalmente retorna o objeto da mensagem."""
         if isinstance(ctx_or_interaction, discord.Interaction):
             if wait_message:
-                return await ctx_or_interaction.followup.send(embed=embed, wait=True)
+                return await ctx_or_interaction.followup.send(
+                    embed=embed, wait=True
+                )
             await ctx_or_interaction.followup.send(embed=embed)
             return None
         return await ctx_or_interaction.send(embed=embed)

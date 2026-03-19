@@ -10,6 +10,7 @@ from cogs.music_modules import (
     MusicRadioMixin,
 )
 
+
 class MusicCog(
     MusicConnectionMixin,
     MusicPlaybackMixin,
@@ -21,6 +22,7 @@ class MusicCog(
     """Cog principal que agrega comandos de musica por mixins."""
 
     FEEDBACK_DELETE_AFTER = 12
+
 
 async def setup(bot):
     """Configura recursos necessarios para inicializacao."""

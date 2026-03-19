@@ -50,13 +50,20 @@ async def get_guilds(request: Request):
                 "id": str(guild.id),
                 "name": guild.name,
                 "connected": vc is not None and vc.is_connected(),
-                "voice_channel": vc.channel.name if vc and vc.channel else None,
+                "voice_channel": vc.channel.name
+                if vc and vc.channel
+                else None,
                 "member_count": guild.member_count,
             }
         )
 
-    guilds.sort(key=lambda item: (not item["connected"], item["name"].casefold()))
-    active_guild_id = next((item["id"] for item in guilds if item["connected"]), guilds[0]["id"] if guilds else None)
+    guilds.sort(
+        key=lambda item: (not item["connected"], item["name"].casefold())
+    )
+    active_guild_id = next(
+        (item["id"] for item in guilds if item["connected"]),
+        guilds[0]["id"] if guilds else None,
+    )
 
     return {
         "guilds": guilds,
@@ -98,8 +105,12 @@ async def get_status(request: Request, guild_id: int | None = None):
                     "title": stat_current_song.get("title", "Desconhecido"),
                     "thumbnail": stat_current_song.get("thumbnail", ""),
                     "user": str(stat_current_song.get("user", "Desconhecido")),
-                    "duration": stat_current_song.get("duration", "Desconhecida"),
-                    "channel": stat_current_song.get("channel", "Desconhecido"),
+                    "duration": stat_current_song.get(
+                        "duration", "Desconhecida"
+                    ),
+                    "channel": stat_current_song.get(
+                        "channel", "Desconhecido"
+                    ),
                 }
                 user_obj = stat_current_song.get("user")
                 if hasattr(user_obj, "display_name"):
@@ -114,7 +125,11 @@ async def get_status(request: Request, guild_id: int | None = None):
         try:
             if isinstance(song, dict):
                 user_obj = song.get("user")
-                user_name = user_obj.display_name if hasattr(user_obj, "display_name") else str(user_obj)
+                user_name = (
+                    user_obj.display_name
+                    if hasattr(user_obj, "display_name")
+                    else str(user_obj)
+                )
                 queue_info.append(
                     {
                         "title": song.get("title", "Desconhecido"),
@@ -137,7 +152,9 @@ async def get_status(request: Request, guild_id: int | None = None):
         "is_shuffling": stat_shuffle,
         "is_paused": stat_paused,
         "voice_connections": len(bot.voice_clients),
-        "progress": player.get_progress() if player else {"current": 0, "duration": 0, "percent": 0},
+        "progress": player.get_progress()
+        if player
+        else {"current": 0, "duration": 0, "percent": 0},
         "language": I18n.get_instance().language,
     }
 
@@ -149,5 +166,7 @@ async def get_queue(request: Request, guild_id: int | None = None):
     vc = _resolve_status_voice_client(bot, guild_id)
     if vc and vc.guild.id in bot.players:
         player = bot.players[vc.guild.id]
-        return {"queue": [_serialize_song(song) for song in list(player.queue)]}
+        return {
+            "queue": [_serialize_song(song) for song in list(player.queue)]
+        }
     return {"queue": []}

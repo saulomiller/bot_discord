@@ -10,14 +10,14 @@ from .queueing import QueueMixin
 from .soundboard import SoundboardMixin
 
 __all__ = [
-    'MAX_PLAYLIST_SIZE',
-    'YDL_OPTIONS',
-    'ControlsMixin',
-    'DashboardMixin',
-    'ExtractionMixin',
-    'PlaybackMixin',
-    'QueueMixin',
-    'SafeFFmpegPCMAudio',
-    'SoundboardMixin',
-    'StreamCache',
+    "MAX_PLAYLIST_SIZE",
+    "YDL_OPTIONS",
+    "ControlsMixin",
+    "DashboardMixin",
+    "ExtractionMixin",
+    "PlaybackMixin",
+    "QueueMixin",
+    "SafeFFmpegPCMAudio",
+    "SoundboardMixin",
+    "StreamCache",
 ]
