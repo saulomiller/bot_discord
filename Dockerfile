@@ -8,15 +8,20 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
-    ffmpeg \
     gosu \
     git \
     curl \
     nodejs \
     npm \
     libopus0 \
+    xz-utils \
     unzip && \
     rm -rf /var/lib/apt/lists/*
+
+# FFmpeg 6.x static build (mais confiável que PPA)
+RUN curl -L https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz \
+    | tar -xJ --strip-components=2 -C /usr/local/bin --wildcards '*/bin/ffmpeg' '*/bin/ffprobe' && \
+    ffmpeg -version | head -1
 
 # Instala deno para extração do YouTube (resolve WARNING do yt-dlp)
 RUN curl -fsSL https://deno.land/install.sh | sh && \
