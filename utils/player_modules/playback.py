@@ -47,21 +47,37 @@ class PlaybackMixin:
 
     @staticmethod
     def _ffmpeg_escape(value: str) -> str:
-        """Escapa aspas para montagem segura de opções do ffmpeg."""
-        return str(value).replace('"', r"\"")
+        return (
+            str(value)
+            .replace("\\", "\\\\")
+            .replace('"', r"\"")
+        )
 
     def _build_ffmpeg_request_options(self, headers: dict | None) -> str:
-        """Monta opções HTTP para ffmpeg com base em headers retornados pelo yt-dlp."""
+        """Monta opções HTTP completas para ffmpeg (modo robusto)."""
         if not headers:
             return ""
 
+        options = []
+
+        # 🔥 HEADERS COMPLETOS (principal melhoria)
+        header_lines = []
+        for k, v in headers.items():
+            if v:
+                header_lines.append(f"{k}: {v}")
+        headers_str = "\\r\\n".join(header_lines) + "\\r\\n"
+        
+        if header_lines:  # evita passar -headers vazio
+            options.append(f'-headers "{self._ffmpeg_escape(headers_str)}"')
+
+        # 🔧 Compatibilidade extra (fallback)
         user_agent = headers.get("User-Agent") or headers.get("user-agent")
         referer = headers.get("Referer") or headers.get("referer")
         origin = headers.get("Origin") or headers.get("origin")
 
-        options = []
         if user_agent:
             options.append(f'-user_agent "{self._ffmpeg_escape(user_agent)}"')
+
         if referer:
             options.append(f'-referer "{self._ffmpeg_escape(referer)}"')
         elif origin:
@@ -278,16 +294,20 @@ class PlaybackMixin:
         seek_position = self.current_song.get("seek", 0)
 
         before_options = (
-            "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+            "-reconnect 1 "
+            "-reconnect_streamed 1 "
+            "-reconnect_on_network_error 1 "
+            "-reconnect_on_http_error 4xx,5xx "
+            "-reconnect_delay_max 10 "
+            "-rw_timeout 15000000 "
         )
         request_options = self._build_ffmpeg_request_options(source_headers)
         if request_options:
             before_options = f"{before_options} {request_options}"
-        output_options = f'-vn -af "aresample=48000,atempo=1.0,volume={self.volume}" -bufsize 10M'
+        output_options = f'-vn -af "aresample=48000,atempo=1.0,volume={self.volume}" -bufsize 50M -maxrate 5M'
 
         if seek_position > 0:
-            output_options += f" -ss {seek_position}"
-            logging.info(f"[play_next] Resumindo de {seek_position}s")
+            before_options += f" -ss {seek_position}"
 
         ffmpeg_options = {
             "before_options": before_options,
