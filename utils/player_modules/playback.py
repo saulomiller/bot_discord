@@ -278,7 +278,7 @@ class PlaybackMixin:
         seek_position = self.current_song.get("seek", 0)
 
         before_options = (
-            "-4 -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+            "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
         )
         request_options = self._build_ffmpeg_request_options(source_headers)
         if request_options:
