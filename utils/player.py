@@ -113,13 +113,14 @@ class MusicPlayer(
 
     @staticmethod
     def _is_direct_stream_url(url: str) -> bool:
-        """Detecta URLs diretas de mídia (ex.: googlevideo/videoplayback)."""
+        """Detecta URLs diretas de mídia (ex.: googlevideo/videoplayback ou m3u8 playlists)."""
         if not url:
             return False
         lower = str(url).lower()
         return (
-            'googlevideo.com/videoplayback' in lower
-            or 'manifest.googlevideo.com' in lower
+            '.googlevideo.com/' in lower
+            or 'googlevideo.com/videoplayback' in lower
+            or 'sndcdn.com/' in lower
         )
 
     @staticmethod

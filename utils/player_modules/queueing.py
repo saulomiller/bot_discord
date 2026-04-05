@@ -27,6 +27,9 @@ class QueueMixin:
             info = info_list[0]
             # Garantir duration_seconds disponível (info é tupla retornada por extract_info)
             duration_seconds = info[5] if len(info) > 5 else 0
+            stream_url = info[6] if len(info) > 6 else ''
+            http_headers = info[7] if len(info) > 7 else {}
+            
             song = {
                 'title': info[0],
                 'url': info[1],
@@ -38,6 +41,14 @@ class QueueMixin:
             }
             self.queue.append(song)
             self._cancel_queue_empty_cleanup()
+            
+            if stream_url and self._is_direct_stream_url(stream_url):
+                self.stream_cache.set(
+                    song['url'],
+                    {'url': stream_url, 'headers': http_headers}
+                )
+                logging.info(f"[add_to_queue] Stream URL cacheada preventivamente para: {song['title']}")
+                
             logging.info(f"[add_to_queue] Música adicionada à fila: {song['title']}")
             logging.info(f"[add_to_queue] Tamanho da fila agora: {len(self.queue)}")
             return song

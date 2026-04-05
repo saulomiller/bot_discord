@@ -84,7 +84,11 @@ class ExtractionMixin:
                         duration_formatted = "Desconhecida"
                     
                     channel = entry.get('uploader', entry.get('channel', 'Desconhecido'))
-                    results.append((title, url, thumbnail, duration_formatted, channel, duration_seconds))
+                    
+                    stream_url = entry.get('url', '')
+                    http_headers = dict(entry.get('http_headers') or {})
+                    
+                    results.append((title, url, thumbnail, duration_formatted, channel, duration_seconds, stream_url, http_headers))
                 except Exception as e:
                     # Log mas não interrompe o processamento
                     logging.warning(f"Erro ao processar entrada da playlist: {e}")

@@ -11,9 +11,27 @@ import asyncio
 import yt_dlp
 from config import RADIOS_FILE, DATA_DIR, SOUNDBOARD_METADATA_FILE, SOUNDBOARD_DIR, save_token_to_json
 
+from collections import OrderedDict
+
+class LRUCache(OrderedDict):
+    """Dicionário LRU Limitado para mitigar memory leaks no Docker."""
+    def __init__(self, maxsize=200, *args, **kwds):
+        self.maxsize = maxsize
+        super().__init__(*args, **kwds)
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        self.move_to_end(key)
+        return value
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if len(self) > self.maxsize:
+            self.popitem(last=False)
+
 # --- Caches ---
-music_info_cache = {}
-playlist_cache = {}
+music_info_cache = LRUCache(maxsize=300)
+playlist_cache = LRUCache(maxsize=100)
 
 # --- Exceções ---
 class VoiceConnectionError(Exception):
@@ -234,81 +252,91 @@ def update_sfx_metadata(sfx_id, updates):
     return new_sfx
 
 # --- Extração de Info (YouTube/SoundCloud) ---
+_SHARED_YDL_OPTS = {
+    'format': 'bestaudio/best',
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'opus',
+        'preferredquality': '320',
+    }],
+    'quiet': True,
+    'noplaylist': True,
+    'socket_timeout': 10,
+    'retries': 3,
+    'skip_download': True,
+    'extract_flat': False,
+    'source_address': '0.0.0.0',
+}
+
+_shared_ydl = None
+
+def get_shared_ydl():
+    """Retorna uma instância Singleton de YoutubeDL reaproveitável, reduzindo CPU e tempo de inicialização."""
+    global _shared_ydl
+    if _shared_ydl is None:
+        _shared_ydl = yt_dlp.YoutubeDL(_SHARED_YDL_OPTS)
+    return _shared_ydl
+
 async def extract_info(search: str) -> tuple[str, str, str, str, str]:
     """Extrai informações da música, incluindo título, URL, thumbnail, duração e canal"""
     # Verificar se a busca já está no cache
     if search in music_info_cache:
         return music_info_cache[search]
         
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'opus',
-            'preferredquality': '320',
-        }],
-        'quiet': True,
-        'noplaylist': True,
-        'socket_timeout': 10,  # Timeout para evitar travamentos
-        'retries': 3,          # Número de tentativas em caso de falha
-        'skip_download': True, # Apenas extrair informações, não baixar
-        'extract_flat': False, # Extrair informações completas
-        'source_address': '0.0.0.0',  # Bind to ipv4 para melhor compatibilidade
-    }
     loop = asyncio.get_event_loop()
 
     def run():
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                logging.info(f"Buscando informações para: {search}")
+        ydl = get_shared_ydl()
+        try:
+            logging.info(f"Buscando informações para: {search}")
+            
+            # Verificar se é uma URL direta ou uma busca
+            if search.startswith(('http://', 'https://')):
+                info = ydl.extract_info(search, download=False)
+                entries = [info]  # URL direta, usar como entrada única
+            else:
+                info = ydl.extract_info(f"ytsearch:{search}", download=False)
+                entries = info.get('entries', [])
+            
+            if not entries:
+                raise ValueError(f"Nenhum resultado encontrado para '{search}'.")
                 
-                # Verificar se é uma URL direta ou uma busca
-                if search.startswith(('http://', 'https://')):
-                    info = ydl.extract_info(search, download=False)
-                    entries = [info]  # URL direta, usar como entrada única
+            entry = entries[0]
+            
+            # Extrair informações extras
+            title = entry.get('title', 'Título desconhecido')
+            url = entry.get('url', entry.get('webpage_url', ''))
+            
+            if not url:
+                raise ValueError(f"URL não encontrada para '{search}'.")
+                
+            thumbnail = entry.get('thumbnail', '')
+            
+            # Extrair duração formatada em minutos:segundos
+            duration = entry.get('duration', 0)
+            if duration:
+                minutes, seconds = divmod(duration, 60)
+                hours, minutes = divmod(minutes, 60)
+                if hours > 0:
+                    duration_formatted = f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}"
                 else:
-                    info = ydl.extract_info(f"ytsearch:{search}", download=False)
-                    entries = info.get('entries', [])
-                
-                if not entries:
-                    raise ValueError(f"Nenhum resultado encontrado para '{search}'.")
-                    
-                entry = entries[0]
-                
-                # Extrair informações extras
-                title = entry.get('title', 'Título desconhecido')
-                url = entry.get('url', entry.get('webpage_url', ''))
-                
-                if not url:
-                    raise ValueError(f"URL não encontrada para '{search}'.")
-                    
-                thumbnail = entry.get('thumbnail', '')
-                
-                # Extrair duração formatada em minutos:segundos
-                duration = entry.get('duration', 0)
-                if duration:
-                    minutes, seconds = divmod(duration, 60)
-                    hours, minutes = divmod(minutes, 60)
-                    if hours > 0:
-                        duration_formatted = f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}"
-                    else:
-                        duration_formatted = f"{int(minutes)}:{int(seconds):02d}"
-                else:
-                    duration_formatted = "Desconhecida"
-                
-                # Nome do canal
-                channel = entry.get('uploader', entry.get('channel', 'Desconhecido'))
-                
-                # Armazenar no cache
-                result = (title, url, thumbnail, duration_formatted, channel)
-                # IMPORTANTE: Acessar a variável global do módulo
-                music_info_cache[search] = result
-                
-                logging.info(f"Informações extraídas com sucesso para: {title}")
-                return result
-            except Exception as e:
-                logging.error(f"Erro ao extrair informação da música '{search}': {e}")
-                raise ValueError(f"Erro ao buscar informações: {str(e)}")
+                    duration_formatted = f"{int(minutes)}:{int(seconds):02d}"
+            else:
+                duration_formatted = "Desconhecida"
+            
+            # Nome do canal
+            channel = entry.get('uploader', entry.get('channel', 'Desconhecido'))
+            
+            # Armazenar no cache
+            result = (title, url, thumbnail, duration_formatted, channel)
+            # IMPORTANTE: Acessar a variável global do módulo
+            music_info_cache[search] = result
+            
+            logging.info(f"Informações extraídas com sucesso para: {title}")
+            return result
+        except Exception as e:
+            logging.error(f"Erro ao extrair informação da música '{search}': {e}")
+            raise ValueError(f"Erro ao buscar informações: {str(e)}")
 
     try:
         # Executar com timeout mais curto para evitar bloqueio
