@@ -297,14 +297,17 @@ class PlaybackMixin:
             "-reconnect 1 "
             "-reconnect_streamed 1 "
             "-reconnect_on_network_error 1 "
-            "-reconnect_on_http_error 4xx,5xx "
+            "-reconnect_on_http_error 5xx "
             "-reconnect_delay_max 10 "
             "-rw_timeout 15000000 "
         )
         request_options = self._build_ffmpeg_request_options(source_headers)
         if request_options:
             before_options = f"{before_options} {request_options}"
-        output_options = f'-vn -af "aresample=48000,atempo=1.0,volume={self.volume}" -bufsize 50M -maxrate 5M'
+        output_options = (
+            f'-vn -b:a 192k -af "volume={self.volume}" '
+            '-f s16le -ar 48000 -ac 2'
+        )
 
         if seek_position > 0:
             before_options += f" -ss {seek_position}"

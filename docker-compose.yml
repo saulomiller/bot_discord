@@ -19,10 +19,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 512M
+          cpus: "2.0"
+          memory: 1G
         reservations:
-          memory: 128M
+          memory: 256M
     # Desabilita IPv6 no container — força pilha IPv4 pura
     sysctls:
       net.ipv6.conf.all.disable_ipv6: 1

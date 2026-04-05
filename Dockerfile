@@ -23,6 +23,9 @@ RUN curl -L https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpe
     | tar -xJ --strip-components=2 -C /usr/local/bin --wildcards '*/bin/ffmpeg' '*/bin/ffprobe' && \
     ffmpeg -version | head -1
 
+# Força o sistema a priorizar IPv4 para evitar que o FFmpeg falhe com "Cannot assign requested address"
+RUN echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf
+
 # Instala deno para extração do YouTube (resolve WARNING do yt-dlp)
 RUN curl -fsSL https://deno.land/install.sh | sh && \
     mv /root/.deno/bin/deno /usr/local/bin/deno && \
