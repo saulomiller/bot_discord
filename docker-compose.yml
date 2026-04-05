@@ -12,10 +12,11 @@ services:
       - "8000:8000"
     env_file:
       - .env
+
     volumes:
       - ./data:/app/data
       - ./static:/app/static
-    # Limita recursos para evitar que o bot consuma tudo do servidor
+
     deploy:
       resources:
         limits:
@@ -23,12 +24,17 @@ services:
           memory: 1G
         reservations:
           memory: 256M
-    # Desabilita IPv6 no container — força pilha IPv4 pura
+
     sysctls:
       net.ipv6.conf.all.disable_ipv6: 1
-    # Logs com rotação para não encher o disco
+      net.ipv6.conf.default.disable_ipv6: 1
+
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+
+    dns:
+      - 9.9.9.9
+      - 1.1.1.1
