@@ -23,8 +23,22 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 FONTS: dict = {}
+
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 SESSION = requests.Session()
 SESSION.headers.update({'User-Agent': 'Mozilla/5.0 (bot)'})
+
+retry_strategy = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["GET"]
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+SESSION.mount("https://", adapter)
+SESSION.mount("http://", adapter)
 
 _FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
 
