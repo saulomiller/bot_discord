@@ -305,8 +305,7 @@ class PlaybackMixin:
         if request_options:
             before_options = f"{before_options} {request_options}"
         output_options = (
-            f'-vn -b:a 192k -af "volume={self.volume}" '
-            '-f s16le -ar 48000 -ac 2'
+            f'-vn -b:a 192k -af "volume={self.volume}"'
         )
 
         if seek_position > 0:
