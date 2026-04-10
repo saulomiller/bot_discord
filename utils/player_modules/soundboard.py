@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from .core import SafeFFmpegPCMAudio
+from .core import SafeFFmpegPCMAudio, SafeFFmpegOpusAudio, build_ffmpeg_options
 
 class SoundboardMixin:
     """Comportamentos de soundboard do MusicPlayer."""
@@ -40,8 +40,9 @@ class SoundboardMixin:
             await asyncio.sleep(0.5)
         
         # Tocar SFX
+        output_options = build_ffmpeg_options({}, volume)
         ffmpeg_options = {
-            'options': f'-vn -af "volume={volume}"'
+            'options': output_options
         }
         
         def after_sfx(error):
@@ -57,8 +58,13 @@ class SoundboardMixin:
 
         try:
             executable = 'ffmpeg'
-            # USAR SafeFFmpegPCMAudio
-            source = SafeFFmpegPCMAudio(sfx_path, executable=executable, **ffmpeg_options)
+            # USAR SafeFFmpegOpusAudio com Fallback PCM
+            try:
+                source = SafeFFmpegOpusAudio(sfx_path, executable=executable, **ffmpeg_options)
+            except Exception as opus_err:
+                logging.warning(f"Fallback para PCM no Soundboard devido a falha Opus: {opus_err}")
+                source = SafeFFmpegPCMAudio(sfx_path, executable=executable, **ffmpeg_options)
+                
             self.voice_client.play(source, after=after_sfx)
             logging.info(f"SFX iniciado: {sfx_path}")
         except Exception as e:
