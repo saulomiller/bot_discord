@@ -2,12 +2,13 @@
 
 import asyncio
 import logging
+import random
 import time
 import yt_dlp
 from collections import deque
 
 from .constants import YDL_FALLBACK_CLIENTS, YDL_OPTIONS
-from .core import SafeFFmpegPCMAudio
+from .core import SafeFFmpegPCMAudio, SafeFFmpegOpusAudio, build_ffmpeg_options
 
 
 def _extract_video_id(url: str) -> str | None:
@@ -173,8 +174,6 @@ class PlaybackMixin:
             return
 
         if self.is_shuffling and len(self.queue) > 1:
-            import random
-
             queue_list = list(self.queue)
             random.shuffle(queue_list)
             self.queue = deque(queue_list)
@@ -220,6 +219,11 @@ class PlaybackMixin:
                 source_headers = dict(
                     cached_entry.get("headers") or source_headers
                 )
+                # Restaurar acodec do cache para que build_ffmpeg_options
+                # consiga ativar -c:a copy em replays/loops.
+                cached_acodec = cached_entry.get("acodec", "")
+                if cached_acodec:
+                    self.current_song["acodec"] = cached_acodec
             else:
                 source_url = cached_entry
         else:
@@ -255,6 +259,7 @@ class PlaybackMixin:
                             duration
                         )
                         self.current_song["duration_seconds"] = duration
+                        self.current_song["acodec"] = info.get("acodec", "")
                     else:
                         logging.debug(
                             "[play_next] Extractor 'generic' detectado; preservando metadados atuais."
@@ -265,11 +270,15 @@ class PlaybackMixin:
                     if source_headers:
                         self.current_song["stream_headers"] = source_headers
 
-                    # Salvar no cache de streams
+                    # Salvar no cache de streams (incluindo acodec)
                     if source_url:
                         self.stream_cache.set(
                             self.current_song["url"],
-                            {"url": source_url, "headers": source_headers},
+                            {
+                                "url": source_url,
+                                "headers": source_headers,
+                                "acodec": self.current_song.get("acodec", ""),
+                            },
                         )
 
                 except Exception as e:
@@ -307,9 +316,8 @@ class PlaybackMixin:
         request_options = self._build_ffmpeg_request_options(source_headers)
         if request_options:
             before_options = f"{before_options} {request_options}"
-        output_options = (
-            f'-vn -b:a 192k -af "volume={self.volume}"'
-        )
+            
+        output_options = build_ffmpeg_options(self.current_song, self.volume, seek_position=seek_position)
 
         if seek_position > 0:
             before_options += f" -ss {seek_position}"
@@ -362,9 +370,36 @@ class PlaybackMixin:
 
         try:
             executable = "ffmpeg"
-            source = SafeFFmpegPCMAudio(
-                source_url, executable=executable, **ffmpeg_options
-            )
+            try:
+                # 1. Pipeline Original (Pode ser Copy ou Encode nativo dependendo do codec)
+                source = SafeFFmpegOpusAudio(
+                    source_url, executable=executable, **ffmpeg_options
+                )
+            except Exception as copy_err:
+                logging.warning(f"Fallback 1 (Falha no Copy/Original Opus): {copy_err}")
+                try:
+                    # 2. Forçar Encode Opus (Trata containers bizarros ou streams fragmentados que quebram o copy)
+                    encode_options = build_ffmpeg_options(self.current_song, self.volume, force_fallback='encode_opus', seek_position=seek_position)
+                    ffmpeg_options_encode = {
+                        **ffmpeg_options,
+                        "options": encode_options
+                    }
+                    
+                    source = SafeFFmpegOpusAudio(
+                        source_url, executable=executable, **ffmpeg_options_encode
+                    )
+                except Exception as opus_err:
+                    logging.warning(f"Fallback 2 (Falha Crítica no OPUS) -> Indo para PCM: {opus_err}")
+                    # 3. Fallback Final para PCM
+                    pcm_options = build_ffmpeg_options(self.current_song, self.volume, force_fallback='encode_pcm', seek_position=seek_position)
+                    ffmpeg_options_pcm = {
+                        **ffmpeg_options,
+                        "options": pcm_options
+                    }
+                    
+                    source = SafeFFmpegPCMAudio(
+                        source_url, executable=executable, **ffmpeg_options_pcm
+                    )
 
             self.voice_client.play(source, after=after_play)
 
@@ -374,8 +409,8 @@ class PlaybackMixin:
 
             # Resetar contadores de tempo
             self.pipeline_delay = 0.2  # ajustar empiricamente
-            # Mantido o seek_position (se houver avanço), somado ao atraso real de inicialização
-            self.started_at = time.monotonic() - seek_position + self.pipeline_delay
+            # Matemática corrigida de temporalidade real x offset
+            self.started_at = time.monotonic() + self.pipeline_delay - seek_position
             self.paused_at = None
             self.total_paused = 0
             self._last_second = -1
@@ -440,7 +475,12 @@ class PlaybackMixin:
                 if song is self.current_song:
                     return
                 self.stream_cache.set(
-                    source_url, {"url": stream_url, "headers": stream_headers}
+                    source_url,
+                    {
+                        "url": stream_url,
+                        "headers": stream_headers,
+                        "acodec": info.get("acodec", ""),
+                    },
                 )
                 extractor_name = str(info.get("extractor", "")).lower()
                 try:
@@ -452,6 +492,7 @@ class PlaybackMixin:
                         duration = info.get("duration", 0)
                         song["duration_seconds"] = duration
                         song["duration"] = self._format_duration(duration)
+                        song["acodec"] = info.get("acodec", "")
                     if stream_headers:
                         song["stream_headers"] = stream_headers
                     song["is_lazy"] = False

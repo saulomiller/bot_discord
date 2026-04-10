@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import functools
 import logging
 import time
 
@@ -196,7 +197,6 @@ class DashboardMixin:
             self._dominant_color = dominant_color
 
             # Gerar Imagem (PIL) em executor para não travar o event loop
-            import functools
             img_buffer = await self.loop.run_in_executor(
                 None,
                 functools.partial(

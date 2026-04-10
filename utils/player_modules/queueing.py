@@ -57,85 +57,92 @@ class QueueMixin:
             raise e
 
     async def add_playlist_async(self, search: str, user: discord.Member) -> dict:
-        """Adiciona playlist de forma OTIMIZADA.
-        
+        """Adiciona playlist de forma otimizada.
+
         1. Busca a PRIMEIRA música imediatamente e toca.
         2. Inicia o processamento do RESTO da playlist em background.
         """
         try:
             logging.info(f"🎵 Iniciando processamento OTIMIZADO de playlist: {search}")
-            
+
             # PASSO 1: Pegar APENAS a primeira música rapidamente
             logging.info("⚡ Buscando primeira música da playlist...")
-            # Usar opções temporárias para extração rápida da primeira entrada
             flat_first_opts = {
                 **YDL_OPTIONS,
                 'extract_flat': 'in_playlist',
                 'playlistend': 1,
                 'ignoreerrors': True,
             }
-            first_info = await self.loop.run_in_executor(
-                None,
-                lambda: yt_dlp.YoutubeDL(flat_first_opts).extract_info(search, download=False)
-            )
+
+            def _extract_first():
+                with yt_dlp.YoutubeDL(flat_first_opts) as ydl:
+                    return ydl.extract_info(search, download=False)
+
+            first_info = await self.loop.run_in_executor(None, _extract_first)
 
             first_song_title = "Playlist em processamento..."
-            
-            # Se conseguiu extrair algo
+            playback_started = False
+
             if first_info and 'entries' in first_info:
                 entries = list(first_info['entries'])
                 if entries:
                     first_entry = entries[0]
                     if first_entry:
-                        # Adicionar a primeira música à fila IMEDIATAMENTE
-                        # Precisamos resolver a URL real se for flat? 
-                        # Sim, mas o add_to_queue lida com isso se for URL.
-                        # No caso de extract_flat='in_playlist', entries são dicts com url e title.
-                        
-                        # Criar objeto música manual para evitar double-fetch
                         song = {
                             'title': first_entry.get('title', 'Desconhecido'),
                             'url': first_entry.get('url'),
-                            'thumbnail': None, # Resolvemos depois/lazy
+                            'thumbnail': None,
                             'duration': first_entry.get('duration_string'),
                             'duration_seconds': first_entry.get('duration'),
                             'channel': 'Playlist',
                             'user': user,
-                            'is_lazy': True # Indicar que precisa resolver stream
+                            'is_lazy': True,
                         }
                         self.queue.append(song)
                         self._cancel_queue_empty_cleanup()
                         first_song_title = song['title']
                         logging.info(f"✓ Primeira música adicionada: {first_song_title}")
-                        
-                        # Se não estiver tocando, tocar AGORA
+
                         if not self.is_playback_busy:
-                             await self.play_next()
-            
-            # PASSO 2: Processar o RESTO em background (começando do índice 2, pois índice 1 já foi adicionado)
-            asyncio.create_task(self._process_remaining_playlist(search, user, start_index=2))
-            
-            # Retornar info genérica
+                            await self.play_next()
+                            playback_started = True
+
+            # PASSO 2: Processar o RESTO em background
+            asyncio.create_task(
+                self._process_remaining_playlist(
+                    search, user,
+                    start_index=2,
+                    playback_already_started=playback_started,
+                )
+            )
+
             return {
                 'title': f"Playlist: {first_song_title}...",
                 'url': search,
                 'thumbnail': '',
                 'duration': '...',
                 'channel': 'Playlist',
-                'user': user
+                'user': user,
             }
-            
+
         except Exception as e:
             logging.error(f"Erro ao adicionar playlist async: {e}")
             raise e
 
-    async def _process_remaining_playlist(self, search, user, start_index=1):
-        """Processa o RESTANTE da playlist em segundo plano."""
+    async def _process_remaining_playlist(
+        self, search, user, start_index=1, playback_already_started=False,
+    ):
+        """Processa o restante da playlist em segundo plano.
+
+        Apenas enfileira as faixas restantes. Só dispara ``play_next`` se
+        ``add_playlist_async`` não tiver conseguido iniciar a reprodução
+        (ex.: primeira entrada era inválida).
+        """
         try:
-            logging.info(f"🎵 Processando restante da playlist (iniciando em {start_index})...")
-            
-            # PASSO 1: Extrair URLs RAPIDAMENTE com extract_flat
-            # Herdar YDL_OPTIONS para manter geo_bypass, cachedir, etc.
+            logging.info(
+                f"🎵 Processando restante da playlist (iniciando em {start_index})..."
+            )
+
             flat_opts = {
                 **YDL_OPTIONS,
                 'extract_flat': 'in_playlist',
@@ -143,113 +150,114 @@ class QueueMixin:
                 'playlistend': MAX_PLAYLIST_SIZE,
                 'ignoreerrors': True,
             }
-            
+
             logging.info(f"⚡ Extraindo URLs da playlist (max {MAX_PLAYLIST_SIZE})...")
-            
-            # Executar em thread para não bloquear
-            playlist_info = await self.loop.run_in_executor(
-                None, 
-                lambda: yt_dlp.YoutubeDL(flat_opts).extract_info(search, download=False)
-            )
-            
+
+            def _extract_remaining():
+                with yt_dlp.YoutubeDL(flat_opts) as ydl:
+                    return ydl.extract_info(search, download=False)
+
+            playlist_info = await self.loop.run_in_executor(None, _extract_remaining)
+
             if not playlist_info:
                 logging.error("Nenhuma informação de playlist encontrada")
                 return
-            
-            # Obter lista de entradas
+
             entries = playlist_info.get('entries', [])
             if not entries:
                 logging.error("Playlist vazia")
                 return
-            
-            # Filtrar entradas None ou inválidas antes da contagem real
+
             valid_entries = [e for e in entries if e is not None]
-            
+
             total_tracks = len(valid_entries)
             logging.info(f"✓ {total_tracks} músicas válidas encontradas na playlist")
-            
-            # Debug: Logar primeiras entradas para verificar se parecem corretas
+
             if valid_entries:
-                logging.debug(f"Primeira entrada: {valid_entries[0].get('title')} ({valid_entries[0].get('url')})")
+                logging.debug(
+                    f"Primeira entrada: {valid_entries[0].get('title')} "
+                    f"({valid_entries[0].get('url')})"
+                )
                 logging.debug(f"Última entrada: {valid_entries[-1].get('title')}")
 
-            # Detecção de Mix do YouTube (Geralmente começa com RD... e tem muitas músicas)
-            # Se for um Mix e o usuário esperava uma playlist pequena, isso explica os 99 itens.
+            # Detecção de Mix do YouTube
             if 'RD' in search or 'list=RD' in search:
-                logging.warning("Detectado YouTube MIX (Lista infinita). Limitando a 25 músicas para evitar spam.")
-                # Reduzir limite se for mix para não lotar a fila
+                logging.warning(
+                    "Detectado YouTube MIX (Lista infinita). "
+                    "Limitando a 25 músicas para evitar spam."
+                )
                 valid_entries = valid_entries[:25]
-            
-            first_song_added = False
+
             added_count = 0
 
-            # PASSO 2: Adicionar à fila
             for idx, entry in enumerate(valid_entries):
                 if added_count >= MAX_PLAYLIST_SIZE:
                     break
-                    
+
                 if not entry:
                     continue
-                
-                # Tentar pegar URL original
+
                 url = entry.get('url') or entry.get('webpage_url') or entry.get('id')
-                
-                # Reconstruir URL se for apenas ID
+
                 if url and not url.startswith('http'):
                     ie_key = entry.get('ie_key', '')
                     if ie_key == 'Youtube' or 'youtube' in (entry.get('extractor', '') or ''):
                         url = f"https://www.youtube.com/watch?v={url}"
                     elif ie_key == 'SoundCloud' or 'soundcloud' in (entry.get('extractor', '') or ''):
-                        url = f"https://soundcloud.com/{url}" if not url.startswith('soundcloud') else f"https://{url}"
-                
-                # Tentar pegar título de MÚLTIPLAS chaves
+                        url = (
+                            f"https://soundcloud.com/{url}"
+                            if not url.startswith('soundcloud')
+                            else f"https://{url}"
+                        )
+
                 title = (
-                    entry.get('title') or 
-                    entry.get('track') or 
-                    entry.get('name') or 
-                    None  # Será resolvido depois se None
+                    entry.get('title')
+                    or entry.get('track')
+                    or entry.get('name')
+                    or None
                 )
-                
+
                 duration = entry.get('duration', 0)
                 thumbnail = entry.get('thumbnail', '')
-                
-                # Se NÃO tem título (comum em SoundCloud flat), usar URL como temporário
-                # O título real será obtido quando a música for tocar (lazy resolve)
+
                 if not title:
-                    # Usar parte da URL como título temporário
                     if url:
-                        # Extrair algo legível da URL
                         temp_title = url.split('/')[-1].split('?')[0]
-                        # Limitar tamanho e limpar
                         temp_title = temp_title.replace('-', ' ').replace('_', ' ')[:40]
                         title = f"🎵 {temp_title}..."
                         logging.debug(f"Título temporário criado: {title}")
                     else:
-                        title = f"🎵 Música #{idx+1}"
-                
+                        title = f"🎵 Música #{idx + 1}"
+
                 song = {
                     'title': title,
                     'url': url,
                     'thumbnail': thumbnail,
                     'duration': self._format_duration(duration),
                     'duration_seconds': duration,
-                    'is_lazy': True,  # IMPORTANTE: Será resolvido no play_next
+                    'is_lazy': True,
                     'channel': 'Playlist',
-                    'user': user
+                    'user': user,
                 }
-                
+
                 self.queue.append(song)
                 self._cancel_queue_empty_cleanup()
                 added_count += 1
-                
-                # Iniciar reprodução assim que a primeira música estiver pronta
-                if not first_song_added:
-                    first_song_added = True
-                    logging.info(f"✓ Primeira música da playlist pronta: {song['title']}")
-                    if not self.is_playback_busy:
-                        self.loop.create_task(self.play_next())
+
+                # Só dispara play_next se add_playlist_async não
+                # conseguiu iniciar reprodução E nada está tocando.
+                if (
+                    not playback_already_started
+                    and added_count == 1
+                    and not self.is_playback_busy
+                ):
+                    logging.info(
+                        f"✓ Iniciando reprodução tardia via background: {song['title']}"
+                    )
+                    self.loop.create_task(self.play_next())
+                    playback_already_started = True
 
             logging.info(f"✓ Playlist completa: {added_count} músicas adicionadas à fila")
-            
+
         except Exception as e:
             logging.error(f"Erro ao processar playlist: {e}")

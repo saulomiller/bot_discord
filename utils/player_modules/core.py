@@ -32,7 +32,7 @@ class StreamCache:
         return None
 
     def set(self, key, url):
-        """Executa a rotina de et."""
+        """Armazena uma URL de stream no cache com timestamp monotonic."""
         self.insert_count += 1
         
         # Limpeza ativa a cada 50 inserções (Higiene)
@@ -80,3 +80,48 @@ class SafeFFmpegPCMAudio(discord.FFmpegPCMAudio):
         
         # Chama o cleanup original para fechar pipes
         super().cleanup()
+
+class SafeFFmpegOpusAudio(discord.FFmpegOpusAudio):
+    """FFmpegOpusAudio com cleanup robusto para evitar processos zumbis e otimização total."""
+    def cleanup(self):
+        """Executa a rotina de cleanup."""
+        proc = self._process
+        if proc:
+            try:
+                logging.info(f"Killing FFmpeg process {proc.pid} (OPUS)...")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    logging.warning(f"FFmpeg {proc.pid} (OPUS) not terminating, forcing kill.")
+                    proc.kill()
+            except Exception as e:
+                logging.error(f"Error killing FFmpeg process: {e}")
+        
+        # Chama o cleanup original para fechar pipes
+        super().cleanup()
+
+def build_ffmpeg_options(info_dict: dict, volume: float, force_fallback: str = None, seek_position: float = 0) -> str:
+    """Constrói opções do FFmpeg otimizadas verificando o codec.
+    
+    Aplica codec copy se a stream já for Opus nativa para máxima
+    performance. Se force_fallback for passado (ex: 'encode_opus' ou 'encode_pcm'),
+    ignora a verificação e retorna a respectiva configuração.
+    """
+    codec = (info_dict.get("acodec") or "").lower()
+    is_opus = "opus" in codec and codec and codec != "none"
+    
+    if force_fallback == 'encode_opus':
+        logging.info(f"[audio] codec={codec} | mode=encode_opus (fallback) | seek={seek_position}")
+        return f'-vn -c:a libopus -vbr on -compression_level 10 -af "volume={volume}"'
+        
+    if force_fallback == 'encode_pcm':
+        logging.info(f"[audio] codec={codec} | mode=encode_pcm (fallback) | seek={seek_position}")
+        return f'-vn -b:a 192k -af "volume={volume}"'
+    
+    if is_opus:
+        logging.info(f"[audio] codec={codec} | mode=copy | seek={seek_position}")
+        return "-vn -c:a copy"
+    else:
+        logging.info(f"[audio] codec={codec} | mode=encode_opus | seek={seek_position}")
+        return f'-vn -c:a libopus -vbr on -compression_level 10 -af "volume={volume}"'

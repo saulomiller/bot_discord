@@ -14,8 +14,10 @@ from utils.player_modules import (
     PlaybackMixin,
     QueueMixin,
     SafeFFmpegPCMAudio,
+    SafeFFmpegOpusAudio,
     SoundboardMixin,
     StreamCache,
+    build_ffmpeg_options,
 )
 
 class MusicPlayer(
@@ -141,5 +143,7 @@ __all__ = [
     'YDL_OPTIONS',
     'MusicPlayer',
     'SafeFFmpegPCMAudio',
+    'SafeFFmpegOpusAudio',
     'StreamCache',
+    'build_ffmpeg_options',
 ]
