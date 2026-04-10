@@ -1,4 +1,7 @@
+# Usa a branch master do discord.py para receber correcoes de voz e recursos novos rapidamente.
 discord.py @ git+https://github.com/Rapptz/discord.py.git@master
+
+# Usa uma versao atual do yt-dlp para evitar bloqueios e mudancas recentes no YouTube (403/PO Tokens).
 yt-dlp>=2024.1.0
 python-dotenv>=1.0.0
 cachetools>=5.0.0

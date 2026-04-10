@@ -389,9 +389,10 @@ class PlaybackMixin:
 
         try:
             executable = "ffmpeg"
-            # Escolher codec para FFmpegOpusAudio: 'copy' se Opus nativo, 'libopus' caso contrário.
-            # Isso evita o warning 'Multiple -codec options' do FFmpeg.
-            opus_codec = "copy" if is_opus else "libopus"
+            # Escolher codec para FFmpegOpusAudio: 'copy' se Opus nativo, None caso contrário.
+            # Para o discord.py, se passarmos 'libopus', ele estranhamente muda para 'copy' (causando no-filter no copy).
+            # Passar None faz com que ele caia no fallback interno e use 'libopus' corretamente.
+            opus_codec = "copy" if is_opus else None
             try:
                 # 1. Pipeline Original (Copy se Opus nativo, Encode se não)
                 source = SafeFFmpegOpusAudio(
@@ -408,7 +409,7 @@ class PlaybackMixin:
                     }
                     
                     source = SafeFFmpegOpusAudio(
-                        source_url, codec="libopus", executable=executable, **ffmpeg_options_encode
+                        source_url, codec=None, executable=executable, **ffmpeg_options_encode
                     )
                 except Exception as opus_err:
                     logging.warning(f"Fallback 2 (Falha Crítica no OPUS) -> Indo para PCM: {opus_err}")
