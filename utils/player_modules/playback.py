@@ -323,14 +323,13 @@ class PlaybackMixin:
             "-reconnect_on_http_error 5xx "
             "-reconnect_delay_max 10 "
             "-rw_timeout 15000000 "
-            "-max_muxing_queue_size 1024 "
         )
         request_options = self._build_ffmpeg_request_options(source_headers)
         if request_options:
             before_options = f"{before_options} {request_options}"
             
         ffmpeg_result = build_ffmpeg_options(self.current_song, self.volume, seek_position=seek_position)
-        output_options = ffmpeg_result["options"]
+        output_options = ffmpeg_result["options"] + " -max_muxing_queue_size 1024"
         is_opus = ffmpeg_result["is_opus"]
 
         if seek_position > 0:
