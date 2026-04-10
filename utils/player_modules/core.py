@@ -19,20 +19,30 @@ class StreamCache:
         self.insert_count = 0
 
     def get(self, key):
-        """Executa a rotina de get."""
+        """Retorna o entry completo do cache (dict com url, headers, acodec, etc).
+
+        Retornar o dict inteiro em vez de só 'url' garante que metadados
+        como acodec e format_id fiquem disponíveis para detecção de Opus
+        em replays/loops.
+        """
         if key in self.cache:
             data = self.cache[key]
             # Usar monotonic para TTL (robusto ao NTP)
             if time.monotonic() - data['time'] < self.ttl:
                 # Move para fim (LRU)
                 self.cache.move_to_end(key)
-                return data['url']
+                return data['value']
             else:
                 del self.cache[key]
         return None
 
-    def set(self, key, url):
-        """Armazena uma URL de stream no cache com timestamp monotonic."""
+    def set(self, key, value):
+        """Armazena um entry no cache com timestamp monotonic.
+
+        Args:
+            key: chave de lookup (normalmente a URL original).
+            value: dict com url, headers, acodec, format_id, etc.
+        """
         self.insert_count += 1
         
         # Limpeza ativa a cada 50 inserções (Higiene)
@@ -41,7 +51,7 @@ class StreamCache:
 
         if key in self.cache:
             self.cache.move_to_end(key)
-        self.cache[key] = {'url': url, 'time': time.monotonic()}
+        self.cache[key] = {'value': value, 'time': time.monotonic()}
         
         # Limpar excesso (LRU)
         if len(self.cache) > self.max_size:
@@ -77,6 +87,14 @@ class SafeFFmpegPCMAudio(discord.FFmpegPCMAudio):
                     proc.kill()
             except Exception as e:
                 logging.error(f"Error killing FFmpeg process: {e}")
+            # Fechar pipes explicitamente para evitar leak em casos extremos
+            try:
+                if proc.stdout:
+                    proc.stdout.close()
+                if proc.stderr:
+                    proc.stderr.close()
+            except Exception:
+                pass
         
         # Chama o cleanup original para fechar pipes
         super().cleanup()
@@ -97,31 +115,106 @@ class SafeFFmpegOpusAudio(discord.FFmpegOpusAudio):
                     proc.kill()
             except Exception as e:
                 logging.error(f"Error killing FFmpeg process: {e}")
+            # Fechar pipes explicitamente para evitar leak em casos extremos
+            try:
+                if proc.stdout:
+                    proc.stdout.close()
+                if proc.stderr:
+                    proc.stderr.close()
+            except Exception:
+                pass
         
         # Chama o cleanup original para fechar pipes
         super().cleanup()
 
-def build_ffmpeg_options(info_dict: dict, volume: float, force_fallback: str = None, seek_position: float = 0) -> str:
-    """Constrói opções do FFmpeg otimizadas verificando o codec.
-    
-    Aplica codec copy se a stream já for Opus nativa para máxima
-    performance. Se force_fallback for passado (ex: 'encode_opus' ou 'encode_pcm'),
-    ignora a verificação e retorna a respectiva configuração.
+def _detect_opus(info_dict: dict) -> bool:
+    """Detecta se a stream de áudio é Opus usando múltiplas heurísticas.
+
+    YouTube moderno (HLS/SABR/m3u8) nem sempre retorna 'acodec' corretamente,
+    então usamos fallbacks:
+      1. acodec contém 'opus'
+      2. format_id é 249/250/251 (formatos Opus padrão do YouTube)
+      3. URL do stream contém '.webm' ou '.opus'
     """
-    codec = (info_dict.get("acodec") or "").lower()
-    is_opus = "opus" in codec and codec and codec != "none"
-    
+    acodec = (info_dict.get("acodec") or "").lower()
+    if acodec and acodec != "none" and "opus" in acodec:
+        return True
+
+    # format_ids 249/250/251 = YouTube Opus (baixa/média/alta qualidade)
+    format_id = str(info_dict.get("format_id", ""))
+    if format_id in ("249", "250", "251"):
+        return True
+
+    # .webm ou .opus em URL → quase sempre Opus
+    # Verificar tanto stream_url (URL resolvida) quanto url (original)
+    stream_url = info_dict.get("stream_url", "") or ""
+    url = info_dict.get("url", "") or ""
+    if any(ext in stream_url for ext in (".webm", ".opus")):
+        return True
+    if any(ext in url for ext in (".webm", ".opus")):
+        return True
+
+    return False
+
+
+def build_ffmpeg_options(
+    info_dict: dict,
+    volume: float,
+    force_fallback: str = None,
+    seek_position: float = 0,
+) -> dict:
+    """Constrói opções do FFmpeg otimizadas verificando o codec.
+
+    Retorna dict com:
+      - 'options': string de output options para FFmpeg
+      - 'is_opus': bool indicando se a fonte é Opus nativo (para usar codec='copy'
+        no FFmpegOpusAudio em vez de passar -c:a manualmente)
+      - 'mode': string descritiva do modo escolhido
+
+    IMPORTANTE: NÃO inclui -c:a no 'options' pois FFmpegOpusAudio já gerencia
+    o codec internamente via seu parâmetro 'codec'. Passar -c:a aqui causa
+    o warning 'Multiple -codec options specified' do FFmpeg.
+    """
+    acodec = (info_dict.get("acodec") or "").lower()
+    is_opus = _detect_opus(info_dict)
+
     if force_fallback == 'encode_opus':
-        logging.info(f"[audio] codec={codec} | mode=encode_opus (fallback) | seek={seek_position}")
-        return f'-vn -c:a libopus -vbr on -compression_level 10 -af "volume={volume}"'
-        
+        logging.info(f"[audio] codec={acodec} | is_opus={is_opus} | mode=encode_opus (fallback) | seek={seek_position}")
+        return {
+            "options": f'-vn -vbr on -compression_level 10 -af "volume={volume}"',
+            "is_opus": False,
+            "mode": "encode_opus",
+        }
+
     if force_fallback == 'encode_pcm':
-        logging.info(f"[audio] codec={codec} | mode=encode_pcm (fallback) | seek={seek_position}")
-        return f'-vn -b:a 192k -af "volume={volume}"'
-    
-    if is_opus:
-        logging.info(f"[audio] codec={codec} | mode=copy | seek={seek_position}")
-        return "-vn -c:a copy"
+        logging.info(f"[audio] codec={acodec} | is_opus={is_opus} | mode=encode_pcm (fallback) | seek={seek_position}")
+        return {
+            "options": f'-vn -b:a 192k -af "volume={volume}"',
+            "is_opus": False,
+            "mode": "encode_pcm",
+        }
+
+    if is_opus and abs(volume - 1.0) < 0.01:
+        # Modo copy: volume == 1.0, sem necessidade de -af volume.
+        # FFmpegOpusAudio produz pacotes Opus diretos → zero re-encode.
+        logging.info(f"[audio] codec={acodec} | is_opus=True | mode=copy | seek={seek_position}")
+        return {
+            "options": "-vn",
+            "is_opus": True,
+            "mode": "copy",
+        }
+    elif is_opus:
+        # Opus nativo mas volume != 1.0 → precisa de -af, então encode.
+        logging.info(f"[audio] codec={acodec} | is_opus=True | mode=encode_opus (volume={volume}) | seek={seek_position}")
+        return {
+            "options": f'-vn -vbr on -compression_level 10 -af "volume={volume}"',
+            "is_opus": False,
+            "mode": "encode_opus",
+        }
     else:
-        logging.info(f"[audio] codec={codec} | mode=encode_opus | seek={seek_position}")
-        return f'-vn -c:a libopus -vbr on -compression_level 10 -af "volume={volume}"'
+        logging.info(f"[audio] codec={acodec} | is_opus=False | mode=encode_opus | seek={seek_position}")
+        return {
+            "options": f'-vn -vbr on -compression_level 10 -af "volume={volume}"',
+            "is_opus": False,
+            "mode": "encode_opus",
+        }
