@@ -294,6 +294,9 @@ class PlaybackMixin:
         seek_position = self.current_song.get("seek", 0)
 
         before_options = (
+            "-re "
+            "-fflags +genpts "
+            "-thread_queue_size 4096 "
             "-reconnect 1 "
             "-reconnect_streamed 1 "
             "-reconnect_on_network_error 1 "
@@ -370,7 +373,9 @@ class PlaybackMixin:
             self.stopped_for_sfx = False
 
             # Resetar contadores de tempo
-            self.started_at = time.monotonic() - seek_position
+            self.pipeline_delay = 0.2  # ajustar empiricamente
+            # Mantido o seek_position (se houver avanço), somado ao atraso real de inicialização
+            self.started_at = time.monotonic() - seek_position + self.pipeline_delay
             self.paused_at = None
             self.total_paused = 0
             self._last_second = -1
