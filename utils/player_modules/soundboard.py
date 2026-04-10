@@ -59,7 +59,7 @@ class SoundboardMixin:
                 volume,
                 force_fallback="encode_opus",
             )
-            sfx_codec = "libopus"
+            sfx_codec = None
             sfx_options = sfx_result["options"]
             logging.info(f"[sfx] mode=encode_opus | volume={volume} | path={sfx_path}")
 
