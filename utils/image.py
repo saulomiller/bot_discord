@@ -17,7 +17,7 @@ import logging
 import os
 import hashlib
 import atexit
-from threading import Lock
+from threading import Lock, RLock
 from typing import Optional, List, Dict, Tuple, Any, Union
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
@@ -34,6 +34,7 @@ log = logging.getLogger(__name__)
 
 FONTS: dict = {}
 _font_lock = Lock()
+cache_lock = RLock()
 
 SESSION = requests.Session()
 SESSION.trust_env = False
@@ -52,18 +53,23 @@ def sizeof_image(value):
     if isinstance(value, bytes):
         return len(value)
     if isinstance(value, Image.Image):
-        # Estimativa O(1) nativa de complexidade em vez de tobytes (O(N))
+        # Estimativa O(1) nativa de complexidade evitando tobytes() excessivo
         return value.width * value.height * len(value.getbands())
     return 1
 
-# Caches Separados (Nível Enterprise para evitar collisons e Memory Loaders pesados)
-image_cache_raw = TTLCache(maxsize=50, ttl=300, getsizeof=sizeof_image)
-image_cache_processed = TTLCache(maxsize=30, ttl=300, getsizeof=sizeof_image)
+# O maxsize deve estar alinhado à escala do sizeof (em bytes)
+# Fix "value too large" exception capping TTLCache memory to exactly ~50MB cada.
+MAX_CACHE_SIZE_BYTES = 50 * 1024 * 1024
 
-executor = ThreadPoolExecutor(max_workers=4)
+image_cache_raw = TTLCache(maxsize=MAX_CACHE_SIZE_BYTES, ttl=300, getsizeof=sizeof_image)
+image_cache_processed = TTLCache(maxsize=MAX_CACHE_SIZE_BYTES, ttl=300, getsizeof=sizeof_image)
+
+max_workers = min(8, os.cpu_count() or 4)
+executor = ThreadPoolExecutor(max_workers=max_workers)
 atexit.register(executor.shutdown)
 
 DEFAULT_BG_COLOR = (18, 18, 18)
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB Limits prevents crashing RAM by huge images
 
 _FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
 
@@ -102,19 +108,33 @@ def hash_bytes(data: bytes) -> str:
 # ---------------------------------------------------------------------------
 
 def fetch_image_content(url: str) -> Optional[bytes]:
-    """Baixa e cacheia conteúdo de imagens por URL usando raw cache."""
+    """Baixa e cacheia conteúdo de imagens por URL usando raw cache (Anti Stampede)."""
     if not url:
         return None
         
     cache_key = f"fetch_{url}"
-    if cache_key in image_cache_raw:
-        return image_cache_raw[cache_key]
+    
+    with cache_lock:
+        if cache_key in image_cache_raw:
+            return image_cache_raw[cache_key]
         
     try:
-        response = SESSION.get(url, timeout=(5, 10))
+        response = SESSION.get(url, stream=True, timeout=(5, 10))
         response.raise_for_status()
+
+        # Proteção contra ataques de imagens gigantes ou falhas maliciosas do header
+        if int(response.headers.get("Content-Length", 0)) > MAX_IMAGE_SIZE:
+             log.error(f"Erro: Imagem excede {MAX_IMAGE_SIZE} bytes. {url}")
+             return None
+             
         data = response.content
-        image_cache_raw[cache_key] = data
+        if len(data) > MAX_IMAGE_SIZE:
+             log.error(f"Erro Real: Imagem recebida excede limite! {url}")
+             return None
+
+        with cache_lock:
+            image_cache_raw[cache_key] = data
+            
         return data
     except Exception as e:
         log.error(f"Erro ao baixar imagem {url}: {e}")
@@ -173,8 +193,10 @@ def get_dominant_color_from_bytes(content: bytes) -> tuple[int, int, int]:
     
     h = hash_bytes(content)
     cache_key = f"color_{h}"
-    if cache_key in image_cache_processed:
-        return image_cache_processed[cache_key]
+    
+    with cache_lock:
+        if cache_key in image_cache_processed:
+            return image_cache_processed[cache_key]
 
     try:
         with Image.open(BytesIO(content)) as img_opened:
@@ -185,7 +207,6 @@ def get_dominant_color_from_bytes(content: bytes) -> tuple[int, int, int]:
         result = image.quantize(colors=8, method=Image.Quantize.FASTOCTREE)
         colors = result.convert('RGB').getcolors(maxcolors=256)
 
-        # Fallback UX com cor média resizing
         fallback_color = DEFAULT_BG_COLOR
         try:
             avg_color = image.resize((1, 1)).getpixel((0, 0))
@@ -199,7 +220,9 @@ def get_dominant_color_from_bytes(content: bytes) -> tuple[int, int, int]:
             
         rgb = max(colors, key=lambda x: x[0])[1]
         final_color = rgb if isinstance(rgb, tuple) and len(rgb) == 3 else fallback_color
-        image_cache_processed[cache_key] = final_color
+        
+        with cache_lock:
+             image_cache_processed[cache_key] = final_color
         return final_color
     except Exception as e:
         log.error(f"Erro ao extrair cor dominante: {e}")
@@ -333,28 +356,37 @@ def prepare_image_assets(content: Optional[bytes], cover_size: int, width: int, 
         cache_key_thumb = f"thumb_{cover_size}_{h}"
         cache_key_bg = f"bg_{width}_{height}_{h}"
         
-        # Otimiza reuso copiando EXCLUSIVAMENTE na leitura p/ nao afetar matrizes.
-        if cache_key_thumb in image_cache_processed and cache_key_bg in image_cache_processed:
-             assets.thumbnail = image_cache_processed[cache_key_thumb].copy()
-             assets.background = image_cache_processed[cache_key_bg].copy()
-             return assets
+        with cache_lock:
+            # Reconstrói via buffer comprimido (Otimização pesada de Memória cacheada)
+            if cache_key_thumb in image_cache_processed and cache_key_bg in image_cache_processed:
+                assets.thumbnail = Image.open(BytesIO(image_cache_processed[cache_key_thumb])).convert("RGB")
+                assets.background = Image.open(BytesIO(image_cache_processed[cache_key_bg])).convert("RGB")
+                return assets
              
         with Image.open(BytesIO(content)) as img_opened:
             img_opened.load()
             img = img_opened.copy().convert("RGB")
             assets.original = img
             
-        assets.thumbnail = generate_thumbnail(img.copy(), (cover_size, cover_size))
-        image_cache_processed[cache_key_thumb] = assets.thumbnail # Guardar matriz base (Custo M/R free)
-
+        # Não clona o objeto, a .crop da função original não o destruirá nativamente.
+        assets.thumbnail = generate_thumbnail(img, (cover_size, cover_size))
+        
+        buf_thumb = BytesIO()
+        assets.thumbnail.save(buf_thumb, format="JPEG", quality=85)
+        
         if is_low_resolution(img):
             r, g, b = assets.dominant_color
             assets.background = Image.new("RGB", (width, height), (r, g, b))
         else:
-            assets.background = generate_blurred_background(img, width, height) # Reuso original
+            assets.background = generate_blurred_background(img, width, height)
             
-        image_cache_processed[cache_key_bg] = assets.background
+        buf_bg = BytesIO()
+        assets.background.save(buf_bg, format="JPEG", quality=75)
         
+        with cache_lock:
+             image_cache_processed[cache_key_thumb] = buf_thumb.getvalue()
+             image_cache_processed[cache_key_bg] = buf_bg.getvalue()
+             
     except Exception as e:
         log.error(f"Erro ao preparar assets da imagem: {e}")
         
