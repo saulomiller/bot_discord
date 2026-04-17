@@ -12,16 +12,21 @@ RESOURCE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 def _validate_resource_id(value: str, *, field_name: str) -> str:
     if not RESOURCE_ID_RE.fullmatch(value):
         raise ValueError(
-            f"{field_name} inválido. Use apenas letras, números, '_' e '-', até 64 caracteres."
+            f"{field_name} inválido. Use apenas letras, números, '_' e '-', "
+            "até 64 caracteres."
         )
     return value
 
 
 class ApiModel(BaseModel):
+    """Base comum para payloads da API com trim automatico de strings."""
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class MusicRequest(ApiModel):
+    """Payload para requisicao de busca/tocar musica."""
+
     search: str = Field(min_length=1, max_length=2048)
 
     @field_validator("search")
@@ -34,16 +39,22 @@ class MusicRequest(ApiModel):
 
 
 class VolumeRequest(ApiModel):
+    """Payload para ajuste de volume do player."""
+
     level: float = Field(ge=0.0, le=1.5)
 
 
 class PlaylistUploadRequest(ApiModel):
+    """Payload para upload de playlist via API."""
+
     file: str = Field(min_length=1, max_length=2_000_000)
     filename: str = Field(min_length=1, max_length=128)
     encoding: Literal["plain", "base64"] = "plain"
 
 
 class RadioRequest(ApiModel):
+    """Payload para cadastro de nova radio personalizada."""
+
     name: str = Field(min_length=2, max_length=80)
     url: str = Field(min_length=10, max_length=2048)
     location: str = Field(default="Desconhecido", max_length=120)
@@ -68,6 +79,8 @@ class RadioRequest(ApiModel):
 
 
 class RadioRemoveRequest(ApiModel):
+    """Payload para remocao de radio pelo id."""
+
     radio_id: str = Field(min_length=1, max_length=64)
 
     @field_validator("radio_id")
@@ -78,6 +91,8 @@ class RadioRemoveRequest(ApiModel):
 
 
 class RadioPlayRequest(ApiModel):
+    """Payload para tocar radio por id no servidor."""
+
     radio_id: str = Field(min_length=1, max_length=64)
     guild_id: PositiveInt | None = None
 
@@ -89,6 +104,8 @@ class RadioPlayRequest(ApiModel):
 
 
 class SoundboardPlayRequest(ApiModel):
+    """Payload para tocar efeito da soundboard."""
+
     guild_id: PositiveInt
     sfx_id: str = Field(min_length=1, max_length=64)
 
@@ -100,6 +117,8 @@ class SoundboardPlayRequest(ApiModel):
 
 
 class SoundboardFavoriteRequest(ApiModel):
+    """Payload para favoritar ou desfavoritar um efeito."""
+
     sfx_id: str = Field(min_length=1, max_length=64)
     favorite: bool
 
@@ -111,6 +130,8 @@ class SoundboardFavoriteRequest(ApiModel):
 
 
 class SoundboardVolumeRequest(ApiModel):
+    """Payload para ajustar volume de um efeito da soundboard."""
+
     sfx_id: str = Field(min_length=1, max_length=64)
     volume: float = Field(ge=0.0, le=2.0)
 
@@ -122,4 +143,6 @@ class SoundboardVolumeRequest(ApiModel):
 
 
 class LanguageRequest(ApiModel):
+    """Payload para definir idioma da aplicacao."""
+
     language: Literal["pt", "en"]

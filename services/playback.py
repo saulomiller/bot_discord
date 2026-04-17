@@ -35,7 +35,9 @@ def get_or_create_player(bot: Any, guild_id: int):
     return music_cog.get_player(guild_id)
 
 
-async def enqueue_search(player: Any, search: str, user: Any, voice_client: Any = None) -> dict:
+async def enqueue_search(
+    player: Any, search: str, user: Any, voice_client: Any = None
+) -> dict:
     """Enfileira search."""
     is_playlist = is_playlist_query(search)
     if is_playlist:
@@ -49,12 +51,18 @@ async def enqueue_search(player: Any, search: str, user: Any, voice_client: Any 
     return {"is_playlist": False, "song": song}
 
 
-def remove_playlist_entries(player: Any, *, include_lazy: bool, skip_current: bool) -> tuple[int, bool]:
+def remove_playlist_entries(
+    player: Any, *, include_lazy: bool, skip_current: bool
+) -> tuple[int, bool]:
     """Remove playlist entries."""
     skipped_current = False
     if skip_current and isinstance(player.current_song, dict):
         current_is_playlist = player.current_song.get("channel") == "Playlist"
-        current_is_lazy = bool(player.current_song.get("is_lazy", False)) if include_lazy else False
+        current_is_lazy = (
+            bool(player.current_song.get("is_lazy", False))
+            if include_lazy
+            else False
+        )
         if current_is_playlist or current_is_lazy:
             player.skip()
             skipped_current = True
@@ -66,7 +74,9 @@ def remove_playlist_entries(player: Any, *, include_lazy: bool, skip_current: bo
         if isinstance(song, dict):
             is_playlist_item = song.get("channel") == "Playlist"
             if include_lazy:
-                is_playlist_item = is_playlist_item or bool(song.get("is_lazy", False))
+                is_playlist_item = is_playlist_item or bool(
+                    song.get("is_lazy", False)
+                )
         if is_playlist_item:
             removed += 1
         else:

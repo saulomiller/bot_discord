@@ -10,11 +10,11 @@ YDL_OPTIONS = {
     "retries": 5,
     "skip_download": True,
     "source_address": "0.0.0.0",  # Força IPv4 no yt-dlp
-    "force_ipv4": True,           # Redundância extra para garantir IPv4
+    "force_ipv4": True,  # Redundância extra para garantir IPv4
     "cachedir": "/app/.cache",
     "ignoreerrors": True,  # Não abortar em entradas inválidas de playlist
     "extract_flat": False,  # Resolver URLs completas por padrão
-    # Permite download automático dos scripts EJS (necessário para web_embedded/web)
+    # Permite baixar scripts EJS necessários para web_embedded/web.
     "remote_components": {"ejs:github"},
     "extractor_args": {
         "youtube": {

@@ -20,6 +20,7 @@ from utils.player_modules import (
     build_ffmpeg_options,
 )
 
+
 class MusicPlayer(
     PlaybackMixin,
     SoundboardMixin,
@@ -41,49 +42,53 @@ class MusicPlayer(
         self.is_looping = False
         self.is_shuffling = False
         self.loop = asyncio.get_running_loop()
-        
+
         # Cache de Streams
         self.stream_cache = StreamCache()
-        
+
         # Cache de vídeos que falharam com UNPLAYABLE — evita re-tentativas
         # redundantes na mesma sessão. Resetado quando o player é recriado.
         self._failed_ids: set = set()
-        
+
         # Reutilizar instância do YoutubeDL (Otimização)
         self.ydl = yt_dlp.YoutubeDL(YDL_OPTIONS)
 
         # Progress tracking
         self.started_at = None
-        self.paused_at = None 
+        self.paused_at = None
         self.total_paused = 0
-        
+
         # Soundboard state
         self.sfx_playing = False
         self.stopped_for_sfx = False
         self.consecutive_errors = 0
-        
+
         # Concurrency safety: Lock para evitar múltiplos play_next simultâneos
         self._play_lock = asyncio.Lock()
 
         # Dashboard (Card Vivo)
         self.dashboard_message = None
-        self.dashboard_context = None # ctx ou interaction
+        self.dashboard_context = None  # ctx ou interaction
         self.dashboard_task = None
         self.last_img_url = None
-        self._last_second = -1  # Rastreador para smart updates (evita recria desnecessária)
+        self._last_second = (
+            -1
+        )  # Rastreador para smart updates (evita recria desnecessária)
         self._queue_empty_cleanup_task = None
         self._queue_empty_grace_seconds = 8
 
     @property
     def is_voice_busy(self) -> bool:
-        """Retorna True quando o voice client já está ocupado (tocando/pausado)."""
+        """Retorna ``True`` quando o voice client já está ocupado."""
         vc = self.voice_client
         return bool(vc and (vc.is_playing() or vc.is_paused()))
 
     @property
     def is_playback_busy(self) -> bool:
-        """Retorna True quando há reprodução ativa ou transição de play em andamento."""
-        return self._play_lock.locked() or self.is_voice_busy or self.sfx_playing
+        """Retorna ``True`` quando há reprodução ou transição em andamento."""
+        return (
+            self._play_lock.locked() or self.is_voice_busy or self.sfx_playing
+        )
 
     @property
     def guild(self):
@@ -104,10 +109,10 @@ class MusicPlayer(
         """Formata duração em segundos para string HH:MM:SS ou MM:SS."""
         if not duration_seconds:
             return "Desconhecida"
-        
+
         minutes, seconds = divmod(int(duration_seconds), 60)
         hours, minutes = divmod(minutes, 60)
-        
+
         if hours > 0:
             return f"{hours}:{minutes:02d}:{seconds:02d}"
         else:
@@ -115,35 +120,36 @@ class MusicPlayer(
 
     @staticmethod
     def _is_direct_stream_url(url: str) -> bool:
-        """Detecta URLs diretas de mídia (ex.: googlevideo/videoplayback ou m3u8 playlists)."""
+        """Detecta URLs diretas de mídia, como googlevideo ou m3u8."""
         if not url:
             return False
         lower = str(url).lower()
         return (
-            '.googlevideo.com/' in lower
-            or 'googlevideo.com/videoplayback' in lower
-            or 'sndcdn.com/' in lower
+            ".googlevideo.com/" in lower
+            or "googlevideo.com/videoplayback" in lower
+            or "sndcdn.com/" in lower
         )
 
     @staticmethod
     def _is_resolvable_service_url(url: str) -> bool:
-        """Detecta páginas canônicas de serviços que devem passar por resolve."""
+        """Detecta páginas canônicas que ainda precisam passar por resolve."""
         if not url:
             return False
         lower = str(url).lower()
         return (
-            'youtube.com/watch' in lower
-            or 'youtu.be/' in lower
-            or 'music.youtube.com/' in lower
-            or 'soundcloud.com/' in lower
+            "youtube.com/watch" in lower
+            or "youtu.be/" in lower
+            or "music.youtube.com/" in lower
+            or "soundcloud.com/" in lower
         )
 
+
 __all__ = [
-    'MAX_PLAYLIST_SIZE',
-    'YDL_OPTIONS',
-    'MusicPlayer',
-    'SafeFFmpegPCMAudio',
-    'SafeFFmpegOpusAudio',
-    'StreamCache',
-    'build_ffmpeg_options',
+    "MAX_PLAYLIST_SIZE",
+    "YDL_OPTIONS",
+    "MusicPlayer",
+    "SafeFFmpegPCMAudio",
+    "SafeFFmpegOpusAudio",
+    "StreamCache",
+    "build_ffmpeg_options",
 ]

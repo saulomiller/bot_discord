@@ -10,7 +10,10 @@ from config import SOUNDBOARD_DIR, ALLOWED_AUDIO_EXTENSIONS
 from utils.helpers import get_sfx_metadata
 from utils.i18n import t
 
+
 class SoundboardCog(commands.Cog):
+    """Cog com comandos slash de soundboard."""
+
     def __init__(self, bot):
         """Inicializa a instancia da classe."""
         self.bot = bot
@@ -19,37 +22,40 @@ class SoundboardCog(commands.Cog):
         """Retorna player."""
         return get_or_create_player(self.bot, guild_id)
 
-    async def sfx_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-        """Autocomplete para listar SFX disponíveis"""
+    async def sfx_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Lista SFX disponíveis para autocomplete."""
         choices = []
         try:
             for file in Path(SOUNDBOARD_DIR).glob("*"):
                 if file.suffix.lower() in ALLOWED_AUDIO_EXTENSIONS:
                     name = file.stem
                     if current.lower() in name.lower():
-                        choices.append(app_commands.Choice(name=name, value=name))
+                        choices.append(
+                            app_commands.Choice(name=name, value=name)
+                        )
         except Exception as e:
             logging.error(f"Erro no autocomplete de SFX: {e}")
-        
+
         return choices[:25]  # Discord limita a 25
 
     @app_commands.command(name="sfx", description="Plays a sound effect")
     @app_commands.describe(nome="Sound effect name")
     @app_commands.autocomplete(nome=sfx_autocomplete)
     async def sfx_command(self, interaction: discord.Interaction, nome: str):
-        """Comando para tocar SFX - COM EMBED EFÊMERO"""
+        """Toca um SFX e responde com embed efêmero."""
         await interaction.response.defer(ephemeral=True)
-        
+
         try:
             # Verificar se bot está em canal de voz
             player = self.get_player(interaction.guild_id)
             if not player or not player.voice_client:
                 await interaction.followup.send(
-                    t('user_must_be_in_voice'),
-                    ephemeral=True
+                    t("user_must_be_in_voice"), ephemeral=True
                 )
                 return
-            
+
             # Buscar arquivo
             sfx_path = None
             for ext in ALLOWED_AUDIO_EXTENSIONS:
@@ -57,36 +63,37 @@ class SoundboardCog(commands.Cog):
                 if path.exists():
                     sfx_path = str(path)
                     break
-            
+
             if not sfx_path:
                 await interaction.followup.send(
-                    t('sfx_not_found', name=nome),
-                    ephemeral=True
+                    t("sfx_not_found", name=nome), ephemeral=True
                 )
                 return
-            
+
             # Obter volume configurado
             metadata = get_sfx_metadata(nome)
             volume = metadata.get("volume", 1.0)
-            
+
             # Tocar SFX
             await player.play_soundboard(sfx_path, volume=volume)
-            
+
             # EMBED EFÊMERO mostrando quem pediu
             embed = discord.Embed(
-                description=t('sfx_requested_by', user=interaction.user.mention, name=nome),
-                color=discord.Color.from_rgb(147, 112, 219)
+                description=t(
+                    "sfx_requested_by",
+                    user=interaction.user.mention,
+                    name=nome,
+                ),
+                color=discord.Color.from_rgb(147, 112, 219),
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
-            
+
             logging.info(f"SFX '{nome}' tocado por {interaction.user.name}")
-            
+
         except Exception as e:
             logging.error(f"Erro ao tocar SFX: {e}")
-            await interaction.followup.send(
-                t('error'),
-                ephemeral=True
-            )
+            await interaction.followup.send(t("error"), ephemeral=True)
+
 
 async def setup(bot):
     """Configura recursos necessarios para inicializacao."""
