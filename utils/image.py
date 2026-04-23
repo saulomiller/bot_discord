@@ -35,6 +35,8 @@ log = logging.getLogger(__name__)
 FONTS: dict = {}
 _font_lock = Lock()
 cache_lock = RLock()
+_vignette_lock = Lock()
+_vignette_cache: dict[tuple[int, int], Image.Image] = {}
 
 SESSION = requests.Session()
 SESSION.trust_env = False
@@ -79,6 +81,7 @@ DEFAULT_BG_COLOR = (18, 18, 18)
 MAX_IMAGE_SIZE = (
     5 * 1024 * 1024
 )  # 5 MB Limits prevents crashing RAM by huge images
+DOWNLOAD_CHUNK_SIZE = 64 * 1024
 
 _FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 
@@ -140,18 +143,29 @@ def fetch_image_content(url: str) -> Optional[bytes]:
             return image_cache_raw[cache_key]
 
     try:
-        response = SESSION.get(url, stream=True, timeout=(5, 10))
-        response.raise_for_status()
+        with SESSION.get(url, stream=True, timeout=(5, 10)) as response:
+            response.raise_for_status()
 
-        # Proteção contra imagens gigantes ou cabeçalhos maliciosos.
-        if int(response.headers.get("Content-Length", 0)) > MAX_IMAGE_SIZE:
-            log.error(f"Erro: Imagem excede {MAX_IMAGE_SIZE} bytes. {url}")
-            return None
+            # Proteção contra cabeçalhos maliciosos e payload gigante.
+            content_length = int(response.headers.get("Content-Length", 0))
+            if content_length > MAX_IMAGE_SIZE:
+                log.error(f"Erro: Imagem excede {MAX_IMAGE_SIZE} bytes. {url}")
+                return None
 
-        data = response.content
-        if len(data) > MAX_IMAGE_SIZE:
-            log.error(f"Erro Real: Imagem recebida excede limite! {url}")
-            return None
+            chunks = []
+            total_bytes = 0
+            for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
+                if not chunk:
+                    continue
+                total_bytes += len(chunk)
+                if total_bytes > MAX_IMAGE_SIZE:
+                    log.error(
+                        "Erro Real: Imagem recebida excede limite! %s", url
+                    )
+                    return None
+                chunks.append(chunk)
+
+        data = b"".join(chunks)
 
         with cache_lock:
             image_cache_raw[cache_key] = data
@@ -331,6 +345,12 @@ def apply_side_gradient(base_img: Image.Image, start_x: int) -> None:
 
 def get_vignette_layer(width: int, height: int) -> Image.Image:
     """Cria uma camada de vinheta para escurecer as bordas."""
+    cache_key = (width, height)
+    with _vignette_lock:
+        cached = _vignette_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     vignette = Image.linear_gradient("L").rotate(90).resize((1, height))
     vignette = vignette.resize((width, height))
 
@@ -340,6 +360,9 @@ def get_vignette_layer(width: int, height: int) -> Image.Image:
 
     layer = Image.new("RGBA", (width, height), (0, 0, 0, 255))
     layer.putalpha(vignette_mask)
+
+    with _vignette_lock:
+        _vignette_cache[cache_key] = layer
     return layer
 
 
@@ -729,12 +752,12 @@ def draw_card_layout(
     return buffer
 
 
-def create_now_playing_card(
+def create_now_playing_card_with_metadata(
     song_info: dict | None,
     next_songs: list | None = None,
     progress_percent: float | None = None,
-) -> BytesIO | None:
-    """Gera o card visual da música atual e da próxima fila."""
+) -> tuple[BytesIO | None, tuple[int, int, int] | None]:
+    """Gera card e retorna metadados visuais úteis sem trabalho duplicado."""
     try:
         if progress_percent is not None and not isinstance(
             progress_percent, (int, float)
@@ -751,14 +774,33 @@ def create_now_playing_card(
         assets = prepare_image_assets(
             content, cover_size=236, width=640, height=640
         )
+        dominant_color = assets.dominant_color if content else None
 
-        return draw_card_layout(
-            song_info, assets, next_songs, progress_percent
+        card_buffer = draw_card_layout(
+            song_info,
+            assets,
+            next_songs,
+            progress_percent,
         )
+        return card_buffer, dominant_color
 
     except Exception as e:
         log.error(f"Erro fatal ao gerar card: {e}", exc_info=True)
-        return None
+        return None, None
+
+
+def create_now_playing_card(
+    song_info: dict | None,
+    next_songs: list | None = None,
+    progress_percent: float | None = None,
+) -> BytesIO | None:
+    """Gera o card visual da música atual e da próxima fila."""
+    card_buffer, _ = create_now_playing_card_with_metadata(
+        song_info,
+        next_songs,
+        progress_percent,
+    )
+    return card_buffer
 
 
 # ---------------------------------------------------------------------------
@@ -772,10 +814,24 @@ async def create_now_playing_card_async(
     progress_percent: float | None = None,
 ) -> BytesIO | None:
     """Executa a geração do card em thread para não bloquear o loop."""
+    card_buffer, _ = await create_now_playing_card_with_metadata_async(
+        song_info,
+        next_songs,
+        progress_percent,
+    )
+    return card_buffer
+
+
+async def create_now_playing_card_with_metadata_async(
+    song_info: dict | None,
+    next_songs: list | None = None,
+    progress_percent: float | None = None,
+) -> tuple[BytesIO | None, tuple[int, int, int] | None]:
+    """Executa geração do card e metadados em thread dedicada."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         executor,
-        create_now_playing_card,
+        create_now_playing_card_with_metadata,
         song_info,
         next_songs,
         progress_percent,

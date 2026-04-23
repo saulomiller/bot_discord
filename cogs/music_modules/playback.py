@@ -1,7 +1,6 @@
 """Comandos de reproducao e fila do cog de musica."""
 
 import asyncio
-import functools
 import logging
 from datetime import timedelta
 
@@ -11,7 +10,7 @@ from discord.ext import commands
 
 from services.playback import enqueue_search, is_playlist_query
 from utils.embeds import EmbedBuilder
-from utils.image import create_now_playing_card, get_dominant_color
+from utils.image import create_now_playing_card_with_metadata_async
 from utils.helpers import ensure_voice
 from utils.i18n import t
 
@@ -435,41 +434,23 @@ class MusicPlaybackMixin:
             current_seconds = progress["current"]
             total_seconds = progress["duration"]
 
-            # Extrair cor dominante
             thumb_url = player_instance.current_song.get("thumbnail")
-            dominant_color = None
-            if thumb_url:
-                try:
-                    loop = self.bot.loop
-                    dominant_color = await loop.run_in_executor(
-                        None, get_dominant_color, thumb_url
-                    )
-                except Exception as e:
-                    logging.error(f"Erro ao extrair cor: {e}")
+            card_buffer, dominant_color = (
+                await create_now_playing_card_with_metadata_async(
+                    player_instance.current_song,
+                    next_songs=list(player_instance.queue)[:3],
+                    progress_percent=(current_seconds / total_seconds)
+                    if total_seconds > 0
+                    else None,
+                )
+            )
 
             embed = EmbedBuilder.create_now_playing_embed(
                 player_instance.current_song,
                 list(player_instance.queue),
                 current_seconds=current_seconds,
                 total_seconds=total_seconds,
-                color=dominant_color,
-            )
-
-            loop = self.bot.loop
-
-            # Card
-            import functools
-
-            card_buffer = await loop.run_in_executor(
-                None,
-                functools.partial(
-                    create_now_playing_card,
-                    player_instance.current_song,
-                    next_songs=list(player_instance.queue)[:3],
-                    progress_percent=(current_seconds / total_seconds)
-                    if total_seconds > 0
-                    else None,
-                ),
+                dominant_color=dominant_color,
             )
 
             file = None

@@ -2,14 +2,13 @@
 
 import asyncio
 import contextlib
-import functools
 import logging
 import time
 
 import discord
 
 from utils.embeds import EmbedBuilder
-from utils.image import create_now_playing_card
+from utils.image import create_now_playing_card_with_metadata_async
 
 
 class DashboardMixin:
@@ -213,38 +212,16 @@ class DashboardMixin:
             progress = self.get_progress()
             pct = progress.get("percent", 0) / 100.0  # 0.0-1.0
 
-            # Extrai cor dominante da thumbnail para sincronizar embed e card.
-            dominant_color = None
-            thumb_url = song_snapshot.get("thumbnail")
-            if thumb_url:
-                try:
-                    from utils.image import (
-                        fetch_image_content,
-                        get_dominant_color_from_bytes,
-                    )
-
-                    content = await self.loop.run_in_executor(
-                        None, fetch_image_content, thumb_url
-                    )
-                    if content:
-                        dominant_color = await self.loop.run_in_executor(
-                            None, get_dominant_color_from_bytes, content
-                        )
-                except Exception as e:
-                    logging.debug(f"Erro ao extrair cor dominante: {e}")
-            # Cachear no player para o dashboard loop reutilizar sem re-fetch
-            self._dominant_color = dominant_color
-
-            # Gerar Imagem (PIL) em executor para não travar o event loop
-            img_buffer = await self.loop.run_in_executor(
-                None,
-                functools.partial(
-                    create_now_playing_card,
+            # Gera card e cor dominante em uma única passada.
+            img_buffer, dominant_color = (
+                await create_now_playing_card_with_metadata_async(
                     song_snapshot,
                     next_songs=next_songs[:3],
                     progress_percent=pct,
-                ),
+                )
             )
+            # Cachear no player para o dashboard loop reutilizar sem re-fetch.
+            self._dominant_color = dominant_color
 
             # Evitar dashboard stale quando a musica muda durante awaits
             if self.current_song is not song_snapshot:
