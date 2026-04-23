@@ -96,11 +96,15 @@ class ExtractionMixin:
                     if duration_seconds:
                         minutes, seconds = divmod(duration_seconds, 60)
                         hours, minutes = divmod(minutes, 60)
-                        duration_formatted = (
-                            f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}"
-                            if hours > 0
-                            else f"{int(minutes)}:{int(seconds):02d}"
-                        )
+                        if hours > 0:
+                            duration_formatted = (
+                                f"{int(hours)}:{int(minutes):02d}:"
+                                f"{int(seconds):02d}"
+                            )
+                        else:
+                            duration_formatted = (
+                                f"{int(minutes)}:{int(seconds):02d}"
+                            )
                     else:
                         duration_formatted = "Desconhecida"
 

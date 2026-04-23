@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 def _parse_color(color) -> discord.Color:
     """
-    Converte qualquer representação de cor para discord.Color.
+    Convert any color representation to discord.Color.
 
     Aceita: tuple/list (r,g,b), str hex '#RRGGBB', discord.Color, int.
     Retorna COLOR_MUSIC como fallback.
@@ -252,7 +252,18 @@ class EmbedBuilder:
                 f"{current_song.get('title', t('unknown'))}\n\n"
             )
 
-        number_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        number_emojis = [
+            "1️⃣",
+            "2️⃣",
+            "3️⃣",
+            "4️⃣",
+            "5️⃣",
+            "6️⃣",
+            "7️⃣",
+            "8️⃣",
+            "9️⃣",
+            "🔟",
+        ]
         display_limit = min(10, total_songs)
         for i, song in enumerate(queue_list[:display_limit], 1):
             title = (

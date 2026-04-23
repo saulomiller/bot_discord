@@ -360,7 +360,7 @@ class PlaybackMixin:
         }
 
         def after_play(err):
-            """Callback executado após música terminar."""
+            """Handle callback after the track finishes."""
             try:
                 if err:
                     logging.error(f"Erro no player: {err}")

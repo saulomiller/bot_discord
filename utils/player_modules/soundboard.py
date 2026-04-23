@@ -71,7 +71,7 @@ class SoundboardMixin:
         ffmpeg_options = {"options": sfx_options}
 
         def after_sfx(error):
-            """Callback após SFX terminar."""
+            """Handle callback after SFX playback ends."""
             try:
                 if error:
                     logging.error(f"SFX error: {error}")

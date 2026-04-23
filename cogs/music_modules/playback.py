@@ -288,7 +288,7 @@ class MusicPlaybackMixin:
 
             deleted_recent = 0
             for i in range(0, len(recent_messages), 100):
-                chunk = recent_messages[i : i + 100]
+                chunk = recent_messages[i:i + 100]
                 if len(chunk) == 1:
                     await chunk[0].delete(reason=reason)
                 elif chunk:

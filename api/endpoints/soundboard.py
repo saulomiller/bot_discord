@@ -4,7 +4,14 @@ import logging
 import os
 import time
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 
 from api.endpoints.common import get_player_for_guild, get_voice_client

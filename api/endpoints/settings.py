@@ -29,7 +29,13 @@ def _resolve_runtime_token(payload_token: str | None = None) -> str | None:
     return file_token or None
 
 
-def _queue_bot_start(request: Request, bot, token: str, *, restart_first: bool) -> asyncio.Task:
+def _queue_bot_start(
+    request: Request,
+    bot,
+    token: str,
+    *,
+    restart_first: bool,
+) -> asyncio.Task:
     """Agenda start do bot e evita tarefas concorrentes de inicializacao."""
     existing_task = getattr(request.app.state, "bot_start_task", None)
     if existing_task and not existing_task.done():
@@ -101,7 +107,10 @@ async def restart_bot(request: Request, _: str = Depends(require_api_key)):
     bot = request.app.state.bot
     token = _resolve_runtime_token()
     if not token:
-        raise HTTPException(status_code=400, detail="Nenhum token configurado para reiniciar o bot.")
+        raise HTTPException(
+            status_code=400,
+            detail="Nenhum token configurado para reiniciar o bot.",
+        )
 
     existing_task = getattr(request.app.state, "bot_start_task", None)
     if existing_task and not existing_task.done():
@@ -124,7 +133,10 @@ async def get_language():
 
 
 @router.post("/api/settings/language")
-async def set_language(body: LanguageRequest, _: str = Depends(require_api_key)):
+async def set_language(
+    body: LanguageRequest,
+    _: str = Depends(require_api_key),
+):
     """Define language."""
     success = I18n.get_instance().save_language(body.language)
     if success:
