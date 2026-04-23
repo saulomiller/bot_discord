@@ -3,10 +3,11 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.endpoints.common import get_player_for_guild, require_voice_client
 from api.endpoints.models import RadioPlayRequest, RadioRemoveRequest, RadioRequest
+from api.endpoints.security import require_api_key
 from utils.helpers import load_radios, save_radios
 
 router = APIRouter()
@@ -24,7 +25,11 @@ async def get_radios():
 
 
 @router.post("/api/radios/add")
-async def add_radio(request: Request, body: RadioRequest):
+async def add_radio(
+    request: Request,
+    body: RadioRequest,
+    _: str = Depends(require_api_key),
+):
     """Adiciona radio."""
     bot = request.app.state.bot
     try:
@@ -71,7 +76,11 @@ async def add_radio(request: Request, body: RadioRequest):
 
 
 @router.post("/api/radios/remove")
-async def remove_radio(request: Request, body: RadioRemoveRequest):
+async def remove_radio(
+    request: Request,
+    body: RadioRemoveRequest,
+    _: str = Depends(require_api_key),
+):
     """Remove radio."""
     bot = request.app.state.bot
     try:
@@ -97,7 +106,11 @@ async def remove_radio(request: Request, body: RadioRemoveRequest):
 
 
 @router.post("/api/radios/play")
-async def play_radio(request: Request, body: RadioPlayRequest):
+async def play_radio(
+    request: Request,
+    body: RadioPlayRequest,
+    _: str = Depends(require_api_key),
+):
     """Inicia reproducao de radio."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, body.guild_id)

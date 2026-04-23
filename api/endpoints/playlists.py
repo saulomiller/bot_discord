@@ -4,9 +4,10 @@ import base64
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.endpoints.models import PlaylistUploadRequest
+from api.endpoints.security import require_api_key
 from api.endpoints.validators import validate_upload_filename
 from config import PLAYLIST_DIR
 
@@ -30,7 +31,10 @@ async def get_playlists():
 
 
 @router.post("/api/upload_playlist")
-async def upload_playlist(payload: PlaylistUploadRequest):
+async def upload_playlist(
+    payload: PlaylistUploadRequest,
+    _: str = Depends(require_api_key),
+):
     """Upload de arquivo de playlist .txt."""
     try:
         safe_filename = validate_upload_filename(
@@ -86,4 +90,3 @@ async def upload_playlist(payload: PlaylistUploadRequest):
     except Exception as exc:
         logging.error(f"Erro no upload de playlist: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-

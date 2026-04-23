@@ -11,9 +11,12 @@ class ControlsMixin:
         self.queue.clear()
         self.current_song = None
         self._last_second = -1  # Reset contador de atualização
+        self.is_paused = False
+        self.paused_at = None
+        self.total_paused = 0
         # Limpar embeds/dashboard em background.
         self.loop.create_task(self.clear_music_dashboard())
-        if self.voice_client and self.voice_client.is_playing():
+        if self.voice_client and (self.voice_client.is_playing() or self.voice_client.is_paused()):
             self.voice_client.stop()
 
     def skip(self):

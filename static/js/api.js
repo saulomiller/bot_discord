@@ -33,14 +33,30 @@ const apiKeyReady = initApiKey();
 /**
  * Monta headers HTTP padrao incluindo autenticacao quando disponivel.
  * @param {Record<string, string>} [extra={}]
+ * @param {{json?: boolean}} [options={}]
  * @returns {Record<string, string>}
  */
-function buildAuthHeaders(extra = {}) {
-    const headers = { 'Content-Type': 'application/json', ...extra };
+function buildAuthHeaders(extra = {}, options = {}) {
+    const headers = { ...extra };
+    if (options.json && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
     if (CONFIG.API_KEY) {
         headers['X-API-Key'] = CONFIG.API_KEY;
     }
     return headers;
+}
+
+/**
+ * Executa chamada em rota protegida, garantindo que a API key esteja carregada.
+ * @param {string} path
+ * @param {RequestInit} [opts={}]
+ * @returns {Promise<any>}
+ */
+async function apiFetchProtected(path, opts = {}) {
+    await apiKeyReady;
+    const headers = buildAuthHeaders(opts.headers || {});
+    return apiFetch(path, { ...opts, headers });
 }
 
 /**
@@ -85,16 +101,16 @@ function withGuildQuery(path, guildId) {
 export const API = {
     getGuilds: () => apiFetch(`${CONFIG.API_BASE}/guilds`),
     getStatus: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/status`, guildId)),
-    play: (search, guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/play`, guildId), {
+    play: (search, guildId = null) => apiFetchProtected(withGuildQuery(`${CONFIG.API_BASE}/play`, guildId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ search })
     }),
-    pause: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/pause`, guildId), { method: 'POST' }),
-    resume: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/resume`, guildId), { method: 'POST' }),
-    skip: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/skip`, guildId), { method: 'POST' }),
-    removePlaylist: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/removeplaylist`, guildId), { method: 'POST' }),
-    setVolume: (level, guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/volume`, guildId), {
+    pause: (guildId = null) => apiFetchProtected(withGuildQuery(`${CONFIG.API_BASE}/pause`, guildId), { method: 'POST' }),
+    resume: (guildId = null) => apiFetchProtected(withGuildQuery(`${CONFIG.API_BASE}/resume`, guildId), { method: 'POST' }),
+    skip: (guildId = null) => apiFetchProtected(withGuildQuery(`${CONFIG.API_BASE}/skip`, guildId), { method: 'POST' }),
+    removePlaylist: (guildId = null) => apiFetchProtected(withGuildQuery(`${CONFIG.API_BASE}/removeplaylist`, guildId), { method: 'POST' }),
+    setVolume: (level, guildId = null) => apiFetchProtected(withGuildQuery(`${CONFIG.API_BASE}/volume`, guildId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level })
@@ -105,7 +121,7 @@ export const API = {
         await apiKeyReady;
         return apiFetch(`${CONFIG.API_BASE}/set_token`, {
             method: 'POST',
-            headers: buildAuthHeaders(),
+            headers: buildAuthHeaders({}, { json: true }),
             body: JSON.stringify({ token })
         });
     },
@@ -113,7 +129,7 @@ export const API = {
         await apiKeyReady;
         return apiFetch(`${CONFIG.API_BASE}/startup`, {
             method: 'POST',
-            headers: buildAuthHeaders(),
+            headers: buildAuthHeaders({}, { json: true }),
             body: JSON.stringify({ token })
         });
     },
@@ -131,6 +147,14 @@ export const API = {
             headers: buildAuthHeaders()
         });
     },
+    setLanguage: async (language) => {
+        await apiKeyReady;
+        return apiFetch(`${CONFIG.API_BASE}/settings/language`, {
+            method: 'POST',
+            headers: buildAuthHeaders({}, { json: true }),
+            body: JSON.stringify({ language })
+        });
+    },
 
     uploadPlaylist: async (file) => {
         const reader = new FileReader();
@@ -138,7 +162,7 @@ export const API = {
             reader.onload = async (e) => {
                 try {
                     const content = e.target.result;
-                    const res = await apiFetch(`${CONFIG.API_BASE}/upload_playlist`, {
+                    const res = await apiFetchProtected(`${CONFIG.API_BASE}/upload_playlist`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -160,17 +184,17 @@ export const API = {
 
     // Radio Management
     getRadios: () => apiFetch(`${CONFIG.API_BASE}/radios`),
-    addRadio: (radioData) => apiFetch(`${CONFIG.API_BASE}/radios/add`, {
+    addRadio: (radioData) => apiFetchProtected(`${CONFIG.API_BASE}/radios/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(radioData)
     }),
-    removeRadio: (radioId) => apiFetch(`${CONFIG.API_BASE}/radios/remove`, {
+    removeRadio: (radioId) => apiFetchProtected(`${CONFIG.API_BASE}/radios/remove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ radio_id: radioId })
     }),
-    playRadio: (radioId, guildId = null) => apiFetch(`${CONFIG.API_BASE}/radios/play`, {
+    playRadio: (radioId, guildId = null) => apiFetchProtected(`${CONFIG.API_BASE}/radios/play`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -182,30 +206,25 @@ export const API = {
     // Soundboard Management
     getSoundboard: () => apiFetch(`${CONFIG.API_BASE}/soundboard`),
     uploadSoundboard: async (formData) => {
-        const res = await fetch(`${CONFIG.API_BASE}/soundboard/upload`, {
+        return apiFetchProtected(`${CONFIG.API_BASE}/soundboard/upload`, {
             method: 'POST',
             body: formData
         });
-        if (!res.ok) {
-            const error = await res.json().catch(() => ({ detail: res.statusText }));
-            throw new Error(error.detail || 'Erro no upload');
-        }
-        return await res.json();
     },
-    playSoundboard: (guildId, sfxId) => apiFetch(`${CONFIG.API_BASE}/soundboard/play`, {
+    playSoundboard: (guildId, sfxId) => apiFetchProtected(`${CONFIG.API_BASE}/soundboard/play`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ guild_id: guildId, sfx_id: sfxId })
     }),
-    deleteSoundboard: (sfxId) => apiFetch(`${CONFIG.API_BASE}/soundboard/${sfxId}`, {
+    deleteSoundboard: (sfxId) => apiFetchProtected(`${CONFIG.API_BASE}/soundboard/${sfxId}`, {
         method: 'DELETE'
     }),
-    toggleFavoriteSoundboard: (sfxId, favorite) => apiFetch(`${CONFIG.API_BASE}/soundboard/${sfxId}/favorite`, {
+    toggleFavoriteSoundboard: (sfxId, favorite) => apiFetchProtected(`${CONFIG.API_BASE}/soundboard/${sfxId}/favorite`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sfx_id: sfxId, favorite })
     }),
-    updateVolumeSoundboard: (sfxId, volume) => apiFetch(`${CONFIG.API_BASE}/soundboard/${sfxId}/volume`, {
+    updateVolumeSoundboard: (sfxId, volume) => apiFetchProtected(`${CONFIG.API_BASE}/soundboard/${sfxId}/volume`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sfx_id: sfxId, volume })

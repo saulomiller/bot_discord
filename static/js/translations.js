@@ -1,5 +1,7 @@
 // Modulo: define os dicionarios de traducao usados na interface web.
 
+import { API } from './api.js';
+
 /**
  * Dicionario de traducoes disponiveis na interface web.
  */
@@ -238,11 +240,7 @@ export class TranslationManager {
      */
     async syncWithBackend(lang) {
         try {
-            await fetch('/api/settings/language', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ language: lang })
-            });
+            await API.setLanguage(lang);
         } catch (error) {
             console.error('Erro ao sincronizar idioma com backend:', error);
         }

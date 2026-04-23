@@ -16,6 +16,13 @@ let radioManager; // Gerenciador de rádios
 let soundboardManager; // Gerenciador de soundboard
 let translationManager; // Gerenciador de traduções
 let selectedGuildId = localStorage.getItem('selected_guild_id') || null;
+let statusRequestInFlight = null;
+let statusRefreshQueued = false;
+let statusRefreshTimer = null;
+let guildContextInFlight = null;
+let guildRefreshQueued = false;
+let guildRefreshTimer = null;
+let queuedGuildPreference = null;
 
 /**
  * Normaliza um guild id para string numerica valida.
@@ -49,6 +56,40 @@ function setCurrentGuildId(guildId) {
     } else {
         localStorage.removeItem('selected_guild_id');
     }
+}
+
+/**
+ * Agenda refresh de status com debounce para reduzir bursts de requests.
+ * @param {number} [delay=0]
+ */
+function scheduleStatusUpdate(delay = 0) {
+    if (statusRefreshTimer) {
+        clearTimeout(statusRefreshTimer);
+    }
+    statusRefreshTimer = setTimeout(() => {
+        statusRefreshTimer = null;
+        updateStatusLoop().catch(() => { });
+    }, delay);
+}
+
+/**
+ * Agenda refresh de contexto de guild com debounce.
+ * @param {number} [delay=0]
+ * @param {string|number|null} [preferredGuildId=null]
+ */
+function scheduleGuildRefresh(delay = 0, preferredGuildId = null) {
+    const normalizedPreferred = normalizeGuildId(preferredGuildId);
+    if (normalizedPreferred) {
+        queuedGuildPreference = normalizedPreferred;
+    }
+
+    if (guildRefreshTimer) {
+        clearTimeout(guildRefreshTimer);
+    }
+    guildRefreshTimer = setTimeout(() => {
+        guildRefreshTimer = null;
+        refreshGuildContext().catch(() => { });
+    }, delay);
 }
 
 /**
@@ -107,19 +148,45 @@ function renderGuildSelector(guilds, preferredGuildId = null) {
  * @returns {Promise<string|null>}
  */
 async function refreshGuildContext(preferredGuildId = null) {
-    try {
-        const data = await API.getGuilds();
-        const guilds = data.guilds || [];
-        const activeGuildId = normalizeGuildId(preferredGuildId) || normalizeGuildId(data.active_guild_id);
-        const resolvedGuildId = renderGuildSelector(guilds, activeGuildId);
-        if (soundboardManager) {
-            soundboardManager.currentGuildId = resolvedGuildId;
+    const normalizedPreferred = normalizeGuildId(preferredGuildId);
+    if (normalizedPreferred) {
+        queuedGuildPreference = normalizedPreferred;
+    }
+
+    if (guildContextInFlight) {
+        guildRefreshQueued = true;
+        return guildContextInFlight;
+    }
+
+    guildContextInFlight = (async () => {
+        try {
+            const data = await API.getGuilds();
+            const guilds = data.guilds || [];
+            const preferred = queuedGuildPreference;
+            queuedGuildPreference = null;
+            const activeGuildId = normalizeGuildId(preferred) || normalizeGuildId(data.active_guild_id);
+            const resolvedGuildId = renderGuildSelector(guilds, activeGuildId);
+            if (soundboardManager) {
+                soundboardManager.currentGuildId = resolvedGuildId;
+            }
+            return resolvedGuildId;
+        } catch (error) {
+            console.warn('Falha ao carregar servidores:', error);
+            renderGuildSelector([], null);
+            return null;
         }
-        return resolvedGuildId;
-    } catch (error) {
-        console.warn('Falha ao carregar servidores:', error);
-        renderGuildSelector([], null);
-        return null;
+    })();
+
+    try {
+        return await guildContextInFlight;
+    } finally {
+        guildContextInFlight = null;
+        if (guildRefreshQueued || queuedGuildPreference) {
+            guildRefreshQueued = false;
+            queueMicrotask(() => {
+                refreshGuildContext().catch(() => { });
+            });
+        }
     }
 }
 
@@ -130,46 +197,65 @@ async function refreshGuildContext(preferredGuildId = null) {
  * @returns {Promise<void>}
  */
 async function updateStatusLoop() {
+    if (statusRequestInFlight) {
+        statusRefreshQueued = true;
+        return statusRequestInFlight;
+    }
+
+    statusRequestInFlight = (async () => {
+        try {
+            let guildId = getCurrentGuildId();
+            if (!guildId) {
+                guildId = await refreshGuildContext();
+            }
+
+            const data = await API.getStatus(guildId);
+            isPaused = !!data.is_paused;
+
+            UI.updateStatus(data, isPaused);
+
+            if (data.language && translationManager && translationManager.currentLang !== data.language) {
+                if (!localStorage.getItem('app_language')) {
+                    translationManager.setLanguage(data.language);
+                }
+            }
+
+            if (liquidBg) {
+                liquidBg.syncPlayState(!isPaused && data.is_ready, data.volume || 0.5);
+            }
+
+            // Sincronizar volume slider com o servidor (apenas se não estiver arrastando)
+            if (!isDraggingVolume && typeof data.volume === 'number') {
+                UI.setVolumeVisual(data.volume);
+            }
+
+            // Sincronizar guild ativa com resposta do backend sem sobrescrever a lista.
+            if (data.guild_id && normalizeGuildId(data.guild_id) !== getCurrentGuildId()) {
+                setCurrentGuildId(data.guild_id);
+                const selector = document.getElementById('guild-select');
+                if (selector) {
+                    selector.value = normalizeGuildId(data.guild_id) || '';
+                }
+            }
+
+            if (soundboardManager) {
+                soundboardManager.currentGuildId = getCurrentGuildId() || data.guild_id || null;
+            }
+        } catch (err) {
+            console.warn('Connection lost', err);
+        }
+    })();
+
     try {
-        let guildId = getCurrentGuildId();
-        if (!guildId) {
-            guildId = await refreshGuildContext();
+        return await statusRequestInFlight;
+    } finally {
+        statusRequestInFlight = null;
+        if (statusRefreshQueued) {
+            statusRefreshQueued = false;
+            queueMicrotask(() => {
+                updateStatusLoop().catch(() => { });
+            });
         }
-
-        const data = await API.getStatus(guildId);
-        isPaused = !!data.is_paused;
-
-        UI.updateStatus(data, isPaused);
-
-        if (data.language && translationManager && translationManager.currentLang !== data.language) {
-            if (!localStorage.getItem('app_language')) {
-                translationManager.setLanguage(data.language);
-            }
-        }
-
-        if (liquidBg) {
-            liquidBg.syncPlayState(!isPaused && data.is_ready, data.volume || 0.5);
-        }
-
-        // Sincronizar volume slider com o servidor (apenas se não estiver arrastando)
-        if (!isDraggingVolume && typeof data.volume === 'number') {
-            UI.setVolumeVisual(data.volume);
-        }
-
-        // Sincronizar guild ativa com resposta do backend sem sobrescrever a lista.
-        if (data.guild_id && normalizeGuildId(data.guild_id) !== getCurrentGuildId()) {
-            setCurrentGuildId(data.guild_id);
-            const selector = document.getElementById('guild-select');
-            if (selector) {
-                selector.value = normalizeGuildId(data.guild_id) || '';
-            }
-        }
-
-        if (soundboardManager) {
-            soundboardManager.currentGuildId = getCurrentGuildId() || data.guild_id || null;
-        }
-    } catch (err) {
-        console.warn('Connection lost', err);
     }
 }
 
@@ -312,7 +398,7 @@ function setupEventListeners() {
                     }
                 } catch (e) { }
 
-                setTimeout(() => updateStatusLoop(), 300);
+                scheduleStatusUpdate(300);
             } catch (e) {
                 UI.showToast(e.message, 'error');
             }
@@ -330,7 +416,7 @@ function setupEventListeners() {
             try {
                 await API.skip(guildId);
                 UI.showToast(translationManager.get('skip_toast'), 'success');
-                setTimeout(() => updateStatusLoop(), 300);
+                scheduleStatusUpdate(300);
             } catch (e) {
                 UI.showToast(e.message, 'error');
             }
@@ -350,7 +436,7 @@ function setupEventListeners() {
             try {
                 const res = await API.removePlaylist(guildId);
                 UI.showToast(res.message || 'Playlist removida da fila', 'success');
-                setTimeout(() => updateStatusLoop(), 300);
+                scheduleStatusUpdate(300);
             } catch (e) {
                 UI.showToast(e.message || 'Erro ao remover playlist', 'error');
             }
@@ -398,7 +484,7 @@ function setupEventListeners() {
             UI.showToast(translationManager.get('added_to_queue_toast'), 'success');
             musicInput.value = '';
             if (clearSearchBtn) clearSearchBtn.style.display = 'none';
-            setTimeout(() => updateStatusLoop(), 500);
+            scheduleStatusUpdate(500);
         } catch (e) {
             UI.showToast(e.message, 'error');
         }
@@ -533,7 +619,7 @@ function setupEventListeners() {
     }
 
     document.addEventListener('languageChanged', () => {
-        refreshGuildContext(getCurrentGuildId()).catch(() => { });
+        scheduleGuildRefresh(120, getCurrentGuildId());
     });
 }
 
@@ -560,9 +646,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     await refreshGuildContext();
     await updateStatusLoop();
-    setInterval(updateStatusLoop, CONFIG.POLLING_INTERVAL);
     setInterval(() => {
-        refreshGuildContext().catch(() => { });
+        updateStatusLoop().catch(() => { });
+    }, CONFIG.POLLING_INTERVAL);
+    setInterval(() => {
+        scheduleGuildRefresh(0, getCurrentGuildId());
     }, 5000);
 
     // Carregar lista de playlists

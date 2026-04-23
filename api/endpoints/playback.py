@@ -2,17 +2,23 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.endpoints.common import get_player_for_guild, require_voice_client
 from api.endpoints.models import MusicRequest, VolumeRequest
+from api.endpoints.security import require_api_key
 from services.playback import enqueue_search, remove_playlist_entries
 
 router = APIRouter()
 
 
 @router.post("/api/play")
-async def api_play(request: Request, body: MusicRequest, guild_id: int | None = None):
+async def api_play(
+    request: Request,
+    body: MusicRequest,
+    guild_id: int | None = None,
+    _: str = Depends(require_api_key),
+):
     """Add a track or playlist to queue and start playback when needed."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, guild_id)
@@ -40,7 +46,11 @@ async def api_play(request: Request, body: MusicRequest, guild_id: int | None = 
 
 
 @router.post("/api/skip")
-async def api_skip(request: Request, guild_id: int | None = None):
+async def api_skip(
+    request: Request,
+    guild_id: int | None = None,
+    _: str = Depends(require_api_key),
+):
     """Executa o endpoint de skip."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, guild_id)
@@ -50,7 +60,11 @@ async def api_skip(request: Request, guild_id: int | None = None):
 
 
 @router.post("/api/removeplaylist")
-async def api_remove_playlist(request: Request, guild_id: int | None = None):
+async def api_remove_playlist(
+    request: Request,
+    guild_id: int | None = None,
+    _: str = Depends(require_api_key),
+):
     """Remove playlist entries for one guild or all known players."""
     bot = request.app.state.bot
     if not getattr(bot, "players", None):
@@ -102,7 +116,11 @@ async def api_remove_playlist(request: Request, guild_id: int | None = None):
 
 
 @router.post("/api/pause")
-async def api_pause(request: Request, guild_id: int | None = None):
+async def api_pause(
+    request: Request,
+    guild_id: int | None = None,
+    _: str = Depends(require_api_key),
+):
     """Executa o endpoint de pause."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, guild_id)
@@ -112,7 +130,11 @@ async def api_pause(request: Request, guild_id: int | None = None):
 
 
 @router.post("/api/resume")
-async def api_resume(request: Request, guild_id: int | None = None):
+async def api_resume(
+    request: Request,
+    guild_id: int | None = None,
+    _: str = Depends(require_api_key),
+):
     """Executa o endpoint de resume."""
     bot = request.app.state.bot
     vc = require_voice_client(bot, guild_id)
@@ -122,7 +144,12 @@ async def api_resume(request: Request, guild_id: int | None = None):
 
 
 @router.post("/api/volume")
-async def api_volume(request: Request, body: VolumeRequest, guild_id: int | None = None):
+async def api_volume(
+    request: Request,
+    body: VolumeRequest,
+    guild_id: int | None = None,
+    _: str = Depends(require_api_key),
+):
     """Executa o endpoint de volume."""
     bot = request.app.state.bot
 

@@ -49,46 +49,95 @@ export class SoundboardManager {
 
         if (this.soundboard.length === 0) {
             const emptyText = this.tm ? this.tm.get('no_sfx') : 'Nenhum efeito sonoro. Faça upload!';
-            grid.innerHTML = `<p style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">${emptyText}</p>`;
+            const empty = document.createElement('p');
+            empty.className = 'empty-state';
+            empty.textContent = emptyText;
+            grid.appendChild(empty);
             return;
         }
 
         this.soundboard.forEach(sfx => {
             const card = document.createElement('div');
+            card.className = `sfx-card${sfx.favorite ? ' favorite' : ''}`;
+            const volume = typeof sfx.volume === 'number' ? sfx.volume : 1.0;
             const favTitle = sfx.favorite ? (this.tm ? this.tm.get('sfx_favorite_remove') : 'Remover dos favoritos') : (this.tm ? this.tm.get('sfx_favorite_add') : 'Adicionar aos favoritos');
             const testTitle = this.tm ? this.tm.get('sfx_test_title') : 'Testar (ouvir no navegador)';
             const playTitle = this.tm ? this.tm.get('sfx_play_discord_title') : 'Tocar no Discord';
             const deleteTitle = this.tm ? this.tm.get('sfx_delete_title') : 'Deletar';
 
-            card.innerHTML = `
-                <i class="fa-solid fa-star sfx-favorite-icon${sfx.favorite ? ' active' : ''}" 
-                   data-id="${sfx.id}" 
-                   title="${favTitle}"></i>
-                <div class="sfx-icon">🔊</div>
-                <div class="sfx-name">${sfx.name}</div>
-                <div class="sfx-volume-control">
-                    <i class="fa-solid fa-volume-low" style="font-size: 12px;"></i>
-                    <input type="range" 
-                           class="sfx-volume-slider" 
-                           data-id="${sfx.id}" 
-                           min="0" 
-                           max="2" 
-                           step="0.1" 
-                           value="${sfx.volume || 1.0}">
-                    <span class="sfx-volume-value">${Math.round((sfx.volume || 1.0) * 100)}%</span>
-                </div>
-                <div class="sfx-actions">
-                    <button class="sfx-test" data-id="${sfx.id}" title="${testTitle}">
-                        <i class="fa-solid fa-headphones"></i>
-                    </button>
-                    <button class="sfx-play" data-id="${sfx.id}" title="${playTitle}">
-                        <i class="fa-solid fa-play"></i>
-                    </button>
-                    <button class="sfx-delete" data-id="${sfx.id}" title="${deleteTitle}">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                </div>
-            `;
+            const favorite = document.createElement('i');
+            favorite.className = `fa-solid fa-star sfx-favorite-icon${sfx.favorite ? ' active' : ''}`;
+            favorite.dataset.id = String(sfx.id ?? '');
+            favorite.title = favTitle;
+
+            const icon = document.createElement('div');
+            icon.className = 'sfx-icon';
+            icon.textContent = '🔊';
+
+            const name = document.createElement('div');
+            name.className = 'sfx-name';
+            name.textContent = String(sfx.name ?? '');
+
+            const volumeControl = document.createElement('div');
+            volumeControl.className = 'sfx-volume-control';
+
+            const lowVolumeIcon = document.createElement('i');
+            lowVolumeIcon.className = 'fa-solid fa-volume-low';
+            lowVolumeIcon.style.fontSize = '12px';
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.className = 'sfx-volume-slider';
+            slider.dataset.id = String(sfx.id ?? '');
+            slider.min = '0';
+            slider.max = '2';
+            slider.step = '0.1';
+            slider.value = String(volume);
+
+            const volumeValue = document.createElement('span');
+            volumeValue.className = 'sfx-volume-value';
+            volumeValue.textContent = `${Math.round(volume * 100)}%`;
+
+            volumeControl.appendChild(lowVolumeIcon);
+            volumeControl.appendChild(slider);
+            volumeControl.appendChild(volumeValue);
+
+            const actions = document.createElement('div');
+            actions.className = 'sfx-actions';
+
+            const testButton = document.createElement('button');
+            testButton.className = 'sfx-test';
+            testButton.dataset.id = String(sfx.id ?? '');
+            testButton.title = testTitle;
+            const testIcon = document.createElement('i');
+            testIcon.className = 'fa-solid fa-headphones';
+            testButton.appendChild(testIcon);
+
+            const playButton = document.createElement('button');
+            playButton.className = 'sfx-play';
+            playButton.dataset.id = String(sfx.id ?? '');
+            playButton.title = playTitle;
+            const playIcon = document.createElement('i');
+            playIcon.className = 'fa-solid fa-play';
+            playButton.appendChild(playIcon);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'sfx-delete';
+            deleteButton.dataset.id = String(sfx.id ?? '');
+            deleteButton.title = deleteTitle;
+            const deleteIcon = document.createElement('i');
+            deleteIcon.className = 'fa-solid fa-trash';
+            deleteButton.appendChild(deleteIcon);
+
+            actions.appendChild(testButton);
+            actions.appendChild(playButton);
+            actions.appendChild(deleteButton);
+
+            card.appendChild(favorite);
+            card.appendChild(icon);
+            card.appendChild(name);
+            card.appendChild(volumeControl);
+            card.appendChild(actions);
 
             grid.appendChild(card);
         });

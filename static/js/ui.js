@@ -53,7 +53,12 @@ export const UI = {
         if (type === 'success') icon = 'fa-check-circle';
         if (type === 'error') icon = 'fa-exclamation-circle';
 
-        toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+        const iconEl = document.createElement('i');
+        iconEl.className = `fa-solid ${icon}`;
+        const textEl = document.createElement('span');
+        textEl.textContent = String(message ?? '');
+        toast.appendChild(iconEl);
+        toast.appendChild(textEl);
         this.elements.toastContainer?.appendChild(toast);
 
         setTimeout(() => {
@@ -204,19 +209,31 @@ export const UI = {
     updatePlaylistList(playlists) {
         const listEl = document.getElementById('playlist-history-list');
         if (!listEl) return;
+        listEl.innerHTML = '';
 
         if (!playlists || playlists.length === 0) {
             const emptyKey = 'empty_playlists';
             const emptyText = this.tm ? this.tm.get(emptyKey) : 'Nenhuma playlist salva.';
-            listEl.innerHTML = `<li class="empty-state">${emptyText}</li>`;
+            const li = document.createElement('li');
+            li.className = 'empty-state';
+            li.textContent = emptyText;
+            listEl.appendChild(li);
             return;
         }
 
-        listEl.innerHTML = playlists.map(name =>
-            `<li class="playlist-item">
-                <i class="fa-solid fa-music"></i>
-                <span>${name}</span>
-            </li>`
-        ).join('');
+        playlists.forEach(name => {
+            const li = document.createElement('li');
+            li.className = 'playlist-item';
+
+            const icon = document.createElement('i');
+            icon.className = 'fa-solid fa-music';
+
+            const text = document.createElement('span');
+            text.textContent = String(name ?? '');
+
+            li.appendChild(icon);
+            li.appendChild(text);
+            listEl.appendChild(li);
+        });
     }
 };

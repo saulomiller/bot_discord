@@ -45,27 +45,54 @@ export class RadioManager {
 
         if (this.radios.length === 0) {
             const emptyText = this.tm ? this.tm.get('no_radios') : 'Nenhuma rádio disponível';
-            list.innerHTML = `<li style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">${emptyText}</li>`;
+            const li = document.createElement('li');
+            li.className = 'empty-state';
+            li.textContent = emptyText;
+            list.appendChild(li);
             return;
         }
 
         this.radios.forEach(radio => {
             const li = document.createElement('li');
             li.className = 'radio-item';
-            li.innerHTML = `
-                <div class="radio-info">
-                    <strong>${radio.name}</strong>
-                    ${radio.location ? `<span class="radio-location">${radio.location}</span>` : ''}
-                </div>
-                <div class="radio-actions">
-                    <button class="btn-small radio-play" data-id="${radio.id}">
-                        <i class="fa-solid fa-play"></i>
-                    </button>
-                    ${radio.custom ? `<button class="btn-small danger radio-delete" data-id="${radio.id}">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>` : ''}
-                </div>
-            `;
+
+            const info = document.createElement('div');
+            info.className = 'radio-info';
+
+            const name = document.createElement('strong');
+            name.textContent = String(radio.name ?? '');
+            info.appendChild(name);
+
+            if (radio.location) {
+                const location = document.createElement('span');
+                location.className = 'radio-location';
+                location.textContent = String(radio.location);
+                info.appendChild(location);
+            }
+
+            const actions = document.createElement('div');
+            actions.className = 'radio-actions';
+
+            const playButton = document.createElement('button');
+            playButton.className = 'btn-small radio-play';
+            playButton.dataset.id = String(radio.id ?? '');
+            const playIcon = document.createElement('i');
+            playIcon.className = 'fa-solid fa-play';
+            playButton.appendChild(playIcon);
+            actions.appendChild(playButton);
+
+            if (radio.custom) {
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'btn-small danger radio-delete';
+                deleteButton.dataset.id = String(radio.id ?? '');
+                const deleteIcon = document.createElement('i');
+                deleteIcon.className = 'fa-solid fa-trash';
+                deleteButton.appendChild(deleteIcon);
+                actions.appendChild(deleteButton);
+            }
+
+            li.appendChild(info);
+            li.appendChild(actions);
             list.appendChild(li);
         });
     }

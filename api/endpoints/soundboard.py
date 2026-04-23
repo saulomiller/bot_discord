@@ -4,7 +4,7 @@ import logging
 import os
 import time
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from api.endpoints.common import get_player_for_guild, get_voice_client
@@ -18,6 +18,7 @@ from api.endpoints.validators import (
     validate_resource_id,
     validate_upload_filename,
 )
+from api.endpoints.security import require_api_key
 from config import ALLOWED_AUDIO_EXTENSIONS, SOUNDBOARD_DIR
 from utils.helpers import (
     get_sfx_metadata,
@@ -39,10 +40,16 @@ async def get_soundboard():
 
         files = [name for name in os.listdir(SOUNDBOARD_DIR) if name.lower().endswith(ALLOWED_AUDIO_EXTENSIONS)]
         soundboard_list = []
+        metadata = load_soundboard_metadata()
+        metadata_by_id = {
+            entry.get("id"): entry
+            for entry in metadata.get("soundboard", [])
+            if isinstance(entry, dict) and entry.get("id")
+        }
 
         for filename in files:
             sfx_id = os.path.splitext(filename)[0]
-            meta = get_sfx_metadata(sfx_id)
+            meta = metadata_by_id.get(sfx_id, {})
             soundboard_list.append(
                 {
                     "id": sfx_id,
@@ -81,7 +88,11 @@ async def get_soundboard_file(filename: str):
 
 
 @router.post("/api/soundboard/play")
-async def play_soundboard(request: Request, body: SoundboardPlayRequest):
+async def play_soundboard(
+    request: Request,
+    body: SoundboardPlayRequest,
+    _: str = Depends(require_api_key),
+):
     """Inicia reproducao de soundboard."""
     bot = request.app.state.bot
     voice_client = get_voice_client(bot, body.guild_id)
@@ -111,7 +122,10 @@ async def play_soundboard(request: Request, body: SoundboardPlayRequest):
 
 
 @router.post("/api/soundboard/upload")
-async def upload_soundboard_file(file: UploadFile = File(...)):
+async def upload_soundboard_file(
+    file: UploadFile = File(...),
+    _: str = Depends(require_api_key),
+):
     """Faz upload de soundboard file."""
     try:
         if not os.path.exists(SOUNDBOARD_DIR):
@@ -148,7 +162,10 @@ async def upload_soundboard_file(file: UploadFile = File(...)):
 
 
 @router.delete("/api/soundboard/{sfx_id}")
-async def delete_soundboard(sfx_id: str):
+async def delete_soundboard(
+    sfx_id: str,
+    _: str = Depends(require_api_key),
+):
     """Remove soundboard."""
     try:
         safe_sfx_id = validate_resource_id(sfx_id, label="sfx_id")
@@ -189,7 +206,11 @@ async def delete_soundboard(sfx_id: str):
 
 
 @router.patch("/api/soundboard/{sfx_id}/favorite")
-async def toggle_favorite_soundboard(sfx_id: str, body: SoundboardFavoriteRequest):
+async def toggle_favorite_soundboard(
+    sfx_id: str,
+    body: SoundboardFavoriteRequest,
+    _: str = Depends(require_api_key),
+):
     """Alterna favorite soundboard."""
     try:
         safe_sfx_id = validate_resource_id(sfx_id, label="sfx_id")
@@ -203,7 +224,11 @@ async def toggle_favorite_soundboard(sfx_id: str, body: SoundboardFavoriteReques
 
 
 @router.patch("/api/soundboard/{sfx_id}/volume")
-async def volume_soundboard(sfx_id: str, body: SoundboardVolumeRequest):
+async def volume_soundboard(
+    sfx_id: str,
+    body: SoundboardVolumeRequest,
+    _: str = Depends(require_api_key),
+):
     """Executa a rotina de volume soundboard."""
     try:
         safe_sfx_id = validate_resource_id(sfx_id, label="sfx_id")
@@ -214,4 +239,3 @@ async def volume_soundboard(sfx_id: str, body: SoundboardVolumeRequest):
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Erro ao atualizar volume.") from exc
-

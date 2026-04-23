@@ -9,8 +9,11 @@
     --accent-color: #0a84ff;
     /* Azul iOS */
     --accent-hover: #0077ed;
+    --primary-color: #30d158;
+    --primary-rgb: 48, 209, 88;
     --text-primary: #ffffff;
     --text-secondary: #8e8e93;
+    --text-muted: #8e8e93;
     --success: #30d158;
     --danger: #ff453a;
     --radius: 24px;
