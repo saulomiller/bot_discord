@@ -38,7 +38,11 @@ async def get_soundboard():
         if not os.path.exists(SOUNDBOARD_DIR):
             os.makedirs(SOUNDBOARD_DIR)
 
-        files = [name for name in os.listdir(SOUNDBOARD_DIR) if name.lower().endswith(ALLOWED_AUDIO_EXTENSIONS)]
+        files = [
+            name
+            for name in os.listdir(SOUNDBOARD_DIR)
+            if name.lower().endswith(ALLOWED_AUDIO_EXTENSIONS)
+        ]
         soundboard_list = []
         metadata = load_soundboard_metadata()
         metadata_by_id = {
@@ -60,11 +64,15 @@ async def get_soundboard():
                 }
             )
 
-        soundboard_list.sort(key=lambda item: (not item["favorite"], item["name"]))
+        soundboard_list.sort(
+            key=lambda item: (not item["favorite"], item["name"])
+        )
         return {"soundboard": soundboard_list}
     except Exception as exc:
         logging.error(f"Erro ao listar soundboard: {exc}")
-        raise HTTPException(status_code=500, detail="Erro ao listar soundboard.") from exc
+        raise HTTPException(
+            status_code=500, detail="Erro ao listar soundboard."
+        ) from exc
 
 
 @router.get("/api/soundboard/file/{filename}")
@@ -78,13 +86,17 @@ async def get_soundboard_file(filename: str):
 
         file_path = os.path.join(SOUNDBOARD_DIR, safe_filename)
         if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+            raise HTTPException(
+                status_code=404, detail="Arquivo não encontrado."
+            )
         return FileResponse(file_path, filename=safe_filename)
     except HTTPException:
         raise
     except Exception as exc:
         logging.error(f"Erro ao servir arquivo do soundboard: {exc}")
-        raise HTTPException(status_code=500, detail="Erro ao carregar arquivo de áudio.") from exc
+        raise HTTPException(
+            status_code=500, detail="Erro ao carregar arquivo de áudio."
+        ) from exc
 
 
 @router.post("/api/soundboard/play")
@@ -97,7 +109,10 @@ async def play_soundboard(
     bot = request.app.state.bot
     voice_client = get_voice_client(bot, body.guild_id)
     if not voice_client:
-        raise HTTPException(status_code=400, detail="Bot não está conectado ao canal de voz neste servidor.")
+        raise HTTPException(
+            status_code=400,
+            detail="Bot não está conectado ao canal de voz neste servidor.",
+        )
 
     player = get_player_for_guild(bot, body.guild_id)
 
@@ -109,7 +124,9 @@ async def play_soundboard(
             sfx_path = candidate
             break
     if not sfx_path:
-        raise HTTPException(status_code=404, detail="Efeito sonoro não encontrado.")
+        raise HTTPException(
+            status_code=404, detail="Efeito sonoro não encontrado."
+        )
 
     try:
         meta = get_sfx_metadata(safe_sfx_id)
@@ -118,7 +135,9 @@ async def play_soundboard(
         return {"status": "success", "message": f"Tocando {safe_sfx_id}"}
     except Exception as exc:
         logging.error(f"Erro ao tocar SFX: {exc}")
-        raise HTTPException(status_code=500, detail=f"Erro ao tocar efeito: {str(exc)}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Erro ao tocar efeito: {str(exc)}"
+        ) from exc
 
 
 @router.post("/api/soundboard/upload")
@@ -132,7 +151,9 @@ async def upload_soundboard_file(
             os.makedirs(SOUNDBOARD_DIR)
 
         if not file.filename:
-            raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
+            raise HTTPException(
+                status_code=400, detail="Nome de arquivo inválido."
+            )
         safe_filename = validate_upload_filename(
             file.filename,
             allowed_extensions=ALLOWED_AUDIO_EXTENSIONS,
@@ -140,11 +161,15 @@ async def upload_soundboard_file(
 
         file_bytes = await file.read()
         if not file_bytes:
-            raise HTTPException(status_code=400, detail="Arquivo de áudio vazio.")
+            raise HTTPException(
+                status_code=400, detail="Arquivo de áudio vazio."
+            )
         if len(file_bytes) > MAX_SFX_UPLOAD_BYTES:
             raise HTTPException(
                 status_code=413,
-                detail=f"Arquivo excede o limite de {MAX_SFX_UPLOAD_BYTES} bytes.",
+                detail=(
+                    f"Arquivo excede o limite de {MAX_SFX_UPLOAD_BYTES} bytes."
+                ),
             )
 
         file_path = os.path.join(SOUNDBOARD_DIR, safe_filename)
@@ -158,7 +183,9 @@ async def upload_soundboard_file(
         raise
     except Exception as exc:
         logging.error(f"Erro no upload SFX: {exc}")
-        raise HTTPException(status_code=500, detail=f"Erro no upload: {str(exc)}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Erro no upload: {str(exc)}"
+        ) from exc
 
 
 @router.delete("/api/soundboard/{sfx_id}")
@@ -188,7 +215,9 @@ async def delete_soundboard(
                 break
 
         if not deleted:
-            raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+            raise HTTPException(
+                status_code=404, detail="Arquivo não encontrado."
+            )
 
         metadata = load_soundboard_metadata()
         metadata["soundboard"] = [
@@ -202,7 +231,9 @@ async def delete_soundboard(
         raise
     except Exception as exc:
         logging.error(f"Erro ao deletar SFX: {exc}")
-        raise HTTPException(status_code=500, detail="Erro ao deletar arquivo.") from exc
+        raise HTTPException(
+            status_code=500, detail="Erro ao deletar arquivo."
+        ) from exc
 
 
 @router.patch("/api/soundboard/{sfx_id}/favorite")
@@ -220,7 +251,9 @@ async def toggle_favorite_soundboard(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Erro ao atualizar favorito.") from exc
+        raise HTTPException(
+            status_code=500, detail="Erro ao atualizar favorito."
+        ) from exc
 
 
 @router.patch("/api/soundboard/{sfx_id}/volume")
@@ -238,4 +271,6 @@ async def volume_soundboard(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Erro ao atualizar volume.") from exc
+        raise HTTPException(
+            status_code=500, detail="Erro ao atualizar volume."
+        ) from exc

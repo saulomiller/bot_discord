@@ -9,42 +9,59 @@ import psutil
 import time
 import asyncio
 import yt_dlp
-from config import RADIOS_FILE, DATA_DIR, SOUNDBOARD_METADATA_FILE, SOUNDBOARD_DIR, save_token_to_json
+from config import (
+    RADIOS_FILE,
+    DATA_DIR,
+    SOUNDBOARD_METADATA_FILE,
+    SOUNDBOARD_DIR,
+    save_token_to_json,
+)
 
 from collections import OrderedDict
 
+
 class LRUCache(OrderedDict):
     """Dicionário LRU Limitado para mitigar memory leaks no Docker."""
+
     def __init__(self, maxsize=200, *args, **kwds):
+        """Inicializa o cache com um tamanho máximo de itens."""
         self.maxsize = maxsize
         super().__init__(*args, **kwds)
 
     def __getitem__(self, key):
+        """Retorna o item e renova sua posição de uso recente."""
         value = super().__getitem__(key)
         self.move_to_end(key)
         return value
 
     def __setitem__(self, key, value):
+        """Armazena o item e remove o menos recente se exceder o limite."""
         super().__setitem__(key, value)
         if len(self) > self.maxsize:
             self.popitem(last=False)
+
 
 # --- Caches ---
 music_info_cache = LRUCache(maxsize=300)
 playlist_cache = LRUCache(maxsize=100)
 
+
 # --- Exceções ---
 class VoiceConnectionError(Exception):
     """Exceção personalizada para erros de conexão de voz."""
+
     pass
 
+
 # --- Funções de Voz ---
-async def ensure_voice(ctx: commands.Context | discord.Interaction) -> discord.VoiceClient | None:
+async def ensure_voice(
+    ctx: commands.Context | discord.Interaction,
+) -> discord.VoiceClient | None:
     """Garante que o bot esteja no mesmo canal de voz que o autor."""
     # Adaptar para funcionar tanto com commands.Context quanto com Interaction
     author = ctx.user if isinstance(ctx, discord.Interaction) else ctx.author
     guild = ctx.guild
-        
+
     if not author.voice:
         raise VoiceConnectionError("Você precisa estar em um canal de voz!")
 
@@ -53,10 +70,12 @@ async def ensure_voice(ctx: commands.Context | discord.Interaction) -> discord.V
     # Permissões
     perms = channel.permissions_for(guild.me)
     if not perms.connect or not perms.speak:
-        raise VoiceConnectionError("Não tenho permissão para conectar ou falar neste canal.")
+        raise VoiceConnectionError(
+            "Não tenho permissão para conectar ou falar neste canal."
+        )
 
     vc = guild.voice_client
-    
+
     # Se existe client mas não está conectado, limpar estado
     if vc and not vc.is_connected():
         try:
@@ -69,8 +88,9 @@ async def ensure_voice(ctx: commands.Context | discord.Interaction) -> discord.V
         vc = await channel.connect()
     elif vc.channel != channel:
         await vc.move_to(channel)
-        
+
     return vc
+
 
 # --- Funções de Sistema ---
 # Variáveis globais para monitoramento de recursos
@@ -79,40 +99,42 @@ resource_check_interval = 60
 cpu_usage = 0
 memory_usage = 0
 
+
 async def check_system_resources():
     """Executa a rotina de check y tem re ource."""
     global last_resource_check, cpu_usage, memory_usage
-    
+
     # Verificar se já passou tempo suficiente desde a última verificação
     current_time = time.time()
     if current_time - last_resource_check < resource_check_interval:
         return cpu_usage, memory_usage
-    
+
     last_resource_check = current_time
-    
+
     try:
         # Obter uso de CPU e memória
         cpu_usage = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
         memory_usage = memory.percent
-        
+
         # Registrar no log se estiver acima de limites
         if cpu_usage > 80:
             logging.warning(f"Uso de CPU alto: {cpu_usage}%")
-        
+
         if memory_usage > 80:
             logging.warning(f"Uso de memória alto: {memory_usage}%")
-            
+
         # Limpar cache se memória estiver muito alta
         if memory_usage > 90:
             logging.warning("Limpando caches devido ao alto uso de memória")
             music_info_cache.clear()
             playlist_cache.clear()
-            
+
         return cpu_usage, memory_usage
     except Exception as e:
         logging.error(f"Erro ao verificar recursos do sistema: {e}")
         return None, None
+
 
 # --- Funções de Rádio ---
 def normalize_radios_data(radios_data):
@@ -135,14 +157,18 @@ def normalize_radios_data(radios_data):
             return
 
         seen_ids.add(radio_id)
-        normalized.append({
-            "id": radio_id,
-            "name": raw_radio.get("name", radio_id),
-            "url": raw_radio.get("url", ""),
-            "location": raw_radio.get("location", "Desconhecido"),
-            "description": raw_radio.get("description", "Rádio personalizada"),
-            "custom": bool(raw_radio.get("custom", default_custom)),
-        })
+        normalized.append(
+            {
+                "id": radio_id,
+                "name": raw_radio.get("name", radio_id),
+                "url": raw_radio.get("url", ""),
+                "location": raw_radio.get("location", "Desconhecido"),
+                "description": raw_radio.get(
+                    "description", "Rádio personalizada"
+                ),
+                "custom": bool(raw_radio.get("custom", default_custom)),
+            }
+        )
 
     if isinstance(radios_data, dict):
         radios_list = radios_data.get("radios")
@@ -160,7 +186,7 @@ def normalize_radios_data(radios_data):
 
 
 def load_radios():
-    """Carregar rádios do arquivo JSON"""
+    """Carrega rádios do arquivo JSON."""
     # Tenta carregar do diretório de dados
     if os.path.exists(RADIOS_FILE):
         try:
@@ -168,11 +194,14 @@ def load_radios():
                 return normalize_radios_data(json.load(f))
         except Exception as e:
             logging.error(f"Erro ao carregar rádios de {RADIOS_FILE}: {e}")
-            
-    # Fallback: Tenta carregar da raiz se não existir em data/ (para compatibilidade ou primeira execução)
+
+    # Fallback: tenta carregar da raiz se ainda não existir em data/.
     if os.path.exists("radios.json"):
         try:
-            logging.info("Carregando radios.json da raiz e copiando para data/radios.json")
+            logging.info(
+                "Carregando radios.json da raiz e copiando para "
+                "data/radios.json"
+            )
             with open("radios.json", "r", encoding="utf-8") as f:
                 data = normalize_radios_data(json.load(f))
             # Salvar no novo local para o futuro
@@ -182,15 +211,18 @@ def load_radios():
                 with open(RADIOS_FILE, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=4)
             except Exception as e:
-                logging.warning(f"Não foi possível migrar radios.json para data/: {e}")
+                logging.warning(
+                    f"Não foi possível migrar radios.json para data/: {e}"
+                )
             return data
         except Exception as e:
             logging.error(f"Erro ao carregar rádios da raiz: {e}")
-            
+
     return {"radios": []}
 
+
 def save_radios(radios_data):
-    """Salvar rádios no arquivo JSON"""
+    """Salva rádios no arquivo JSON."""
     try:
         normalized = normalize_radios_data(radios_data)
         if not os.path.exists(DATA_DIR):
@@ -202,9 +234,10 @@ def save_radios(radios_data):
         logging.error(f"Erro ao salvar rádios: {e}")
         return False
 
+
 # --- Funções de Soundboard ---
 def load_soundboard_metadata():
-    """Carregar metadata do soundboard (favoritos, volume, etc)"""
+    """Carrega metadados do soundboard, como favoritos e volume."""
     if os.path.exists(SOUNDBOARD_METADATA_FILE):
         try:
             with open(SOUNDBOARD_METADATA_FILE, "r", encoding="utf-8") as f:
@@ -213,8 +246,9 @@ def load_soundboard_metadata():
             logging.error(f"Erro ao carregar metadata do soundboard: {e}")
     return {"soundboard": []}
 
+
 def save_soundboard_metadata(metadata):
-    """Salvar metadata do soundboard"""
+    """Salva os metadados do soundboard."""
     try:
         if not os.path.exists(SOUNDBOARD_DIR):
             os.makedirs(SOUNDBOARD_DIR)
@@ -223,26 +257,28 @@ def save_soundboard_metadata(metadata):
     except Exception as e:
         logging.error(f"Erro ao salvar metadata do soundboard: {e}")
 
+
 def get_sfx_metadata(sfx_id):
-    """Obter metadata de um efeito sonoro específico"""
+    """Obtém os metadados de um efeito sonoro específico."""
     metadata = load_soundboard_metadata()
     for sfx in metadata.get("soundboard", []):
         if sfx.get("id") == sfx_id:
             return sfx
     return {"id": sfx_id, "favorite": False, "volume": 1.0}
 
+
 def update_sfx_metadata(sfx_id, updates):
-    """Atualizar metadata de um efeito sonoro"""
+    """Atualiza os metadados de um efeito sonoro."""
     metadata = load_soundboard_metadata()
     soundboard = metadata.get("soundboard", [])
-    
+
     # Procurar SFX existente
     for sfx in soundboard:
         if sfx.get("id") == sfx_id:
             sfx.update(updates)
             save_soundboard_metadata(metadata)
             return sfx
-    
+
     # Se não existir, criar novo
     new_sfx = {"id": sfx_id, "favorite": False, "volume": 1.0}
     new_sfx.update(updates)
@@ -251,108 +287,126 @@ def update_sfx_metadata(sfx_id, updates):
     save_soundboard_metadata(metadata)
     return new_sfx
 
+
 # --- Extração de Info (YouTube/SoundCloud) ---
 _SHARED_YDL_OPTS = {
-    'format': 'bestaudio/best',
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'opus',
-        'preferredquality': '320',
-    }],
-    'quiet': True,
-    'noplaylist': True,
-    'socket_timeout': 10,
-    'retries': 3,
-    'skip_download': True,
-    'extract_flat': False,
-    'source_address': '0.0.0.0',
+    "format": "bestaudio/best",
+    "postprocessors": [
+        {
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "opus",
+            "preferredquality": "320",
+        }
+    ],
+    "quiet": True,
+    "noplaylist": True,
+    "socket_timeout": 10,
+    "retries": 3,
+    "skip_download": True,
+    "extract_flat": False,
+    "source_address": "0.0.0.0",
 }
 
 _shared_ydl = None
 
+
 def get_shared_ydl():
-    """Retorna uma instância Singleton de YoutubeDL reaproveitável, reduzindo CPU e tempo de inicialização."""
+    """Retorna uma instância reaproveitável de ``YoutubeDL``."""
     global _shared_ydl
     if _shared_ydl is None:
         _shared_ydl = yt_dlp.YoutubeDL(_SHARED_YDL_OPTS)
     return _shared_ydl
 
+
 async def extract_info(search: str) -> tuple[str, str, str, str, str]:
-    """Extrai informações da música, incluindo título, URL, thumbnail, duração e canal"""
+    """Extrai título, URL, thumbnail, duração e canal de uma música."""
     # Verificar se a busca já está no cache
     if search in music_info_cache:
         return music_info_cache[search]
-        
+
     loop = asyncio.get_event_loop()
 
     def run():
         ydl = get_shared_ydl()
         try:
             logging.info(f"Buscando informações para: {search}")
-            
+
             # Verificar se é uma URL direta ou uma busca
-            if search.startswith(('http://', 'https://')):
+            if search.startswith(("http://", "https://")):
                 info = ydl.extract_info(search, download=False)
                 entries = [info]  # URL direta, usar como entrada única
             else:
                 info = ydl.extract_info(f"ytsearch:{search}", download=False)
-                entries = info.get('entries', [])
-            
+                entries = info.get("entries", [])
+
             if not entries:
-                raise ValueError(f"Nenhum resultado encontrado para '{search}'.")
-                
+                raise ValueError(
+                    f"Nenhum resultado encontrado para '{search}'."
+                )
+
             entry = entries[0]
-            
+
             # Extrair informações extras
-            title = entry.get('title', 'Título desconhecido')
-            url = entry.get('url', entry.get('webpage_url', ''))
-            
+            title = entry.get("title", "Título desconhecido")
+            url = entry.get("url", entry.get("webpage_url", ""))
+
             if not url:
                 raise ValueError(f"URL não encontrada para '{search}'.")
-                
-            thumbnail = entry.get('thumbnail', '')
-            
+
+            thumbnail = entry.get("thumbnail", "")
+
             # Extrair duração formatada em minutos:segundos
-            duration = entry.get('duration', 0)
+            duration = entry.get("duration", 0)
             if duration:
                 minutes, seconds = divmod(duration, 60)
                 hours, minutes = divmod(minutes, 60)
                 if hours > 0:
-                    duration_formatted = f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}"
+                    duration_formatted = (
+                        f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}"
+                    )
                 else:
                     duration_formatted = f"{int(minutes)}:{int(seconds):02d}"
             else:
                 duration_formatted = "Desconhecida"
-            
+
             # Nome do canal
-            channel = entry.get('uploader', entry.get('channel', 'Desconhecido'))
-            
+            channel = entry.get(
+                "uploader", entry.get("channel", "Desconhecido")
+            )
+
             # Armazenar no cache
             result = (title, url, thumbnail, duration_formatted, channel)
             # IMPORTANTE: Acessar a variável global do módulo
             music_info_cache[search] = result
-            
+
             logging.info(f"Informações extraídas com sucesso para: {title}")
             return result
         except Exception as e:
-            logging.error(f"Erro ao extrair informação da música '{search}': {e}")
+            logging.error(
+                f"Erro ao extrair informação da música '{search}': {e}"
+            )
             raise ValueError(f"Erro ao buscar informações: {str(e)}")
 
     try:
         # Executar com timeout mais curto para evitar bloqueio
-        return await asyncio.wait_for(loop.run_in_executor(None, run), timeout=15)
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, run), timeout=15
+        )
     except asyncio.TimeoutError:
         logging.error(f"Timeout ao buscar informações da música: {search}")
-        raise ValueError(f"A busca por '{search}' demorou muito tempo. Tente novamente.")
+        raise ValueError(
+            f"A busca por '{search}' demorou muito tempo. Tente novamente."
+        )
     except Exception as e:
         logging.error(f"Erro não tratado ao buscar música '{search}': {e}")
         raise ValueError(f"Não foi possível buscar '{search}': {str(e)}")
 
+
 def prompt_token_terminal():
     """Solicita token via input no terminal."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("🎵 DISCORD MUSIC BOT - CONFIGURAÇÃO DE TOKEN")
-    print("="*60)
+    print("=" * 60)
     print("\nNenhum token válido encontrado no sistema.")
     print("\nOpções:")
     print("1. Inserir token agora (via terminal)")
@@ -363,21 +417,23 @@ def prompt_token_terminal():
     print("- Clique em 'New Application'")
     print("- Vá para 'Bot' e clique em 'Add Bot'")
     print("- Clique em 'Copy Token'")
-    print("="*60)
-    
+    print("=" * 60)
+
     try:
         choice = input("\nEscolha uma opção (1/2/3): ").strip()
     except (EOFError, OSError):
-        logging.warning("\n⚠️ Ambiente não interativo detectado (Docker/Systemd).")
+        logging.warning(
+            "\n⚠️ Ambiente não interativo detectado (Docker/Systemd)."
+        )
         logging.info("⏳ Pulando configuração de token via terminal.")
         return None
-    
+
     if choice == "1":
         try:
             token = input("\nCole o token do Discord: ").strip()
         except (EOFError, OSError):
             return None
-            
+
         if len(token) > 50:
             save_token_to_json(token)
             logging.info("✅ Token salvo com sucesso!")
@@ -386,7 +442,9 @@ def prompt_token_terminal():
             logging.error("❌ Token inválido (muito curto)")
             return None
     elif choice == "2":
-        logging.info("\n✅ Acesse: http://localhost:8000 para configurar o token")
+        logging.info(
+            "\n✅ Acesse: http://localhost:8000 para configurar o token"
+        )
         return None
     else:
         logging.info("\n⏳ Pulando configuração de token. Apenas API rodando.")

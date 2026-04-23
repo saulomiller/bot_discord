@@ -31,7 +31,10 @@ async def api_play(
             song_title = song.get("title", "Playlist")
             return {
                 "status": "success",
-                "message": f"Playlist adicionada! Tocando: '{song_title}'. Processando resto em segundo plano...",
+                "message": (
+                    f"Playlist adicionada! Tocando: '{song_title}'. "
+                    "Processando resto em segundo plano..."
+                ),
                 "is_playlist": True,
             }
 
@@ -83,7 +86,12 @@ async def api_remove_playlist(
         if removed > 0:
             message_parts.append(f"Removidas {removed} músicas da fila.")
         if not message_parts:
-            return {"status": "success", "message": "Nenhuma música de playlist encontrada para remover."}
+            return {
+                "status": "success",
+                "message": (
+                    "Nenhuma música de playlist encontrada para remover."
+                ),
+            }
         return {"status": "success", "message": " ".join(message_parts)}
 
     total_removed = 0
@@ -110,7 +118,10 @@ async def api_remove_playlist(
         message_parts.append(f"Removidas {total_removed} músicas da fila.")
 
     if not message_parts:
-        return {"status": "success", "message": "Nenhuma música de playlist encontrada para remover."}
+        return {
+            "status": "success",
+            "message": "Nenhuma música de playlist encontrada para remover.",
+        }
 
     return {"status": "success", "message": " ".join(message_parts)}
 

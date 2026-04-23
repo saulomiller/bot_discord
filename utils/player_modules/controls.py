@@ -2,6 +2,7 @@
 
 import time
 
+
 class ControlsMixin:
     """Controles de sess?o do MusicPlayer."""
 

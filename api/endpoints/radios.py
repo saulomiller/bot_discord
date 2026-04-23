@@ -6,7 +6,11 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.endpoints.common import get_player_for_guild, require_voice_client
-from api.endpoints.models import RadioPlayRequest, RadioRemoveRequest, RadioRequest
+from api.endpoints.models import (
+    RadioPlayRequest,
+    RadioRemoveRequest,
+    RadioRequest,
+)
 from api.endpoints.security import require_api_key
 from utils.helpers import load_radios, save_radios
 
@@ -21,7 +25,9 @@ async def get_radios():
         return {"status": "success", "radios": radios_data.get("radios", [])}
     except Exception as exc:
         logging.error(f"Erro ao listar rádios: {exc}")
-        raise HTTPException(status_code=500, detail="Erro ao listar rádios.") from exc
+        raise HTTPException(
+            status_code=500, detail="Erro ao listar rádios."
+        ) from exc
 
 
 @router.post("/api/radios/add")
@@ -48,7 +54,10 @@ async def add_radio(
             None,
         )
         if duplicate:
-            raise HTTPException(status_code=409, detail="Já existe uma rádio com o mesmo nome ou URL.")
+            raise HTTPException(
+                status_code=409,
+                detail="Já existe uma rádio com o mesmo nome ou URL.",
+            )
 
         new_radio = {
             "id": str(uuid.uuid4()),
@@ -67,12 +76,18 @@ async def add_radio(
         if music_cog:
             music_cog.RADIOS = radio_manager
 
-        return {"status": "success", "message": "Rádio adicionada com sucesso.", "radio": new_radio}
+        return {
+            "status": "success",
+            "message": "Rádio adicionada com sucesso.",
+            "radio": new_radio,
+        }
     except HTTPException:
         raise
     except Exception as exc:
         logging.error(f"Erro ao adicionar rádio: {exc}")
-        raise HTTPException(status_code=500, detail="Erro ao adicionar rádio.") from exc
+        raise HTTPException(
+            status_code=500, detail="Erro ao adicionar rádio."
+        ) from exc
 
 
 @router.post("/api/radios/remove")
@@ -86,9 +101,13 @@ async def remove_radio(
     try:
         radio_manager = load_radios()
         radios_list = radio_manager.get("radios", [])
-        updated_radios = [radio for radio in radios_list if radio.get("id") != body.radio_id]
+        updated_radios = [
+            radio for radio in radios_list if radio.get("id") != body.radio_id
+        ]
         if len(updated_radios) == len(radios_list):
-            raise HTTPException(status_code=404, detail="Rádio não encontrada.")
+            raise HTTPException(
+                status_code=404, detail="Rádio não encontrada."
+            )
         radio_manager["radios"] = updated_radios
         if not save_radios(radio_manager):
             raise RuntimeError("Falha ao salvar rádios.")
@@ -102,7 +121,9 @@ async def remove_radio(
         raise
     except Exception as exc:
         logging.error(f"Erro ao remover rádio: {exc}")
-        raise HTTPException(status_code=500, detail="Erro ao remover rádio.") from exc
+        raise HTTPException(
+            status_code=500, detail="Erro ao remover rádio."
+        ) from exc
 
 
 @router.post("/api/radios/play")
@@ -119,9 +140,18 @@ async def play_radio(
     try:
         radio_manager = load_radios()
         radios_list = radio_manager.get("radios", [])
-        radio = next((entry for entry in radios_list if entry.get("id") == body.radio_id), None)
+        radio = next(
+            (
+                entry
+                for entry in radios_list
+                if entry.get("id") == body.radio_id
+            ),
+            None,
+        )
         if not radio:
-            raise HTTPException(status_code=404, detail="Rádio não encontrada.")
+            raise HTTPException(
+                status_code=404, detail="Rádio não encontrada."
+            )
 
         song = await player.add_to_queue(radio["url"], bot.user)
         if isinstance(song, dict):
@@ -131,7 +161,10 @@ async def play_radio(
         if not vc.is_playing() and not player.is_paused:
             await player.play_next()
 
-        return {"status": "success", "message": f"Tocando rádio: '{radio['name']}'"}
+        return {
+            "status": "success",
+            "message": f"Tocando rádio: '{radio['name']}'",
+        }
     except HTTPException:
         raise
     except Exception as exc:

@@ -24,4 +24,3 @@ async def get_api_key(request: Request):
     if client_host not in ("127.0.0.1", "::1", "localhost"):
         raise HTTPException(status_code=403, detail="Acesso negado.")
     return {"api_key": API_KEY}
-

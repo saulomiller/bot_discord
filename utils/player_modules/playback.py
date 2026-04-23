@@ -48,11 +48,7 @@ class PlaybackMixin:
 
     @staticmethod
     def _ffmpeg_escape(value: str) -> str:
-        return (
-            str(value)
-            .replace("\\", "\\\\")
-            .replace('"', r"\"")
-        )
+        return str(value).replace("\\", "\\\\").replace('"', r"\"")
 
     def _build_ffmpeg_request_options(self, headers: dict | None) -> str:
         """Monta opções HTTP completas para ffmpeg (modo robusto)."""
@@ -67,7 +63,7 @@ class PlaybackMixin:
             if v:
                 header_lines.append(f"{k}: {v}")
         headers_str = "\\r\\n".join(header_lines) + "\\r\\n"
-        
+
         if header_lines:  # evita passar -headers vazio
             options.append(f'-headers "{self._ffmpeg_escape(headers_str)}"')
 
@@ -117,7 +113,10 @@ class PlaybackMixin:
         for idx, clients in enumerate(YDL_FALLBACK_CLIENTS):
             try:
                 logging.info(
-                    f"[resolve] Fallback {idx + 1}/{len(YDL_FALLBACK_CLIENTS)} com clientes: {clients}"
+                    "[resolve] Fallback %s/%s com clientes: %s",
+                    idx + 1,
+                    len(YDL_FALLBACK_CLIENTS),
+                    clients,
                 )
                 info = _try_extract_with_clients(
                     base_params, source_url, clients
@@ -152,7 +151,8 @@ class PlaybackMixin:
     async def _play_next_internal(self):
         """Implementação interna de play_next (protegida pelo lock)."""
         logging.info(
-            f"[play_next] Chamado. Voice client existe: {self.voice_client is not None}"
+            "[play_next] Chamado. Voice client existe: %s",
+            self.voice_client is not None,
         )
 
         # 1. Verificar conexão de voz
@@ -163,7 +163,7 @@ class PlaybackMixin:
             self.stop()  # Limpa fila e para tudo
             return
 
-        # Defesa principal contra corrida: se já está reproduzindo/pausado, não iniciar outra faixa.
+        # Evita corrida: não inicia outra faixa se o client já estiver ocupado.
         if self.is_voice_busy:
             logging.info("[play_next] Ignorado: voice client já está ocupado.")
             return
@@ -183,7 +183,9 @@ class PlaybackMixin:
             self.current_song = None
             self._schedule_queue_empty_cleanup()
             logging.info(
-                f"[play_next] Fila vazia, limpando dashboard em {self._queue_empty_grace_seconds}s se continuar vazia"
+                "[play_next] Fila vazia, limpando dashboard em %ss "
+                "se continuar vazia",
+                self._queue_empty_grace_seconds,
             )
             return
 
@@ -192,7 +194,11 @@ class PlaybackMixin:
         logging.info(f"[play_next] Preparando: {self.current_song['title']}")
         try:
             logging.debug(
-                f"[play_next] current_song metadata: title={self.current_song.get('title')}, duration_seconds={self.current_song.get('duration_seconds')}, is_lazy={self.current_song.get('is_lazy')}"
+                "[play_next] current_song metadata: title=%s, "
+                "duration_seconds=%s, is_lazy=%s",
+                self.current_song.get("title"),
+                self.current_song.get("duration_seconds"),
+                self.current_song.get("is_lazy"),
             )
         except Exception:
             pass
@@ -205,7 +211,8 @@ class PlaybackMixin:
         video_id = _extract_video_id(source_url)
         if video_id and video_id in self._failed_ids:
             logging.warning(
-                f"[play_next] Pulando {source_url} — marcado como falho nesta sessão."
+                "[play_next] Pulando %s; marcado como falho nesta sessão.",
+                source_url,
             )
             self.loop.create_task(self.play_next())
             return
@@ -241,9 +248,10 @@ class PlaybackMixin:
             if requires_resolution:
                 try:
                     logging.info(
-                        f"Resolvendo Stream URL (Lazy)... Cache Miss para {source_url}"
+                        "Resolvendo Stream URL (Lazy)... Cache Miss para %s",
+                        source_url,
                     )
-                    # _resolve_stream_url tenta primário + fallbacks automaticamente
+                    # _resolve_stream_url tenta primário e fallbacks.
                     (
                         stream_url,
                         stream_headers,
@@ -266,10 +274,13 @@ class PlaybackMixin:
                         )
                         self.current_song["duration_seconds"] = duration
                         self.current_song["acodec"] = info.get("acodec", "")
-                        self.current_song["format_id"] = info.get("format_id", "")
+                        self.current_song["format_id"] = info.get(
+                            "format_id", ""
+                        )
                     else:
                         logging.debug(
-                            "[play_next] Extractor 'generic' detectado; preservando metadados atuais."
+                            "[play_next] Extractor 'generic' detectado; "
+                            "preservando metadados atuais."
                         )
 
                     source_url = stream_url
@@ -287,17 +298,21 @@ class PlaybackMixin:
                                 "url": source_url,
                                 "headers": source_headers,
                                 "acodec": self.current_song.get("acodec", ""),
-                                "format_id": self.current_song.get("format_id", ""),
+                                "format_id": self.current_song.get(
+                                    "format_id", ""
+                                ),
                             },
                         )
 
                 except Exception as e:
                     logging.error(f"Erro ao resolver stream: {e}")
-                    # Marcar video_id como falho para não tentar de novo nesta sessão
+                    # Marca video_id como falho nesta sessão.
                     if video_id:
                         self._failed_ids.add(video_id)
                         logging.info(
-                            f"[play_next] video_id '{video_id}' adicionado ao cache de falhas."
+                            "[play_next] video_id '%s' adicionado ao cache "
+                            "de falhas.",
+                            video_id,
                         )
                     self.loop.create_task(self.play_next())
                     return
@@ -327,9 +342,13 @@ class PlaybackMixin:
         request_options = self._build_ffmpeg_request_options(source_headers)
         if request_options:
             before_options = f"{before_options} {request_options}"
-            
-        ffmpeg_result = build_ffmpeg_options(self.current_song, self.volume, seek_position=seek_position)
-        output_options = ffmpeg_result["options"] + " -max_muxing_queue_size 1024"
+
+        ffmpeg_result = build_ffmpeg_options(
+            self.current_song, self.volume, seek_position=seek_position
+        )
+        output_options = (
+            ffmpeg_result["options"] + " -max_muxing_queue_size 1024"
+        )
         is_opus = ffmpeg_result["is_opus"]
 
         if seek_position > 0:
@@ -346,11 +365,22 @@ class PlaybackMixin:
                 if err:
                     logging.error(f"Erro no player: {err}")
 
-                # Métrica de drift: diferença entre tempo real e duração esperada
-                if self.started_at and self.song_duration and self.song_duration > 0:
-                    real_elapsed = time.monotonic() - self.started_at - self.total_paused
+                # Métrica de drift: tempo real menos duração esperada.
+                if (
+                    self.started_at
+                    and self.song_duration
+                    and self.song_duration > 0
+                ):
+                    real_elapsed = (
+                        time.monotonic() - self.started_at - self.total_paused
+                    )
                     drift = real_elapsed - self.song_duration
-                    logging.debug(f"[drift] real={real_elapsed:.1f}s | expected={self.song_duration:.1f}s | drift={drift:+.3f}s")
+                    logging.debug(
+                        "[drift] real=%.1fs | expected=%.1fs | drift=%+.3fs",
+                        real_elapsed,
+                        self.song_duration,
+                        drift,
+                    )
 
                 if self.stopped_for_sfx:
                     logging.info(
@@ -362,7 +392,7 @@ class PlaybackMixin:
                     if "seek" in self.current_song:
                         del self.current_song["seek"]
                     self.current_song["is_lazy"] = (
-                        True  # Re-resolver no próximo loop para garantir link fresco!
+                        True  # Re-resolve no próximo loop para link fresco.
                     )
                     self.queue.appendleft(self.current_song)
 
@@ -376,7 +406,8 @@ class PlaybackMixin:
                         exc = fut.exception()
                     except Exception as callback_exc:
                         logging.error(
-                            f"Falha ao inspecionar tarefa agendada: {callback_exc}"
+                            "Falha ao inspecionar tarefa agendada: %s",
+                            callback_exc,
                         )
                         return
                     if exc:
@@ -389,37 +420,58 @@ class PlaybackMixin:
 
         try:
             executable = "ffmpeg"
-            # Escolher codec para FFmpegOpusAudio: 'copy' se Opus nativo, None caso contrário.
-            # Para o discord.py, se passarmos 'libopus', ele estranhamente muda para 'copy' (causando no-filter no copy).
-            # Passar None faz com que ele caia no fallback interno e use 'libopus' corretamente.
+            # Usa 'copy' para Opus nativo e None para acionar encode interno.
+            # Em discord.py, passar 'libopus' aqui pode virar 'copy' indevido.
+            # Com None, o fallback interno usa 'libopus' corretamente.
             opus_codec = "copy" if is_opus else None
             try:
                 # 1. Pipeline Original (Copy se Opus nativo, Encode se não)
                 source = SafeFFmpegOpusAudio(
-                    source_url, codec=opus_codec, executable=executable, **ffmpeg_options
+                    source_url,
+                    codec=opus_codec,
+                    executable=executable,
+                    **ffmpeg_options,
                 )
             except Exception as copy_err:
-                logging.warning(f"Fallback 1 (Falha no {opus_codec}): {copy_err}")
+                logging.warning(
+                    f"Fallback 1 (Falha no {opus_codec}): {copy_err}"
+                )
                 try:
-                    # 2. Forçar Encode Opus (Trata containers bizarros ou streams fragmentados que quebram o copy)
-                    encode_result = build_ffmpeg_options(self.current_song, self.volume, force_fallback='encode_opus', seek_position=seek_position)
+                    # 2. Força Encode Opus para streams problemáticos.
+                    encode_result = build_ffmpeg_options(
+                        self.current_song,
+                        self.volume,
+                        force_fallback="encode_opus",
+                        seek_position=seek_position,
+                    )
                     ffmpeg_options_encode = {
                         **ffmpeg_options,
-                        "options": encode_result["options"]
+                        "options": encode_result["options"],
                     }
-                    
+
                     source = SafeFFmpegOpusAudio(
-                        source_url, codec=None, executable=executable, **ffmpeg_options_encode
+                        source_url,
+                        codec=None,
+                        executable=executable,
+                        **ffmpeg_options_encode,
                     )
                 except Exception as opus_err:
-                    logging.warning(f"Fallback 2 (Falha Crítica no OPUS) -> Indo para PCM: {opus_err}")
+                    logging.warning(
+                        "Fallback 2 (Falha Crítica no OPUS) -> Indo para PCM: "
+                        f"{opus_err}"
+                    )
                     # 3. Fallback Final para PCM
-                    pcm_result = build_ffmpeg_options(self.current_song, self.volume, force_fallback='encode_pcm', seek_position=seek_position)
+                    pcm_result = build_ffmpeg_options(
+                        self.current_song,
+                        self.volume,
+                        force_fallback="encode_pcm",
+                        seek_position=seek_position,
+                    )
                     ffmpeg_options_pcm = {
                         **ffmpeg_options,
-                        "options": pcm_result["options"]
+                        "options": pcm_result["options"],
                     }
-                    
+
                     source = SafeFFmpegPCMAudio(
                         source_url, executable=executable, **ffmpeg_options_pcm
                     )
@@ -433,7 +485,9 @@ class PlaybackMixin:
             # Resetar contadores de tempo
             self.pipeline_delay = 0.2  # ajustar empiricamente
             # Matemática corrigida de temporalidade real x offset
-            self.started_at = time.monotonic() + self.pipeline_delay - seek_position
+            self.started_at = (
+                time.monotonic() + self.pipeline_delay - seek_position
+            )
             self.paused_at = None
             self.total_paused = 0
             self._last_second = -1
@@ -451,7 +505,8 @@ class PlaybackMixin:
                 next_song = self.queue[0]
                 if next_song.get("is_lazy") or "youtube" in next_song["url"]:
                     logging.info(
-                        f"🔮 Pré-resolvendo próxima música: {next_song['title']}"
+                        "🔮 Pré-resolvendo próxima música: %s",
+                        next_song["title"],
                     )
                     asyncio.create_task(self._pre_resolve_next(next_song))
 

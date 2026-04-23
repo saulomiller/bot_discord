@@ -7,19 +7,22 @@ from collections import OrderedDict
 
 import discord
 
+
 class StreamCache:
-    """Cache simples para URLs de stream com TTL, limite de tamanho e limpeza ativa.
-    
-    Usa time.monotonic() para robustez contra mudanças de clock do sistema."""
+    """Cache simples para URLs de stream com TTL e limpeza ativa.
+
+    Usa ``time.monotonic()`` para robustez contra mudanças de clock do sistema.
+    """
+
     def __init__(self, ttl=600, max_size=100):
         """Inicializa a instancia da classe."""
         self.cache = OrderedDict()
-        self.ttl = ttl # 10 minutos
+        self.ttl = ttl  # 10 minutos
         self.max_size = max_size
         self.insert_count = 0
 
     def get(self, key):
-        """Retorna o entry completo do cache (dict com url, headers, acodec, etc).
+        """Retorna o entry completo do cache.
 
         Retornar o dict inteiro em vez de só 'url' garante que metadados
         como acodec e format_id fiquem disponíveis para detecção de Opus
@@ -28,10 +31,10 @@ class StreamCache:
         if key in self.cache:
             data = self.cache[key]
             # Usar monotonic para TTL (robusto ao NTP)
-            if time.monotonic() - data['time'] < self.ttl:
+            if time.monotonic() - data["time"] < self.ttl:
                 # Move para fim (LRU)
                 self.cache.move_to_end(key)
-                return data['value']
+                return data["value"]
             else:
                 del self.cache[key]
         return None
@@ -42,17 +45,18 @@ class StreamCache:
         Args:
             key: chave de lookup (normalmente a URL original).
             value: dict com url, headers, acodec, format_id, etc.
+
         """
         self.insert_count += 1
-        
+
         # Limpeza ativa a cada 50 inserções (Higiene)
         if self.insert_count % 50 == 0:
             self._sweep()
 
         if key in self.cache:
             self.cache.move_to_end(key)
-        self.cache[key] = {'value': value, 'time': time.monotonic()}
-        
+        self.cache[key] = {"value": value, "time": time.monotonic()}
+
         # Limpar excesso (LRU)
         if len(self.cache) > self.max_size:
             self.cache.popitem(last=False)
@@ -61,18 +65,22 @@ class StreamCache:
         """Remove itens expirados do cache (usando monotonic)."""
         now = time.monotonic()
         keys_to_remove = [
-            k for k, v in self.cache.items()
-            if now - v['time'] > self.ttl
+            k for k, v in self.cache.items() if now - v["time"] > self.ttl
         ]
-        
+
         for k in keys_to_remove:
             del self.cache[k]
-        
+
         if keys_to_remove:
-            logging.info(f"🧹 Cache Sweep: {len(keys_to_remove)} itens expirados removidos.")
+            logging.info(
+                "🧹 Cache Sweep: %s itens expirados removidos.",
+                len(keys_to_remove),
+            )
+
 
 class SafeFFmpegPCMAudio(discord.FFmpegPCMAudio):
     """FFmpegPCMAudio com cleanup robusto para evitar processos zumbis."""
+
     def cleanup(self):
         """Executa a rotina de cleanup."""
         proc = self._process
@@ -83,7 +91,9 @@ class SafeFFmpegPCMAudio(discord.FFmpegPCMAudio):
                 try:
                     proc.wait(timeout=1)
                 except subprocess.TimeoutExpired:
-                    logging.warning(f"FFmpeg {proc.pid} not terminating, forcing kill.")
+                    logging.warning(
+                        f"FFmpeg {proc.pid} not terminating, forcing kill."
+                    )
                     proc.kill()
             except Exception as e:
                 logging.error(f"Error killing FFmpeg process: {e}")
@@ -95,12 +105,14 @@ class SafeFFmpegPCMAudio(discord.FFmpegPCMAudio):
                     proc.stderr.close()
             except Exception:
                 pass
-        
+
         # Chama o cleanup original para fechar pipes
         super().cleanup()
 
+
 class SafeFFmpegOpusAudio(discord.FFmpegOpusAudio):
-    """FFmpegOpusAudio com cleanup robusto para evitar processos zumbis e otimização total."""
+    """FFmpegOpusAudio com cleanup robusto para evitar processos zumbis."""
+
     def cleanup(self):
         """Executa a rotina de cleanup."""
         proc = self._process
@@ -111,7 +123,10 @@ class SafeFFmpegOpusAudio(discord.FFmpegOpusAudio):
                 try:
                     proc.wait(timeout=1)
                 except subprocess.TimeoutExpired:
-                    logging.warning(f"FFmpeg {proc.pid} (OPUS) not terminating, forcing kill.")
+                    logging.warning(
+                        "FFmpeg %s (OPUS) not terminating, forcing kill.",
+                        proc.pid,
+                    )
                     proc.kill()
             except Exception as e:
                 logging.error(f"Error killing FFmpeg process: {e}")
@@ -123,9 +138,10 @@ class SafeFFmpegOpusAudio(discord.FFmpegOpusAudio):
                     proc.stderr.close()
             except Exception:
                 pass
-        
+
         # Chama o cleanup original para fechar pipes
         super().cleanup()
+
 
 def _detect_opus(info_dict: dict) -> bool:
     """Detecta se a stream de áudio é Opus usando múltiplas heurísticas.
@@ -167,8 +183,8 @@ def build_ffmpeg_options(
 
     Retorna dict com:
       - 'options': string de output options para FFmpeg
-      - 'is_opus': bool indicando se a fonte é Opus nativo (para usar codec='copy'
-        no FFmpegOpusAudio em vez de passar -c:a manualmente)
+      - 'is_opus': bool indicando se a fonte é Opus nativo
+        para usar codec='copy' no FFmpegOpusAudio
       - 'mode': string descritiva do modo escolhido
 
     IMPORTANTE: NÃO inclui -c:a no 'options' pois FFmpegOpusAudio já gerencia
@@ -178,16 +194,30 @@ def build_ffmpeg_options(
     acodec = (info_dict.get("acodec") or "").lower()
     is_opus = _detect_opus(info_dict)
 
-    if force_fallback == 'encode_opus':
-        logging.info(f"[audio] codec={acodec} | is_opus={is_opus} | mode=encode_opus (fallback) | seek={seek_position}")
+    if force_fallback == "encode_opus":
+        logging.info(
+            "[audio] codec=%s | is_opus=%s | mode=encode_opus "
+            "(fallback) | seek=%s",
+            acodec,
+            is_opus,
+            seek_position,
+        )
         return {
-            "options": f'-vn -vbr on -compression_level 10 -af "volume={volume}"',
+            "options": (
+                f'-vn -vbr on -compression_level 10 -af "volume={volume}"'
+            ),
             "is_opus": False,
             "mode": "encode_opus",
         }
 
-    if force_fallback == 'encode_pcm':
-        logging.info(f"[audio] codec={acodec} | is_opus={is_opus} | mode=encode_pcm (fallback) | seek={seek_position}")
+    if force_fallback == "encode_pcm":
+        logging.info(
+            "[audio] codec=%s | is_opus=%s | mode=encode_pcm "
+            "(fallback) | seek=%s",
+            acodec,
+            is_opus,
+            seek_position,
+        )
         return {
             "options": f'-vn -b:a 192k -af "volume={volume}"',
             "is_opus": False,
@@ -197,7 +227,11 @@ def build_ffmpeg_options(
     if is_opus and abs(volume - 1.0) < 0.01:
         # Modo copy: volume == 1.0, sem necessidade de -af volume.
         # FFmpegOpusAudio produz pacotes Opus diretos → zero re-encode.
-        logging.info(f"[audio] codec={acodec} | is_opus=True | mode=copy | seek={seek_position}")
+        logging.info(
+            "[audio] codec=%s | is_opus=True | mode=copy | seek=%s",
+            acodec,
+            seek_position,
+        )
         return {
             "options": "-vn",
             "is_opus": True,
@@ -205,16 +239,30 @@ def build_ffmpeg_options(
         }
     elif is_opus:
         # Opus nativo mas volume != 1.0 → precisa de -af, então encode.
-        logging.info(f"[audio] codec={acodec} | is_opus=True | mode=encode_opus (volume={volume}) | seek={seek_position}")
+        logging.info(
+            "[audio] codec=%s | is_opus=True | mode=encode_opus "
+            "(volume=%s) | seek=%s",
+            acodec,
+            volume,
+            seek_position,
+        )
         return {
-            "options": f'-vn -vbr on -compression_level 10 -af "volume={volume}"',
+            "options": (
+                f'-vn -vbr on -compression_level 10 -af "volume={volume}"'
+            ),
             "is_opus": False,
             "mode": "encode_opus",
         }
     else:
-        logging.info(f"[audio] codec={acodec} | is_opus=False | mode=encode_opus | seek={seek_position}")
+        logging.info(
+            "[audio] codec=%s | is_opus=False | mode=encode_opus | seek=%s",
+            acodec,
+            seek_position,
+        )
         return {
-            "options": f'-vn -vbr on -compression_level 10 -af "volume={volume}"',
+            "options": (
+                f'-vn -vbr on -compression_level 10 -af "volume={volume}"'
+            ),
             "is_opus": False,
             "mode": "encode_opus",
         }

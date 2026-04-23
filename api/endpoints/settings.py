@@ -60,7 +60,9 @@ def _queue_bot_start(request: Request, bot, token: str, *, restart_first: bool) 
 
 
 @router.post("/api/set_token")
-async def set_token(request: Request, body: dict = Body(...), _: str = Depends(require_api_key)):
+async def set_token(
+    request: Request, body: dict = Body(...), _: str = Depends(require_api_key)
+):
     """Set Discord bot token."""
     bot = request.app.state.bot
     token = body.get("token")
@@ -73,17 +75,24 @@ async def set_token(request: Request, body: dict = Body(...), _: str = Depends(r
         logging.info("Token do Discord foi salvo/atualizado via API.")
 
         if bot.is_ready():
-            logging.info("Bot já está online. Tentando reiniciar com o novo token...")
+            logging.info(
+                "Bot já está online. Tentando reiniciar com o novo token..."
+            )
             await bot.close()
             await asyncio.sleep(1)
 
         return {
             "status": "success",
-            "message": "Token atualizado. Reinicie o bot manualmente se ele não voltar.",
+            "message": (
+                "Token atualizado. Reinicie o bot manualmente se ele não "
+                "voltar."
+            ),
         }
     except Exception as exc:
         logging.error(f"Erro ao salvar token via API: {exc}")
-        raise HTTPException(status_code=500, detail="Falha ao salvar o token.") from exc
+        raise HTTPException(
+            status_code=500, detail="Falha ao salvar o token."
+        ) from exc
 
 
 @router.post("/api/restart")
@@ -103,7 +112,9 @@ async def restart_bot(request: Request, _: str = Depends(require_api_key)):
         _queue_bot_start(request, bot, token, restart_first=True)
         return {"status": "success", "message": "Bot reiniciando..."}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Falha ao reiniciar o bot.") from exc
+        raise HTTPException(
+            status_code=500, detail="Falha ao reiniciar o bot."
+        ) from exc
 
 
 @router.get("/api/settings/language")
@@ -117,7 +128,10 @@ async def set_language(body: LanguageRequest, _: str = Depends(require_api_key))
     """Define language."""
     success = I18n.get_instance().save_language(body.language)
     if success:
-        return {"status": "success", "message": f"Idioma alterado para {body.language}"}
+        return {
+            "status": "success",
+            "message": f"Idioma alterado para {body.language}",
+        }
     raise HTTPException(status_code=500, detail="Erro ao salvar idioma.")
 
 
@@ -134,12 +148,18 @@ async def shutdown(request: Request, _: str = Depends(require_api_key)):
 
 
 @router.post("/api/startup")
-async def startup(request: Request, body: dict = Body(default={}), _: str = Depends(require_api_key)):
+async def startup(
+    request: Request,
+    body: dict = Body(default={}),
+    _: str = Depends(require_api_key),
+):
     """Executa a rotina de startup."""
     bot = request.app.state.bot
     token = _resolve_runtime_token(body.get("token"))
     if not token:
-        raise HTTPException(status_code=400, detail="Nenhum token fornecido ou configurado.")
+        raise HTTPException(
+            status_code=400, detail="Nenhum token fornecido ou configurado."
+        )
     if bot.is_ready():
         return {"status": "success", "message": "Bot já está online."}
 
@@ -152,4 +172,6 @@ async def startup(request: Request, body: dict = Body(default={}), _: str = Depe
         _queue_bot_start(request, bot, token, restart_first=False)
         return {"status": "success", "message": "Bot inicializando..."}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Falha ao inicializar o bot.") from exc
+        raise HTTPException(
+            status_code=500, detail="Falha ao inicializar o bot."
+        ) from exc

@@ -20,16 +20,23 @@ def require_voice_client(bot, guild_id: int | None = None):
     """Exige voice client."""
     if guild_id is None:
         if not bot.voice_clients:
-            raise HTTPException(status_code=400, detail="Bot não está em um canal de voz.")
+            raise HTTPException(
+                status_code=400, detail="Bot não está em um canal de voz."
+            )
         if len(bot.voice_clients) > 1:
             raise HTTPException(
                 status_code=400,
-                detail="guild_id é obrigatório quando o bot está conectado em múltiplos servidores.",
+                detail=(
+                    "guild_id é obrigatório quando o bot está conectado em "
+                    "múltiplos servidores."
+                ),
             )
 
     vc = get_voice_client(bot, guild_id)
     if not vc:
-        raise HTTPException(status_code=400, detail="Bot não está em um canal de voz.")
+        raise HTTPException(
+            status_code=400, detail="Bot não está em um canal de voz."
+        )
     return vc
 
 
