@@ -25,7 +25,7 @@ from api.endpoints.validators import (
     validate_resource_id,
     validate_upload_filename,
 )
-from api.endpoints.security import require_api_key
+from api.endpoints.security import require_admin_session, require_api_key
 from config import ALLOWED_AUDIO_EXTENSIONS, SOUNDBOARD_DIR
 from utils.helpers import (
     get_sfx_metadata,
@@ -39,7 +39,9 @@ MAX_SFX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 
 @router.get("/api/soundboard")
-async def get_soundboard():
+async def get_soundboard(
+    _: str = Depends(require_api_key),
+):
     """Retorna soundboard."""
     try:
         if not os.path.exists(SOUNDBOARD_DIR):
@@ -83,7 +85,10 @@ async def get_soundboard():
 
 
 @router.get("/api/soundboard/file/{filename}")
-async def get_soundboard_file(filename: str):
+async def get_soundboard_file(
+    filename: str,
+    _: bool = Depends(require_admin_session),
+):
     """Retorna soundboard file."""
     try:
         safe_filename = validate_upload_filename(

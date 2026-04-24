@@ -18,7 +18,9 @@ router = APIRouter()
 
 
 @router.get("/api/radios")
-async def get_radios():
+async def get_radios(
+    _: str = Depends(require_api_key),
+):
     """Retorna radios."""
     try:
         radios_data = load_radios()

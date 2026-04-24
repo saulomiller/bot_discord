@@ -1,40 +1,38 @@
 # bot_discord
 
-Bot de musicas para Discord com soundboard, radios online, playlists e painel web
-de gerenciamento. O projeto foi pensado para rodar em homelab via Docker, mas
-tambem pode ser executado localmente para desenvolvimento.
+Bot de musica para Discord com painel web, player compacto, radios online,
+playlists e soundboard. O projeto foi pensado para homelab com Docker, mas
+tambem pode rodar localmente para desenvolvimento.
 
-> Projeto em desenvolvimento ativo. Algumas telas e fluxos ainda podem receber
-> ajustes de layout, seguranca e experiencia de instalacao.
+> Projeto em desenvolvimento ativo. Fluxos de instalacao, seguranca e interface
+> web ainda podem receber ajustes.
 
-## Interface Web
+## Interface web
 
-O painel web permite controlar o bot pelo navegador, configurar o token do
-Discord, escolher o servidor ativo, gerenciar fila, radios, playlists e
-soundboard.
+O painel web permite controlar o bot pelo navegador:
 
-<<<<<<< Updated upstream
-<img width="2560" height="1333" alt="image" src="https://github.com/user-attachments/assets/51780682-bd9c-4969-9b36-143e1f64be34" />
+- escolher o servidor ativo;
+- adicionar musicas por nome ou link;
+- controlar fila, volume, pausa, resume e skip;
+- gerenciar radios customizadas;
+- enviar playlists `.txt`;
+- enviar e tocar efeitos de soundboard;
+- configurar o token do Discord pela tela de setup;
+- usar um player compacto em barra fixa, independente do scroll da pagina.
 
-<img width="2560" height="1325" alt="{3D7AAACA-BF3D-45FD-9C73-02878186FFA3}" src="https://github.com/user-attachments/assets/7305b4e0-834e-4d7c-9877-8a48673700f7" />
-
-=======
 <img width="2940" height="1912" alt="Interface web do bot" src="https://github.com/user-attachments/assets/609bf028-6e9c-4921-82d7-18bcecb99adc" />
->>>>>>> Stashed changes
 
 ## Principais recursos
 
-- Reproducao de musicas via YouTube, SoundCloud e buscas por nome.
-- Suporte a radios online.
-- Soundboard com upload, favoritos, volume por efeito e reproducao via painel.
-- Interface web protegida por senha admin.
-- Setup inicial pelo navegador para adicionar o token do Discord.
-- Player web compacto em formato de barra fixa.
-- Fila de musicas com skip, pausa, resume, volume e remocao de playlists.
-- Upload de playlists `.txt` pela interface web.
+- Reproducao de musicas via YouTube, SoundCloud e busca por nome.
+- Suporte a playlists e URLs de playlist.
+- Radios online com cadastro pela interface web.
+- Soundboard com upload, favoritos, volume por efeito e pre-escuta no navegador.
+- Painel web protegido por senha admin.
+- Setup inicial pelo navegador para salvar o token do Discord.
+- API FastAPI usada pelo painel.
 - Suporte multi-servidor no painel.
-- API FastAPI para controle do bot.
-- Execucao em Docker com volume persistente em `data/`.
+- Docker com volume persistente em `data/`.
 
 ## Tecnologias
 
@@ -48,7 +46,7 @@ soundboard.
 - Pillow
 - Docker e Docker Compose
 
-## Estrutura
+## Estrutura do projeto
 
 ```text
 bot_discord/
@@ -56,9 +54,9 @@ bot_discord/
 |-- cogs/                 # Comandos e cogs do Discord
 |-- data/                 # Dados persistentes locais, ignorados pelo Git
 |-- playlist/             # Utilitarios de playlist
-|-- services/             # Servicos de playback e regras auxiliares
+|-- services/             # Regras de playback e dominio
 |-- static/               # Interface web
-|-- utils/                # Helpers, embeds, i18n e player modules
+|-- utils/                # Helpers, i18n, imagens e player modules
 |-- bot.py                # Entrada principal: bot Discord + API web
 |-- config.py             # Configuracoes, paths, token, auth e API key
 |-- docker-compose.yml
@@ -91,31 +89,47 @@ GID=1000
 Recomendacoes:
 
 - Nunca comite `.env`.
-- Em Docker, configure pelo menos `WEB_ADMIN_PASSWORD`.
-- `DISCORD_TOKEN` pode ser definido no `.env`, pelo terminal interativo ou pela tela `/setup`.
+- Em Docker/headless, configure `WEB_ADMIN_PASSWORD`.
+- `DISCORD_TOKEN` pode ficar vazio para ser configurado pela tela `/setup`.
 - Quando o token e salvo pela interface web, ele fica em `data/token.json`.
-- `data/` e persistente e ignorado pelo Git, pois pode conter token, senha hash, API key, playlists e soundboard.
+- `data/` e persistente e ignorado pelo Git, pois pode conter token, hash de
+  senha, API key, playlists, radios e soundboard.
+
+### Posso rodar sem token no `.env`?
+
+Sim. Esse e o fluxo recomendado quando voce quer configurar tudo pela interface:
+
+1. Defina apenas `WEB_ADMIN_PASSWORD` no `.env`.
+2. Suba o container.
+3. Acesse `http://IP_DO_SERVIDOR:8000`.
+4. Faca login com a senha do painel.
+5. Informe o token do Discord na tela `/setup`.
+
+O bot inicia a API mesmo sem token. Nesse estado, o painel abre o setup e o bot
+fica offline ate receber um token valido.
 
 ## Primeiro acesso
 
-Ao abrir `http://localhost:8000` ou `http://IP_DO_SERVIDOR:8000`, o backend segue este fluxo:
+Ao abrir `http://localhost:8000` ou `http://IP_DO_SERVIDOR:8000`, o backend
+segue este fluxo:
 
 1. Se o usuario nao estiver autenticado, redireciona para `/login`.
 2. Depois do login, se ainda nao existir token valido, redireciona para `/setup`.
 3. Na tela `/setup`, informe o token do Discord.
-4. O token e validado, salvo em `data/token.json` e o bot tenta iniciar.
+4. O token e salvo em `data/token.json` e o bot tenta iniciar.
 5. Com senha e token configurados, `/` abre o dashboard principal.
 
 ## Opcoes de terminal
 
 O projeto mantem prompts de terminal apenas para execucao local interativa. No
-Docker/headless, esses prompts sao pulados automaticamente porque o container nao
-recebe stdin.
+Docker/headless, os prompts sao pulados automaticamente porque o container nao
+tem stdin interativo.
 
 ### Senha admin do painel
 
 Se nao existir `WEB_ADMIN_PASSWORD` no `.env` e nao existir `data/auth.json`, o
-`bot.py` so pergunta a senha quando o processo estiver em um terminal interativo:
+`bot.py` so pergunta a senha quando o processo estiver em um terminal
+interativo:
 
 ```text
 Definir senha agora? (s/N):
@@ -134,15 +148,19 @@ WEB_ADMIN_PASSWORD=sua-senha-forte
 ### Token do Discord
 
 Se nao existir token em `data/token.json`, `token.json` legado ou
-`DISCORD_TOKEN`, o terminal interativo mostra apenas:
+`DISCORD_TOKEN`, o terminal interativo mostra:
 
 ```text
 Inserir token agora? (s/N):
+Cole o token do Discord:
 ```
 
-- Respondendo `s`, o token e solicitado e salvo em `data/token.json`.
-- Respondendo `N` ou deixando vazio, a API sobe e voce configura pela interface web.
-- Em Docker/headless, essa pergunta nao aparece; use `DISCORD_TOKEN` no `.env` ou a tela `/setup`.
+- Respondendo `s`, o token e solicitado sem eco no terminal e salvo em
+  `data/token.json`.
+- Respondendo `N` ou deixando vazio, a API sobe e voce configura pela interface
+  web.
+- Em Docker/headless, essa pergunta nao aparece; use `DISCORD_TOKEN` no `.env`
+  ou a tela `/setup`.
 
 ## Instalacao com Docker
 
@@ -160,15 +178,10 @@ cp .env.example .env
 nano .env
 ```
 
-No Docker, mantenha pelo menos:
+Para configurar o token pela interface web, deixe:
 
 ```env
 WEB_ADMIN_PASSWORD=sua-senha-forte
-```
-
-Se quiser configurar o token depois pela interface web, deixe:
-
-```env
 DISCORD_TOKEN=
 ```
 
@@ -216,8 +229,8 @@ pip install -r requirements.txt
 python bot.py
 ```
 
-Nesse modo, se o terminal for interativo, o `bot.py` pode perguntar a senha admin
-e o token conforme descrito acima.
+Nesse modo, se o terminal for interativo, o `bot.py` pode perguntar a senha
+admin e o token.
 
 ## Resetar para uma instalacao nova
 
@@ -231,8 +244,14 @@ docker compose up -d --build
 ```
 
 Isso apaga token salvo, API key local, senha hash do painel, playlists,
-soundboard e metadados locais. Se voce usa `.env`, ele continua existindo e sera
-reutilizado no proximo start.
+soundboard, radios customizadas e metadados locais. Se voce usa `.env`, ele
+continua existindo e sera reutilizado no proximo start.
+
+Para remover tambem a imagem local criada pelo projeto:
+
+```bash
+docker compose down --rmi local --remove-orphans
+```
 
 ## Comandos do Discord
 
@@ -301,7 +320,23 @@ interface web. Extensoes aceitas:
 - A sessao admin usa cookie HTTP-only.
 - A API usa API key interna gerada em `data/api_key.json`.
 - Rotas sensiveis exigem sessao admin e API key.
-- Nao exponha a porta `8000` diretamente na internet sem proxy, HTTPS e controles adicionais.
+- Arquivos de upload passam por validacao de nome, extensao e tamanho.
+- O token digitado no terminal interativo nao e ecoado na tela.
+- Nao exponha a porta `8000` diretamente na internet sem proxy, HTTPS e
+  controles adicionais.
+
+### Radios customizadas e URLs externas
+
+Radios customizadas aceitam URLs `http` e `https`. Como essas URLs podem ser
+resolvidas e acessadas pelo backend na hora de tocar, cadastre apenas fontes
+confiaveis.
+
+Para homelab fechado, login + API key ja reduzem bastante o risco. Se o painel
+for exposto fora da rede confiavel, a recomendacao e adicionar hardening extra:
+
+- bloquear `localhost`, IPs privados e IPs link-local por padrao;
+- resolver DNS antes de salvar/tocar a radio;
+- permitir excecoes explicitas por allowlist no `.env`.
 
 ## Arquivos persistentes importantes
 
@@ -314,6 +349,7 @@ interface web. Extensoes aceitas:
 | `data/soundboard/` | Efeitos enviados pelo painel |
 | `data/playlist/` | Playlists e dados locais |
 | `data/radios.json` | Radios customizadas |
+| `token.json` | Caminho legado ainda lido para compatibilidade |
 
 ## Qualidade de codigo
 

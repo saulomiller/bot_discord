@@ -156,7 +156,7 @@ async def restart_bot(request: Request, _: str = Depends(require_api_key)):
 
 
 @router.get("/api/settings/language")
-async def get_language():
+async def get_language(_: str = Depends(require_api_key)):
     """Retorna language."""
     return {"language": I18n.get_instance().language}
 

@@ -47,8 +47,8 @@
     position: fixed;
     top: 20px;
     left: 20px;
-    z-index: 2100;
-    /* Acima da barra lateral (2000) e todo o resto */
+    z-index: 900;
+    /* Acima do player fixo, mas abaixo do overlay e da sidebar aberta. */
     background: rgba(0, 0, 0, 0.2);
     /* Fundo muito sutil */
     backdrop-filter: blur(5px);

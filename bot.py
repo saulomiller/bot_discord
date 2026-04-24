@@ -221,7 +221,7 @@ def prompt_token_terminal():
         return None
 
     try:
-        token = input("\nCole o token do Discord: ").strip()
+        token = getpass("\nCole o token do Discord: ").strip()
     except (EOFError, OSError):
         return None
 

@@ -2,9 +2,10 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.endpoints.common import get_voice_client
+from api.endpoints.security import require_api_key
 from utils.i18n import I18n
 
 router = APIRouter()
@@ -40,7 +41,10 @@ def _serialize_song(song):
 
 
 @router.get("/api/guilds")
-async def get_guilds(request: Request):
+async def get_guilds(
+    request: Request,
+    _: str = Depends(require_api_key),
+):
     """Return guild list and connection state for multi-server control."""
     bot = request.app.state.bot
     connected_by_guild = {vc.guild.id: vc for vc in bot.voice_clients}
@@ -76,7 +80,11 @@ async def get_guilds(request: Request):
 
 
 @router.get("/api/status")
-async def get_status(request: Request, guild_id: int | None = None):
+async def get_status(
+    request: Request,
+    guild_id: int | None = None,
+    _: str = Depends(require_api_key),
+):
     """Return current bot status for dashboard."""
     bot = request.app.state.bot
 
@@ -163,7 +171,11 @@ async def get_status(request: Request, guild_id: int | None = None):
 
 
 @router.get("/api/queue")
-async def get_queue(request: Request, guild_id: int | None = None):
+async def get_queue(
+    request: Request,
+    guild_id: int | None = None,
+    _: str = Depends(require_api_key),
+):
     """Return current queue."""
     bot = request.app.state.bot
     vc = _resolve_status_voice_client(bot, guild_id)

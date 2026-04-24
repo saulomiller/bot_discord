@@ -99,8 +99,8 @@ function withGuildQuery(path, guildId) {
  * Cliente de API consumido pelo dashboard web.
  */
 export const API = {
-    getGuilds: () => apiFetch(`${CONFIG.API_BASE}/guilds`),
-    getStatus: (guildId = null) => apiFetch(withGuildQuery(`${CONFIG.API_BASE}/status`, guildId)),
+    getGuilds: () => apiFetchProtected(`${CONFIG.API_BASE}/guilds`),
+    getStatus: (guildId = null) => apiFetchProtected(withGuildQuery(`${CONFIG.API_BASE}/status`, guildId)),
     play: (search, guildId = null) => apiFetchProtected(withGuildQuery(`${CONFIG.API_BASE}/play`, guildId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -180,10 +180,10 @@ export const API = {
             reader.readAsText(file);
         });
     },
-    getPlaylists: () => apiFetch(`${CONFIG.API_BASE}/playlists`),
+    getPlaylists: () => apiFetchProtected(`${CONFIG.API_BASE}/playlists`),
 
     // Radio Management
-    getRadios: () => apiFetch(`${CONFIG.API_BASE}/radios`),
+    getRadios: () => apiFetchProtected(`${CONFIG.API_BASE}/radios`),
     addRadio: (radioData) => apiFetchProtected(`${CONFIG.API_BASE}/radios/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,7 +204,7 @@ export const API = {
     }),
 
     // Soundboard Management
-    getSoundboard: () => apiFetch(`${CONFIG.API_BASE}/soundboard`),
+    getSoundboard: () => apiFetchProtected(`${CONFIG.API_BASE}/soundboard`),
     uploadSoundboard: async (formData) => {
         return apiFetchProtected(`${CONFIG.API_BASE}/soundboard/upload`, {
             method: 'POST',

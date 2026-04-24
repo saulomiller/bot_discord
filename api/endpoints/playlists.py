@@ -18,7 +18,9 @@ MAX_PLAYLIST_LINE_CHARS = 4096
 
 
 @router.get("/api/playlists")
-async def get_playlists():
+async def get_playlists(
+    _: str = Depends(require_api_key),
+):
     """Return saved playlist files."""
     try:
         if not os.path.exists(PLAYLIST_DIR):
