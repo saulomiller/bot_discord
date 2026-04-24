@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup do Bot</title>
+    <link rel="stylesheet" href="/static/style.css?v=5">
+    <link rel="stylesheet" href="/static/css/auth.css?v=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="auth-page">
+    <canvas id="liquid-canvas" class="liquid-background"></canvas>
+    <div class="background-glow"></div>
+
+    <main class="auth-shell">
+        <section class="auth-card" aria-labelledby="setup-title">
+            <div class="auth-brand">
+                <div class="auth-brand-mark"><i class="fa-brands fa-discord"></i></div>
+                <div>
+                    <h1 id="setup-title">Configurar Discord</h1>
+                    <p>Salve o token do bot para iniciar o painel de musica.</p>
+                </div>
+            </div>
+
+            <form id="setup-form" class="auth-form">
+                <div id="setup-message" class="auth-message" role="status"></div>
+                <div class="auth-field">
+                    <label for="token">Token do bot Discord</label>
+                    <input id="token" name="token" type="password" autocomplete="off" required>
+                </div>
+                <div class="auth-actions">
+                    <button id="setup-submit" class="auth-primary" type="submit">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        Salvar e iniciar
+                    </button>
+                    <p class="auth-secondary">O token sera salvo em data/token.json.</p>
+                </div>
+            </form>
+        </section>
+        <p class="auth-footnote">Voce tambem pode configurar DISCORD_TOKEN pelo .env.</p>
+    </main>
+
+    <script type="module">
+        let apiKey = null;
+        const form = document.getElementById('setup-form');
+        const button = document.getElementById('setup-submit');
+        const message = document.getElementById('setup-message');
+
+        function showMessage(text, type = 'error') {
+            message.textContent = text;
+            message.className = `auth-message show ${type}`;
+        }
+
+        async function init() {
+            const authResponse = await fetch('/api/auth/status', { credentials: 'same-origin' });
+            const auth = await authResponse.json();
+            if (!auth.authenticated) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const keyResponse = await fetch('/api/get_api_key', { credentials: 'same-origin' });
+            const keyData = await keyResponse.json();
+            apiKey = keyData.api_key;
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            button.disabled = true;
+            try {
+                const token = String(new FormData(form).get('token') || '').trim();
+                if (token.length < 50) {
+                    throw new Error('Token invalido ou muito curto.');
+                }
+                const response = await fetch('/api/settings/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': apiKey || ''
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ token, start_bot: true })
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Falha ao salvar token.');
+                }
+                showMessage('Token salvo. Abrindo dashboard...', 'success');
+                window.location.href = '/';
+            } catch (error) {
+                showMessage(error.message);
+                button.disabled = false;
+            }
+        });
+
+        init().catch(() => {
+            showMessage('Nao foi possivel preparar o setup. Tente fazer login novamente.');
+            button.disabled = true;
+        });
+    </script>
+</body>
+
+</html>

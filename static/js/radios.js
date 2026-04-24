@@ -33,7 +33,7 @@ export class RadioManager {
             this.radios = data.radios || [];
             this.render();
         } catch (error) {
-            console.error('Erro ao carregar rádios:', error);
+            console.warn('Erro ao carregar rádios:', error);
         }
     }
 

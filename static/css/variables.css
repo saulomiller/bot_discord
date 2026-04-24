@@ -3,9 +3,10 @@
 /* ===== Variaveis Globais ===== */
 :root {
     --bg-color: #000000;
-    --card-bg: #1c1c1e;
+    --card-bg: rgba(24, 24, 27, 0.92);
+    --panel-bg: rgba(255, 255, 255, 0.045);
     /* Cor padrão dos widgets iOS dark */
-    --card-border: rgba(255, 255, 255, 0.1);
+    --card-border: rgba(255, 255, 255, 0.12);
     --accent-color: #0a84ff;
     /* Azul iOS */
     --accent-hover: #0077ed;
@@ -16,7 +17,9 @@
     --text-muted: #8e8e93;
     --success: #30d158;
     --danger: #ff453a;
-    --radius: 24px;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow-soft: 0 12px 28px rgba(0, 0, 0, 0.24);
     /* Bordas bem arredondadas */
     --font-stack: "SF Pro Display", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
 }

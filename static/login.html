@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login do Painel</title>
+    <link rel="stylesheet" href="/static/style.css?v=5">
+    <link rel="stylesheet" href="/static/css/auth.css?v=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="auth-page">
+    <canvas id="liquid-canvas" class="liquid-background"></canvas>
+    <div class="background-glow"></div>
+
+    <main class="auth-shell">
+        <section class="auth-card" aria-labelledby="login-title">
+            <div class="auth-brand">
+                <div class="auth-brand-mark"><i class="fa-solid fa-lock"></i></div>
+                <div>
+                    <h1 id="login-title">Painel protegido</h1>
+                    <p>Entre para administrar o bot e configurar o token.</p>
+                </div>
+            </div>
+
+            <form id="login-form" class="auth-form">
+                <div id="login-message" class="auth-message" role="status"></div>
+                <div class="auth-field">
+                    <label for="password">Senha do painel</label>
+                    <input id="password" name="password" type="password" autocomplete="current-password" required>
+                </div>
+                <div class="auth-actions">
+                    <button id="login-submit" class="auth-primary" type="submit">
+                        <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                        Entrar
+                    </button>
+                    <p class="auth-secondary">A senha pode ser definida no terminal ou por WEB_ADMIN_PASSWORD.</p>
+                </div>
+            </form>
+        </section>
+        <p class="auth-footnote">Esta senha protege somente o painel web. O token do Discord fica separado.</p>
+    </main>
+
+    <script type="module">
+        const form = document.getElementById('login-form');
+        const button = document.getElementById('login-submit');
+        const message = document.getElementById('login-message');
+
+        function showMessage(text, type = 'error') {
+            message.textContent = text;
+            message.className = `auth-message show ${type}`;
+        }
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/auth/status', { credentials: 'same-origin' });
+                const data = await response.json();
+                if (!data.configured) {
+                    showMessage('Senha do painel nao configurada. Defina pelo terminal ou no .env com WEB_ADMIN_PASSWORD.');
+                    button.disabled = true;
+                } else if (data.authenticated) {
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                showMessage('Nao foi possivel verificar o estado do painel.');
+            }
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            button.disabled = true;
+            try {
+                const password = new FormData(form).get('password');
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ password })
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Senha invalida.');
+                }
+                showMessage('Login realizado. Redirecionando...', 'success');
+                window.location.href = '/';
+            } catch (error) {
+                showMessage(error.message);
+                button.disabled = false;
+            }
+        });
+
+        checkStatus();
+    </script>
+</body>
+
+</html>

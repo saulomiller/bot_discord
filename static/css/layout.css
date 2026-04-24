@@ -57,7 +57,7 @@
 
 .container {
     width: 100%;
-    max-width: 1100px;
+    max-width: 1180px;
     position: relative;
     z-index: 1;
 }
@@ -67,7 +67,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 14px;
     padding: 0 10px;
     position: relative;
     /* Garante contexto de empilhamento do cabeçalho se necessário */
@@ -80,9 +80,63 @@
 }
 
 h1 {
-    font-size: 28px;
+    font-size: clamp(22px, 2.2vw, 28px);
     font-weight: 700;
-    letter-spacing: -0.5px;
+    letter-spacing: 0;
+}
+
+.system-notice {
+    align-items: center;
+    background: rgba(10, 132, 255, 0.1);
+    border: 1px solid rgba(10, 132, 255, 0.28);
+    border-radius: var(--radius);
+    display: flex;
+    gap: 14px;
+    justify-content: space-between;
+    margin: 0 10px 16px;
+    padding: 12px 14px;
+}
+
+.system-notice[hidden] {
+    display: none;
+}
+
+.system-notice.is-error {
+    background: rgba(255, 69, 58, 0.1);
+    border-color: rgba(255, 69, 58, 0.34);
+}
+
+.system-notice-main {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    min-width: 0;
+}
+
+.system-notice-main i {
+    color: var(--accent-color);
+}
+
+.system-notice.is-error .system-notice-main i {
+    color: var(--danger);
+}
+
+.system-notice strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.system-notice p {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin: 0;
+}
+
+.system-notice-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
 }
 
 /* Header Actions Container */
@@ -132,20 +186,31 @@ h1 {
 .bento-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 14px;
 }
 
 /* Layout Desktop: 2 colunas principais */
 @media (min-width: 768px) {
     .bento-grid {
-        grid-template-columns: 1.5fr 1fr;
-        /* Esquerda maior, Direita menor */
-        grid-template-rows: auto auto;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
     }
 
-    /* Hero ocupa a esquerda inteira */
     .card-hero {
-        grid-row: span 2;
+        grid-column: span 7;
+    }
+
+    .card-input,
+    .card-queue,
+    .card-radios {
+        grid-column: span 5;
+    }
+
+    .card-playlist {
+        grid-column: span 7;
+    }
+
+    .card-soundboard {
+        grid-column: span 12;
     }
 }
 
@@ -154,10 +219,28 @@ h1 {
     .app-header {
         justify-content: center;
         flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
     }
 
     .guild-selector {
         min-width: 0;
         width: 100%;
+    }
+
+    .header-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .system-notice {
+        align-items: stretch;
+        flex-direction: column;
+        margin-inline: 0;
+    }
+
+    .system-notice-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
     }
 }

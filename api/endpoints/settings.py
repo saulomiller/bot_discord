@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from api.endpoints.models import LanguageRequest
 from api.endpoints.security import require_api_key
-from config import load_token_from_json, save_token_to_json
+from config import is_valid_token_value, load_token_from_json, save_token_to_json
 from utils.i18n import I18n
 
 router = APIRouter()
@@ -72,7 +72,7 @@ async def set_token(
     """Set Discord bot token."""
     bot = request.app.state.bot
     token = body.get("token")
-    if not token or len(token) < 50:
+    if not is_valid_token_value(token):
         raise HTTPException(status_code=400, detail="Token não fornecido.")
 
     try:
@@ -81,24 +81,53 @@ async def set_token(
         logging.info("Token do Discord foi salvo/atualizado via API.")
 
         if bot.is_ready():
-            logging.info(
-                "Bot já está online. Tentando reiniciar com o novo token..."
-            )
+            logging.info("Bot já está online. Tentando reiniciar com o novo token...")
             await bot.close()
             await asyncio.sleep(1)
 
         return {
             "status": "success",
             "message": (
-                "Token atualizado. Reinicie o bot manualmente se ele não "
-                "voltar."
+                "Token atualizado. Reinicie o bot manualmente se ele não voltar."
             ),
         }
     except Exception as exc:
         logging.error(f"Erro ao salvar token via API: {exc}")
-        raise HTTPException(
-            status_code=500, detail="Falha ao salvar o token."
-        ) from exc
+        raise HTTPException(status_code=500, detail="Falha ao salvar o token.") from exc
+
+
+@router.post("/api/settings/token")
+async def set_settings_token(
+    request: Request, body: dict = Body(...), _: str = Depends(require_api_key)
+):
+    """Salva o token Discord e opcionalmente inicia o bot."""
+    bot = request.app.state.bot
+    token = body.get("token")
+    should_start = bool(body.get("start_bot", True))
+    if not is_valid_token_value(token):
+        raise HTTPException(status_code=400, detail="Token invalido.")
+
+    try:
+        save_token_to_json(token)
+        os.environ["DISCORD_TOKEN"] = token
+        logging.info("Token do Discord foi salvo/atualizado via setup web.")
+
+        if should_start and not bot.is_ready():
+            existing_task = getattr(request.app.state, "bot_start_task", None)
+            if not existing_task or existing_task.done():
+                _queue_bot_start(request, bot, token, restart_first=False)
+
+        return {
+            "status": "success",
+            "message": (
+                "Token salvo. O bot esta inicializando."
+                if should_start
+                else "Token salvo."
+            ),
+        }
+    except Exception as exc:
+        logging.error(f"Erro ao salvar token via setup: {exc}")
+        raise HTTPException(status_code=500, detail="Falha ao salvar o token.") from exc
 
 
 @router.post("/api/restart")

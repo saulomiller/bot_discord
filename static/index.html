@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controlador de Bot de Música</title>
-    <link rel="stylesheet" href="/static/style.css?v=2">
+    <link rel="stylesheet" href="/static/style.css?v=5">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
@@ -35,6 +35,24 @@
                 </div>
             </div>
         </header>
+
+        <section id="system-notice" class="system-notice" aria-live="polite" hidden>
+            <div class="system-notice-main">
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                <div>
+                    <strong id="system-notice-title" data-i18n="notice_offline_title">Bot offline</strong>
+                    <p id="system-notice-message" data-i18n="notice_offline_message">Conecte a API e configure o token para controlar o Discord.</p>
+                </div>
+            </div>
+            <div class="system-notice-actions">
+                <button id="notice-settings-btn" class="btn-small" data-i18n="notice_settings">
+                    <i class="fa-solid fa-gear" aria-hidden="true"></i> Ajustes
+                </button>
+                <button id="notice-refresh-btn" class="btn-small secondary" data-i18n="notice_refresh">
+                    <i class="fa-solid fa-rotate" aria-hidden="true"></i> Atualizar
+                </button>
+            </div>
+        </section>
 
         <!-- Barra Lateral -->
         <aside id="settings-sidebar" class="sidebar">
@@ -194,9 +212,22 @@
                 <div class="card-header">
                     <h3><i class="fa-solid fa-volume-high"></i> <span data-i18n="soundboard_title">Soundboard</span>
                     </h3>
-                    <button id="upload-sfx-btn" class="btn-small" data-i18n="btn_upload">
-                        <i class="fa-solid fa-upload"></i> Upload
-                    </button>
+                    <div class="sfx-toolbar">
+                        <div class="sfx-search">
+                            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                            <input id="sfx-search" type="search" data-i18n-placeholder="sfx_search_placeholder"
+                                placeholder="Buscar efeito...">
+                        </div>
+                        <div class="sfx-filter" role="group" aria-label="Filtro da soundboard">
+                            <button class="sfx-filter-btn active" type="button" data-filter="all"
+                                data-i18n="sfx_filter_all">Todos</button>
+                            <button class="sfx-filter-btn" type="button" data-filter="favorites"
+                                data-i18n="sfx_filter_favorites">Favoritos</button>
+                        </div>
+                        <button id="upload-sfx-btn" class="btn-small" data-i18n="btn_upload">
+                            <i class="fa-solid fa-upload"></i> Upload
+                        </button>
+                    </div>
                 </div>
 
                 <div id="soundboard-grid" class="soundboard-grid custom-scrollbar">

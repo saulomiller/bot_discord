@@ -9,7 +9,7 @@ O projeto está em desenvolvimento ativo. Algumas funcionalidades podem apresent
 instabilidades ou estar incompletas.
 
 **Problemas conhecidos:**
-- Controle do soundboard pela GUI ainda não implementado
+- Projeto em evolucao; a interface web ainda recebe melhorias de layout e estados offline.
 
 **Em desenvolvimento:**
 - melhora do soundboard
@@ -77,9 +77,8 @@ O bot precisa estar em um canal de voz. Ao usar o comando `/sfx <nome>`, o bot:
 2. Reproduz o efeito de áudio solicitado
 3. Retoma a música automaticamente em seguida
 
-Os áudios do soundboard podem ser adicionados e gerenciados pela interface web (GUI).
-
-> ⚠️ O controle do soundboard pela GUI ainda está em desenvolvimento. Por enquanto, o gerenciamento de sfx via chat do Discord funciona normalmente.
+Os áudios do soundboard podem ser adicionados, testados, favoritados,
+removidos e tocados no Discord pela interface web (GUI).
 
 ## 🤖 Comandos disponíveis
 
@@ -120,12 +119,15 @@ cd bot_discord
 
 ### 2. Configure o token do Discord
 
-**Opção A — Via CLI:** edite o arquivo `token.json` na raiz do projeto:
+**Opção A — Via CLI:** edite o arquivo `data/token.json`:
 ```json
 {
-  "token": "SEU_TOKEN_AQUI"
+  "DISCORD_TOKEN": "SEU_TOKEN_AQUI"
 }
 ```
+
+O bot ainda aceita o `token.json` antigo na raiz do projeto como fallback,
+mas o caminho recomendado e persistido pela interface web é `data/token.json`.
 
 **Opção B — Via interface web:** após subir o container, acesse a GUI pelo navegador e adicione o token diretamente pelo painel de configurações.
 
