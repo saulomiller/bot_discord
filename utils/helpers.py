@@ -5,16 +5,13 @@ from discord.ext import commands
 import logging
 import os
 import json
-import psutil
 import time
 import asyncio
-import yt_dlp
 from config import (
     RADIOS_FILE,
     DATA_DIR,
     SOUNDBOARD_METADATA_FILE,
     SOUNDBOARD_DIR,
-    save_token_to_json,
 )
 
 from collections import OrderedDict
@@ -102,6 +99,8 @@ memory_usage = 0
 
 async def check_system_resources():
     """Executa a rotina de check y tem re ource."""
+    import psutil
+
     global last_resource_check, cpu_usage, memory_usage
 
     # Verificar se já passou tempo suficiente desde a última verificação
@@ -312,6 +311,8 @@ _shared_ydl = None
 
 def get_shared_ydl():
     """Retorna uma instância reaproveitável de ``YoutubeDL``."""
+    import yt_dlp
+
     global _shared_ydl
     if _shared_ydl is None:
         _shared_ydl = yt_dlp.YoutubeDL(_SHARED_YDL_OPTS)
@@ -400,52 +401,3 @@ async def extract_info(search: str) -> tuple[str, str, str, str, str]:
     except Exception as e:
         logging.error(f"Erro não tratado ao buscar música '{search}': {e}")
         raise ValueError(f"Não foi possível buscar '{search}': {str(e)}")
-
-
-def prompt_token_terminal():
-    """Solicita token via input no terminal."""
-    print("\n" + "=" * 60)
-    print("🎵 DISCORD MUSIC BOT - CONFIGURAÇÃO DE TOKEN")
-    print("=" * 60)
-    print("\nNenhum token válido encontrado no sistema.")
-    print("\nOpções:")
-    print("1. Inserir token agora (via terminal)")
-    print("2. Usar interface web (http://localhost:8000)")
-    print("3. Pular por enquanto (API apenas)")
-    print("\nInstruções para obter o token:")
-    print("- Acesse: https://discord.com/developers/applications")
-    print("- Clique em 'New Application'")
-    print("- Vá para 'Bot' e clique em 'Add Bot'")
-    print("- Clique em 'Copy Token'")
-    print("=" * 60)
-
-    try:
-        choice = input("\nEscolha uma opção (1/2/3): ").strip()
-    except (EOFError, OSError):
-        logging.warning(
-            "\n⚠️ Ambiente não interativo detectado (Docker/Systemd)."
-        )
-        logging.info("⏳ Pulando configuração de token via terminal.")
-        return None
-
-    if choice == "1":
-        try:
-            token = input("\nCole o token do Discord: ").strip()
-        except (EOFError, OSError):
-            return None
-
-        if len(token) > 50:
-            save_token_to_json(token)
-            logging.info("✅ Token salvo com sucesso!")
-            return token
-        else:
-            logging.error("❌ Token inválido (muito curto)")
-            return None
-    elif choice == "2":
-        logging.info(
-            "\n✅ Acesse: http://localhost:8000 para configurar o token"
-        )
-        return None
-    else:
-        logging.info("\n⏳ Pulando configuração de token. Apenas API rodando.")
-        return None

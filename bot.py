@@ -5,17 +5,18 @@ from discord.ext import commands
 import logging
 import asyncio
 import os
+import sys
 import uvicorn
 from getpass import getpass
 
 from config import (
     ADMIN_SESSION_COOKIE,
+    is_valid_token_value,
     is_admin_password_configured,
     resolve_configured_token,
     save_admin_password,
-    load_token_from_json,
+    save_token_to_json,
 )
-from utils.helpers import prompt_token_terminal
 from api.routes import router as api_router
 from api.endpoints.security import is_request_admin_authenticated
 from fastapi import FastAPI
@@ -136,6 +137,13 @@ def prompt_admin_password_terminal():
     if is_admin_password_configured():
         return
 
+    if not sys.stdin.isatty():
+        logging.warning(
+            "Senha do painel nao configurada. Em Docker/headless, defina "
+            "WEB_ADMIN_PASSWORD no .env para proteger o painel web."
+        )
+        return
+
     print("\n" + "=" * 60)
     print("PAINEL WEB - CONFIGURACAO DE SENHA ADMIN")
     print("=" * 60)
@@ -179,6 +187,53 @@ def prompt_admin_password_terminal():
     logging.warning("Senha do painel nao configurada apos 3 tentativas.")
 
 
+def prompt_token_terminal():
+    """Solicita token via terminal apenas em execucao interativa."""
+    if not sys.stdin.isatty():
+        logging.info(
+            "Token do Discord nao configurado. Em Docker/headless, use "
+            "DISCORD_TOKEN no .env ou configure pela interface web."
+        )
+        return None
+
+    print("\n" + "=" * 60)
+    print("DISCORD MUSIC BOT - CONFIGURACAO DE TOKEN")
+    print("=" * 60)
+    print("\nNenhum token valido encontrado no sistema.")
+    print("Voce pode inserir o token agora ou configurar depois pela web.")
+    print("\nInstrucoes para obter o token:")
+    print("- Acesse: https://discord.com/developers/applications")
+    print("- Clique em 'New Application'")
+    print("- Va para 'Bot' e clique em 'Add Bot'")
+    print("- Clique em 'Copy Token'")
+    print("=" * 60)
+
+    try:
+        choice = input("\nInserir token agora? (s/N): ").strip().lower()
+    except (EOFError, OSError):
+        return None
+
+    if choice not in ("s", "sim", "y", "yes"):
+        logging.info(
+            "Pulando token no terminal. Acesse http://localhost:8000 para "
+            "configurar pela interface web."
+        )
+        return None
+
+    try:
+        token = input("\nCole o token do Discord: ").strip()
+    except (EOFError, OSError):
+        return None
+
+    if is_valid_token_value(token):
+        save_token_to_json(token)
+        logging.info("Token salvo com sucesso.")
+        return token
+
+    logging.error("Token invalido ou muito curto.")
+    return None
+
+
 async def run_bot_and_api():
     """Inicia o bot do Discord e o servidor da API."""
     try:
@@ -187,10 +242,7 @@ async def run_bot_and_api():
     except Exception as e:
         logging.error(f"Erro ao configurar senha do painel: {e}")
 
-    # Prioriza o token do token.json, depois do .env
-    token = load_token_from_json()
-    if not token:
-        token = os.getenv("DISCORD_TOKEN")
+    token = resolve_configured_token()
 
     # Se ainda não tem token, perguntar no terminal
     if not token or not token.strip():
@@ -207,16 +259,7 @@ async def run_bot_and_api():
     api_task = asyncio.create_task(server.serve())
 
     # Verifica se o token é válido antes de tentar iniciar o bot
-    if (
-        token
-        and token.strip()
-        and token
-        not in [
-            "SEU_TOKEN_AQUI",
-            "SEU_TOKEN_DO_DISCORD_AQUI",
-            "your_discord_token_here",
-        ]
-    ):
+    if is_valid_token_value(token):
 
         async def run_bot_safe():
             """Tenta iniciar o bot, mas não deixa a API morrer se falhar."""

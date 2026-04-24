@@ -1,158 +1,334 @@
-# 🎵 bot_discord
-Bot de músicas para Discord com soundboard e interface web de gerenciamento,
-rodando em homelab pessoal via Docker. Desenvolvido para fins de estudo e aprendizado.
+# bot_discord
 
-> Documentação em andamento...
-> ## 🚧 Status do projeto & Problemas conhecidos
+Bot de musicas para Discord com soundboard, radios online, playlists e painel web
+de gerenciamento. O projeto foi pensado para rodar em homelab via Docker, mas
+tambem pode ser executado localmente para desenvolvimento.
 
-O projeto está em desenvolvimento ativo. Algumas funcionalidades podem apresentar
-instabilidades ou estar incompletas.
+> Projeto em desenvolvimento ativo. Algumas telas e fluxos ainda podem receber
+> ajustes de layout, seguranca e experiencia de instalacao.
 
-**Problemas conhecidos:**
-- Projeto em evolucao; a interface web ainda recebe melhorias de layout e estados offline.
+## Interface Web
 
-**Em desenvolvimento:**
-- melhora do soundboard
-- gerenciamento muti-chat
-- Mensagens automáticas
-- opção em ingles
-- melhoria na seguranca do token .env
-- possibilidade de desativar funções 
-## 🖥️ Interface Web
+O painel web permite controlar o bot pelo navegador, configurar o token do
+Discord, escolher o servidor ativo, gerenciar fila, radios, playlists e
+soundboard.
 
+<<<<<<< Updated upstream
 <img width="2560" height="1333" alt="image" src="https://github.com/user-attachments/assets/51780682-bd9c-4969-9b36-143e1f64be34" />
 
 <img width="2560" height="1325" alt="{3D7AAACA-BF3D-45FD-9C73-02878186FFA3}" src="https://github.com/user-attachments/assets/7305b4e0-834e-4d7c-9877-8a48673700f7" />
 
+=======
+<img width="2940" height="1912" alt="Interface web do bot" src="https://github.com/user-attachments/assets/609bf028-6e9c-4921-82d7-18bcecb99adc" />
+>>>>>>> Stashed changes
 
+## Principais recursos
 
-## 🛠️ Tecnologias utilizadas
+- Reproducao de musicas via YouTube, SoundCloud e buscas por nome.
+- Suporte a radios online.
+- Soundboard com upload, favoritos, volume por efeito e reproducao via painel.
+- Interface web protegida por senha admin.
+- Setup inicial pelo navegador para adicionar o token do Discord.
+- Player web compacto em formato de barra fixa.
+- Fila de musicas com skip, pausa, resume, volume e remocao de playlists.
+- Upload de playlists `.txt` pela interface web.
+- Suporte multi-servidor no painel.
+- API FastAPI para controle do bot.
+- Execucao em Docker com volume persistente em `data/`.
 
-- **Python 3** — linguagem principal
-- **discord.py** — comandos assíncronos (async/await)
-- **FastAPI** — API e interface web de gerenciamento
-- **Uvicorn** — servidor ASGI
-- **yt-dlp** — extração e reprodução de áudio (YouTube, SoundCloud e rádios online)
-- **FFmpeg** — processamento de áudio
-- **Pillow (PIL)** — geração dinâmica de embeds com capa do álbum e barra de progresso
-- **Deno** — resolução de desafios JS do YouTube
-- **Docker / Docker Compose** — containerização e deploy
+## Tecnologias
 
-## 📁 Estrutura do projeto
-```
+- Python 3
+- discord.py
+- FastAPI
+- Uvicorn
+- yt-dlp
+- FFmpeg
+- Deno
+- Pillow
+- Docker e Docker Compose
+
+## Estrutura
+
+```text
 bot_discord/
-├── api/          # Rotas e endpoints da interface web (FastAPI)
-├── cogs/         # Módulos de comandos do bot (discord.py)
-├── playlist/     # Gerenciamento de playlists
-├── services/     # Serviços auxiliares
-├── static/       # Arquivos estáticos da interface web
-├── utils/        # Utilitários gerais
-├── bot.py        # Ponto de entrada do bot
-├── config.py     # Configurações gerais
-├── Dockerfile
-└── docker-compose.yml
+|-- api/                  # Rotas FastAPI usadas pelo painel web
+|-- cogs/                 # Comandos e cogs do Discord
+|-- data/                 # Dados persistentes locais, ignorados pelo Git
+|-- playlist/             # Utilitarios de playlist
+|-- services/             # Servicos de playback e regras auxiliares
+|-- static/               # Interface web
+|-- utils/                # Helpers, embeds, i18n e player modules
+|-- bot.py                # Entrada principal: bot Discord + API web
+|-- config.py             # Configuracoes, paths, token, auth e API key
+|-- docker-compose.yml
+|-- Dockerfile
+`-- .env.example
 ```
 
-## 📌 Funcionalidades
+## Configuracao por `.env`
 
-- Reprodução de músicas via YouTube e SoundCloud no Discord
-- Suporte a rádios online
-- Soundboard integrado via comandos no Discord
-- Interface web (GUI) para controle e gerenciamento do bot em tempo real
-- Fila de músicas com controle de skip e navegação
-- Gerenciamento de playlists via GUI — upload de arquivos `.txt` com lista de músicas
-- Embed dinâmico com capa do álbum e barra de progresso em tempo real (gerado com Pillow)
-- Cache de imagens para evitar reprocessamento desnecessário
-- Limpeza automática do chat ao término da música
-- Execução em container Docker com usuário não-root (segurança)
-- Deploy contínuo em homelab pessoal
+Copie o exemplo e ajuste localmente:
 
-## 💬 Experiência no chat
+```bash
+cp .env.example .env
+```
 
-- **Mensagens efêmeras** — ao adicionar uma música, apenas o usuário que solicitou recebe a confirmação, mantendo o chat limpo
-- **Limpeza automática** — ao término da música, o bot remove as mensagens relacionadas do canal automaticamente
+Exemplo recomendado para Docker:
 
-## 🎵 Como funciona o Soundboard
+```env
+# Obrigatorio em Docker/headless para conseguir fazer login no painel.
+WEB_ADMIN_PASSWORD=troque-por-uma-senha-forte
 
-O bot precisa estar em um canal de voz. Ao usar o comando `/sfx <nome>`, o bot:
+# Opcional. Pode ficar vazio se voce quiser configurar pela interface web.
+DISCORD_TOKEN=
 
-1. Pausa a música que estiver tocando (se houver)
-2. Reproduz o efeito de áudio solicitado
-3. Retoma a música automaticamente em seguida
+# Opcional. Usado no build para alinhar usuario/grupo do container.
+UID=1000
+GID=1000
+```
 
-Os áudios do soundboard podem ser adicionados, testados, favoritados,
-removidos e tocados no Discord pela interface web (GUI).
+Recomendacoes:
 
-## 🤖 Comandos disponíveis
+- Nunca comite `.env`.
+- Em Docker, configure pelo menos `WEB_ADMIN_PASSWORD`.
+- `DISCORD_TOKEN` pode ser definido no `.env`, pelo terminal interativo ou pela tela `/setup`.
+- Quando o token e salvo pela interface web, ele fica em `data/token.json`.
+- `data/` e persistente e ignorado pelo Git, pois pode conter token, senha hash, API key, playlists e soundboard.
 
-### Comandos de usuário (/)
+## Primeiro acesso
 
-| Comando | Descrição |
-|---|---|
-| `/play <link ou nome>` | Toca uma música do YouTube ou SoundCloud |
-| `/radio <nome>` | Toca uma rádio específica |
-| `/radios` | Lista as rádios disponíveis |
-| `/skip` | Pula para a próxima música |
-| `/sfx <nome>` | Toca um efeito sonoro do soundboard |
-| `/leave` | Faz o bot sair do canal de voz |
+Ao abrir `http://localhost:8000` ou `http://IP_DO_SERVIDOR:8000`, o backend segue este fluxo:
 
-### Comandos administrativos (!)
+1. Se o usuario nao estiver autenticado, redireciona para `/login`.
+2. Depois do login, se ainda nao existir token valido, redireciona para `/setup`.
+3. Na tela `/setup`, informe o token do Discord.
+4. O token e validado, salvo em `data/token.json` e o bot tenta iniciar.
+5. Com senha e token configurados, `/` abre o dashboard principal.
 
-> Exclusivos para administradores do servidor.
+## Opcoes de terminal
 
-## ✅ Qualidade de código
+O projeto mantem prompts de terminal apenas para execucao local interativa. No
+Docker/headless, esses prompts sao pulados automaticamente porque o container nao
+recebe stdin.
 
-- **PEP 8** — estilo e formatação do código Python
-- **PEP 257** — padronização de docstrings
-- **Pytest** — testes de complexidade e comportamento
-- **W3C Validator** — validação de semântica HTML na interface web
+### Senha admin do painel
 
-## 🤖 Desenvolvimento assistido por IA
+Se nao existir `WEB_ADMIN_PASSWORD` no `.env` e nao existir `data/auth.json`, o
+`bot.py` so pergunta a senha quando o processo estiver em um terminal interativo:
 
-Este projeto contou com o auxílio de ferramentas de IA (Claude e ChatGPT)
-para resolução de problemas, revisão de código e aceleração do aprendizado.
+```text
+Definir senha agora? (s/N):
+Senha do painel (min. 8 caracteres):
+Confirme a senha:
+```
 
-## 🚀 Como executar
+Se voce responder `s`, a senha e salva como hash em `data/auth.json`.
 
-### 1. Clone o repositório
+Em Docker, use o `.env`:
+
+```env
+WEB_ADMIN_PASSWORD=sua-senha-forte
+```
+
+### Token do Discord
+
+Se nao existir token em `data/token.json`, `token.json` legado ou
+`DISCORD_TOKEN`, o terminal interativo mostra apenas:
+
+```text
+Inserir token agora? (s/N):
+```
+
+- Respondendo `s`, o token e solicitado e salvo em `data/token.json`.
+- Respondendo `N` ou deixando vazio, a API sobe e voce configura pela interface web.
+- Em Docker/headless, essa pergunta nao aparece; use `DISCORD_TOKEN` no `.env` ou a tela `/setup`.
+
+## Instalacao com Docker
+
+### 1. Clonar o repositorio
+
 ```bash
 git clone https://github.com/saulomiller/bot_discord.git
 cd bot_discord
 ```
 
-### 2. Configure o token do Discord
+### 2. Criar o `.env`
 
-**Opção A — Via CLI:** edite o arquivo `data/token.json`:
-```json
-{
-  "DISCORD_TOKEN": "SEU_TOKEN_AQUI"
-}
+```bash
+cp .env.example .env
+nano .env
 ```
 
-O bot ainda aceita o `token.json` antigo na raiz do projeto como fallback,
-mas o caminho recomendado e persistido pela interface web é `data/token.json`.
+No Docker, mantenha pelo menos:
 
-**Opção B — Via interface web:** após subir o container, acesse a GUI pelo navegador e adicione o token diretamente pelo painel de configurações.
+```env
+WEB_ADMIN_PASSWORD=sua-senha-forte
+```
 
-### 3. Build e execução
+Se quiser configurar o token depois pela interface web, deixe:
+
+```env
+DISCORD_TOKEN=
+```
+
+### 3. Subir o bot
+
 ```bash
 docker compose up -d --build
 ```
 
-### 4. Verificar logs
-```bash
-# Logs em tempo real
-docker compose logs -f
+### 4. Acompanhar logs
 
-# Logs apenas do bot
+```bash
 docker compose logs -f bot
 ```
 
-### 5. Parar o bot
-```bash
-docker compose down
+### 5. Abrir a interface web
+
+Local:
+
+```text
+http://localhost:8000
 ```
 
-## 📄 Licença
+Homelab/rede local:
+
+```text
+http://IP_DO_SERVIDOR:8000
+```
+
+Exemplo:
+
+```text
+http://192.168.15.7:8000
+```
+
+## Instalacao local/interativa
+
+Para desenvolvimento fora do Docker, crie um ambiente Python e instale as
+dependencias:
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+python bot.py
+```
+
+Nesse modo, se o terminal for interativo, o `bot.py` pode perguntar a senha admin
+e o token conforme descrito acima.
+
+## Resetar para uma instalacao nova
+
+Use com cuidado: isso remove configuracoes locais persistidas.
+
+```bash
+docker compose down
+rm -rf data
+mkdir -p data
+docker compose up -d --build
+```
+
+Isso apaga token salvo, API key local, senha hash do painel, playlists,
+soundboard e metadados locais. Se voce usa `.env`, ele continua existindo e sera
+reutilizado no proximo start.
+
+## Comandos do Discord
+
+### Slash commands
+
+| Comando | Descricao |
+| --- | --- |
+| `/play <link ou nome>` | Adiciona musica ou playlist a fila |
+| `/skip` | Pula para a proxima musica |
+| `/stop` | Para a reproducao e limpa a fila |
+| `/pause` | Pausa a reproducao |
+| `/resume` | Retoma a reproducao |
+| `/agora` | Mostra a musica atual |
+| `/nowplaying` | Mostra a musica atual com progresso |
+| `/fila` | Mostra a fila |
+| `/volume <valor>` | Ajusta o volume |
+| `/join` | Entra no canal de voz |
+| `/leave` | Sai do canal de voz |
+| `/removeplaylist` | Remove musicas de playlist da fila |
+| `/radios` | Lista radios disponiveis |
+| `/radio <id>` | Toca uma radio |
+| `/addradio` | Adiciona radio customizada, exige admin |
+| `/removeradio` | Remove radio customizada, exige admin |
+| `/sfx <nome>` | Toca um efeito do soundboard |
+
+### Prefix commands
+
+O bot tambem mantem comandos por prefixo `!` para compatibilidade:
+
+```text
+!play
+!skip
+!stop
+!pause
+!resume
+!agora
+!fila
+!volume
+!join
+!leave
+!removeplaylist
+!radios
+!radio
+!clear
+!clearforce
+!sair_todos
+```
+
+## Soundboard
+
+O bot precisa estar conectado a um canal de voz. Ao tocar um efeito com
+`/sfx <nome>`, ele pausa a musica atual, reproduz o efeito e retoma a musica em
+seguida.
+
+Os arquivos aceitos ficam em `data/soundboard/` e podem ser enviados pela
+interface web. Extensoes aceitas:
+
+```text
+.mp3, .wav, .ogg, .m4a, .webm
+```
+
+## Seguranca
+
+- O painel exige senha admin.
+- A senha pode vir de `WEB_ADMIN_PASSWORD` ou de `data/auth.json`.
+- A sessao admin usa cookie HTTP-only.
+- A API usa API key interna gerada em `data/api_key.json`.
+- Rotas sensiveis exigem sessao admin e API key.
+- Nao exponha a porta `8000` diretamente na internet sem proxy, HTTPS e controles adicionais.
+
+## Arquivos persistentes importantes
+
+| Caminho | Funcao |
+| --- | --- |
+| `.env` | Senha admin e variaveis locais, nao versionar |
+| `data/token.json` | Token do Discord salvo pela web ou terminal |
+| `data/auth.json` | Hash da senha admin quando criada pelo terminal |
+| `data/api_key.json` | API key local gerada automaticamente |
+| `data/soundboard/` | Efeitos enviados pelo painel |
+| `data/playlist/` | Playlists e dados locais |
+| `data/radios.json` | Radios customizadas |
+
+## Qualidade de codigo
+
+- O codigo Python deve seguir PEP 8.
+- Docstrings seguem a intencao da PEP 257.
+- Antes de preparar merge, rode verificacoes de sintaxe/lint quando possivel.
+
+Exemplos:
+
+```bash
+python -m py_compile bot.py config.py utils/helpers.py
+python -m ruff check .
+python -m ruff format --check .
+```
+
+## Licenca
 
 MIT

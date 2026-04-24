@@ -11,8 +11,6 @@ RUN apt-get update && \
     gosu \
     git \
     curl \
-    nodejs \
-    npm \
     libopus0 \
     xz-utils \
     unzip && \
@@ -53,8 +51,8 @@ RUN groupadd -g ${GID} -o appgroup
 RUN useradd -m -r -d /app -u ${UID} -g appgroup -o -s /bin/bash appuser
 
 # Cria diretórios necessários com permissões corretas
-RUN mkdir -p /app/playlist /app/.cache && \
-    chown -R appuser:appgroup /app/playlist /app/.cache
+RUN mkdir -p /app/.cache && \
+    chown -R appuser:appgroup /app/.cache
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

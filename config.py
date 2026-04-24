@@ -90,10 +90,15 @@ def is_valid_token_value(token: str | None) -> bool:
 
 def resolve_configured_token() -> str | None:
     """Resolve token persistido para decidir o fluxo inicial da interface."""
-    token = load_token_from_json()
-    if not token:
-        token = os.getenv("DISCORD_TOKEN")
-    return token if is_valid_token_value(token) else None
+    json_token = load_token_from_json()
+    if is_valid_token_value(json_token):
+        return json_token
+
+    env_token = os.getenv("DISCORD_TOKEN")
+    if is_valid_token_value(env_token):
+        return env_token
+
+    return None
 
 
 # --- Autenticacao do painel web ---
