@@ -20,7 +20,10 @@ instabilidades ou estar incompletas.
 - possibilidade de desativar funções 
 ## 🖥️ Interface Web
 
-<img width="2940" height="1912" alt="image" src="https://github.com/user-attachments/assets/609bf028-6e9c-4921-82d7-18bcecb99adc" />
+<img width="2560" height="1333" alt="image" src="https://github.com/user-attachments/assets/51780682-bd9c-4969-9b36-143e1f64be34" />
+
+<img width="2560" height="1325" alt="{3D7AAACA-BF3D-45FD-9C73-02878186FFA3}" src="https://github.com/user-attachments/assets/7305b4e0-834e-4d7c-9877-8a48673700f7" />
+
 
 
 ## 🛠️ Tecnologias utilizadas
