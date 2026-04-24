@@ -3,24 +3,24 @@
 /* ========================== SOUNDBOARD ========================== */
 
 .card-soundboard {
-    grid-column: span 2;
-    min-height: 400px;
+    grid-column: span 12;
+    min-height: 320px;
 }
 
 .soundboard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-    padding: 16px;
-    max-height: 500px;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 12px;
+    padding: 4px;
+    max-height: 440px;
     overflow-y: auto;
 }
 
 .sfx-card {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--panel-bg);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 16px;
+    border-radius: var(--radius-sm);
+    padding: 14px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -58,7 +58,7 @@
 }
 
 .sfx-icon {
-    font-size: 40px;
+    font-size: 32px;
 }
 
 .sfx-name {
@@ -66,7 +66,7 @@
     font-weight: 500;
     text-align: center;
     word-break: break-word;
-    min-height: 36px;
+    min-height: 34px;
     display: flex;
     align-items: center;
 }
@@ -123,7 +123,7 @@
     flex: 1;
     padding: 8px;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.05);
     color: white;
     cursor: pointer;
@@ -177,5 +177,97 @@
 
     .sfx-card {
         padding: 12px;
+    }
+}
+
+.card-soundboard .card-header {
+    align-items: center;
+    display: flex;
+    gap: 14px;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.sfx-toolbar {
+    align-items: center;
+    display: flex;
+    flex: 1;
+    gap: 8px;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+.sfx-search {
+    align-items: center;
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    display: flex;
+    gap: 8px;
+    max-width: 240px;
+    padding: 0 10px;
+    width: min(240px, 100%);
+}
+
+.sfx-search input {
+    background: transparent;
+    border: 0;
+    color: var(--text-primary);
+    min-width: 0;
+    outline: 0;
+    padding: 9px 0;
+    width: 100%;
+}
+
+.sfx-filter {
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-sm);
+    display: flex;
+    padding: 3px;
+}
+
+.sfx-filter-btn {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 7px 10px;
+}
+
+.sfx-filter-btn.active {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+}
+
+.card-soundboard .btn-small {
+    align-items: center;
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    width: auto;
+}
+
+@media (max-width: 768px) {
+    .card-soundboard .card-header,
+    .sfx-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .sfx-search {
+        max-width: none;
+        width: 100%;
+    }
+
+    .sfx-filter {
+        width: 100%;
+    }
+
+    .sfx-filter-btn {
+        flex: 1;
     }
 }

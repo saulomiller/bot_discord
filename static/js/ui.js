@@ -23,6 +23,11 @@ export const UI = {
             dot: document.querySelector('#status-indicator .dot'),
             pill: document.getElementById('status-indicator')
         },
+        systemNotice: {
+            root: document.getElementById('system-notice'),
+            title: document.getElementById('system-notice-title'),
+            message: document.getElementById('system-notice-message')
+        },
         player: {
             title: document.getElementById('song-title'),
             artist: document.getElementById('song-artist'),
@@ -37,6 +42,32 @@ export const UI = {
             fill: document.getElementById('progress-fill'),
             current: document.getElementById('current-time'),
             total: document.getElementById('total-time')
+        }
+    },
+
+    /**
+     * Atualiza o aviso operacional exibido abaixo do cabecalho.
+     * @param {'ready'|'offline'|'api-lost'} state
+     */
+    setConnectionState(state) {
+        const notice = this.elements.systemNotice;
+        const statusInfo = this.elements.statusInfo;
+        const isReady = state === 'ready';
+        const isApiLost = state === 'api-lost';
+
+        if (notice.root) {
+            notice.root.hidden = isReady;
+            notice.root.classList.toggle('is-error', isApiLost);
+        }
+
+        const titleKey = isApiLost ? 'notice_api_lost_title' : 'notice_offline_title';
+        const messageKey = isApiLost ? 'notice_api_lost_message' : 'notice_offline_message';
+        if (notice.title) notice.title.textContent = this.tm ? this.tm.get(titleKey) : (isApiLost ? 'API indisponível' : 'Bot offline');
+        if (notice.message) notice.message.textContent = this.tm ? this.tm.get(messageKey) : (isApiLost ? 'O painel não conseguiu falar com o servidor local.' : 'Configure o token para controlar o Discord.');
+
+        if (statusInfo.pill) {
+            statusInfo.pill.classList.toggle('is-ready', isReady);
+            statusInfo.pill.classList.toggle('is-error', isApiLost);
         }
     },
 
@@ -104,6 +135,7 @@ export const UI = {
         if (statusInfo.dot) {
             statusInfo.dot.style.background = ready ? '#30d158' : '#ff453a';
         }
+        this.setConnectionState(ready ? 'ready' : 'offline');
 
         if (hasCurrentSong) {
             if (player.title) player.title.textContent = data.current_song.title;

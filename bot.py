@@ -6,12 +6,22 @@ import logging
 import asyncio
 import os
 import uvicorn
-from config import load_token_from_json
+from getpass import getpass
+
+from config import (
+    ADMIN_SESSION_COOKIE,
+    is_admin_password_configured,
+    resolve_configured_token,
+    save_admin_password,
+    load_token_from_json,
+)
 from utils.helpers import prompt_token_terminal
 from api.routes import router as api_router
+from api.endpoints.security import is_request_admin_authenticated
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import Cookie, Request
 
 # Inicializar FastAPI
 app = FastAPI(
@@ -26,9 +36,16 @@ if not os.path.exists("static"):
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-@app.get("/", response_class=FileResponse)
-async def read_index():
+@app.get("/")
+async def read_index(
+    request: Request,
+    bot_admin_session: str | None = Cookie(None, alias=ADMIN_SESSION_COOKIE),
+):
     """Retorna a pagina principal do dashboard web."""
+    if not is_request_admin_authenticated(request, bot_admin_session):
+        return RedirectResponse("/login")
+    if not resolve_configured_token():
+        return RedirectResponse("/setup")
     if os.path.exists("static/index.html"):
         return FileResponse("static/index.html")
     return {
@@ -37,6 +54,32 @@ async def read_index():
             "static/index.html existe."
         )
     }
+
+
+@app.get("/login")
+async def read_login(
+    request: Request,
+    bot_admin_session: str | None = Cookie(None, alias=ADMIN_SESSION_COOKIE),
+):
+    """Retorna tela de login do painel."""
+    if is_request_admin_authenticated(request, bot_admin_session):
+        return RedirectResponse("/" if resolve_configured_token() else "/setup")
+    if os.path.exists("static/login.html"):
+        return FileResponse("static/login.html")
+    return {"message": "Tela de login nao encontrada."}
+
+
+@app.get("/setup")
+async def read_setup(
+    request: Request,
+    bot_admin_session: str | None = Cookie(None, alias=ADMIN_SESSION_COOKIE),
+):
+    """Retorna tela de configuracao inicial do token."""
+    if not is_request_admin_authenticated(request, bot_admin_session):
+        return RedirectResponse("/login")
+    if os.path.exists("static/setup.html"):
+        return FileResponse("static/setup.html")
+    return {"message": "Tela de setup nao encontrada."}
 
 
 # Incluir rotas da API
@@ -88,8 +131,62 @@ bot = MusicBot()
 app.state.bot = bot
 
 
+def prompt_admin_password_terminal():
+    """Configura a senha admin do painel via terminal quando possivel."""
+    if is_admin_password_configured():
+        return
+
+    print("\n" + "=" * 60)
+    print("PAINEL WEB - CONFIGURACAO DE SENHA ADMIN")
+    print("=" * 60)
+    print("Nenhuma senha do painel web foi encontrada.")
+    print("Defina uma senha para proteger o dashboard em http://localhost:8000.")
+    print("Em Docker/headless, use WEB_ADMIN_PASSWORD no arquivo .env.")
+
+    try:
+        choice = input("\nDefinir senha agora? (s/N): ").strip().lower()
+    except (EOFError, OSError):
+        logging.warning(
+            "Ambiente nao interativo detectado. Defina WEB_ADMIN_PASSWORD "
+            "no .env para proteger o painel web."
+        )
+        return
+
+    if choice not in ("s", "sim", "y", "yes"):
+        logging.warning(
+            "Senha do painel nao configurada. A interface web exigira "
+            "WEB_ADMIN_PASSWORD ou nova configuracao pelo terminal."
+        )
+        return
+
+    for _ in range(3):
+        try:
+            password = getpass("Senha do painel (min. 8 caracteres): ")
+            confirm = getpass("Confirme a senha: ")
+        except (EOFError, OSError):
+            return
+
+        if password != confirm:
+            logging.error("As senhas nao conferem.")
+            continue
+        try:
+            save_admin_password(password)
+            logging.info("Senha admin do painel salva em data/auth.json.")
+            return
+        except ValueError as exc:
+            logging.error(str(exc))
+
+    logging.warning("Senha do painel nao configurada apos 3 tentativas.")
+
+
 async def run_bot_and_api():
     """Inicia o bot do Discord e o servidor da API."""
+    try:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, prompt_admin_password_terminal)
+    except Exception as e:
+        logging.error(f"Erro ao configurar senha do painel: {e}")
+
     # Prioriza o token do token.json, depois do .env
     token = load_token_from_json()
     if not token:
@@ -103,9 +200,7 @@ async def run_bot_and_api():
         except Exception as e:
             logging.error(f"Erro ao solicitar token: {e}")
 
-    config = uvicorn.Config(
-        app, host="0.0.0.0", port=8000, log_level="warning"
-    )
+    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
     server = uvicorn.Server(config)
 
     # Inicia o servidor uvicorn em uma tarefa de fundo
@@ -139,18 +234,11 @@ async def run_bot_and_api():
                     "Acesse a interface web para configurar um token válido."
                 )
             except discord.errors.PrivilegedIntentsRequired as e:
-                logging.error(
-                    f"❌ Intents não habilitados no Developer Portal: {e}"
-                )
+                logging.error(f"❌ Intents não habilitados no Developer Portal: {e}")
+                logging.warning("📌 Acesse https://discord.com/developers/applications")
+                logging.warning("📌 Habilite: Message Content Intent e Presence Intent")
                 logging.warning(
-                    "📌 Acesse https://discord.com/developers/applications"
-                )
-                logging.warning(
-                    "📌 Habilite: Message Content Intent e Presence Intent"
-                )
-                logging.warning(
-                    "⏳ Aguardando token válido via interface web ou "
-                    "terminal..."
+                    "⏳ Aguardando token válido via interface web ou terminal..."
                 )
             except Exception as e:
                 logging.error(f"❌ Erro ao iniciar o bot: {e}")
@@ -160,7 +248,7 @@ async def run_bot_and_api():
                 )
 
         # Iniciar o bot em background, NÃO bloquear a API
-        bot_task = asyncio.create_task(run_bot_safe())
+        asyncio.create_task(run_bot_safe())
         # Apenas aguardarmos a API rodar - o bot roda independentemente
         await api_task
     else:
@@ -169,8 +257,7 @@ async def run_bot_and_api():
             "rodando, mas o bot está offline."
         )
         logging.warning(
-            "✨ Acesse a interface web (http://localhost:8000) para "
-            "configurar o token."
+            "✨ Acesse a interface web (http://localhost:8000) para configurar o token."
         )
         await api_task
 

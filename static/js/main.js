@@ -173,6 +173,7 @@ async function refreshGuildContext(preferredGuildId = null) {
         } catch (error) {
             console.warn('Falha ao carregar servidores:', error);
             renderGuildSelector([], null);
+            UI.setConnectionState('api-lost');
             return null;
         }
     })();
@@ -243,6 +244,7 @@ async function updateStatusLoop() {
             }
         } catch (err) {
             console.warn('Connection lost', err);
+            UI.setConnectionState('api-lost');
         }
     })();
 
@@ -460,6 +462,28 @@ function setupEventListeners() {
         });
     }
 
+    const noticeSettingsBtn = document.getElementById('notice-settings-btn');
+    if (noticeSettingsBtn) {
+        noticeSettingsBtn.addEventListener('click', () => {
+            if (!UI.elements.sidebar?.classList.contains('open')) {
+                UI.toggleSidebar();
+            }
+        });
+    }
+
+    const noticeRefreshBtn = document.getElementById('notice-refresh-btn');
+    if (noticeRefreshBtn) {
+        noticeRefreshBtn.addEventListener('click', async () => {
+            try {
+                await refreshGuildContext(getCurrentGuildId());
+                await updateStatusLoop();
+                UI.showToast(translationManager.get('success_update'), 'success');
+            } catch (e) {
+                UI.showToast(translationManager.get('error_update'), 'error');
+            }
+        });
+    }
+
     // Music Input
     const musicInput = document.getElementById('music-input');
     const playInputBtn = document.getElementById('play-btn');
@@ -629,6 +653,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         translationManager = new TranslationManager();
         UI.setTranslationManager(translationManager);
+        UI.setConnectionState('offline');
         console.log('TranslationManager initialized');
     } catch (e) {
         console.error('TranslationManager init failed:', e);

@@ -78,7 +78,7 @@ export async function apiFetch(path, opts = {}) {
         }
         return await res.json().catch(() => ({}));
     } catch (err) {
-        console.error('API error', err);
+        console.warn('API unavailable or request failed', err);
         throw err;
     }
 }

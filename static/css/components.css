@@ -4,9 +4,9 @@
 .card {
     background: var(--card-bg);
     border-radius: var(--radius);
-    padding: 24px;
+    padding: 20px;
     border: 1px solid var(--card-border);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-soft);
     display: flex;
     flex-direction: column;
     position: relative;
@@ -16,13 +16,23 @@
 .status-pill {
     background: rgba(255, 255, 255, 0.1);
     padding: 6px 12px;
-    border-radius: 50px;
+    border-radius: 999px;
     display: flex;
     align-items: center;
     gap: 8px;
     font-size: 13px;
     font-weight: 500;
     backdrop-filter: blur(10px);
+}
+
+.status-pill.is-ready {
+    background: rgba(48, 209, 88, 0.12);
+    color: #d8ffe0;
+}
+
+.status-pill.is-error {
+    background: rgba(255, 69, 58, 0.14);
+    color: #ffd7d4;
 }
 
 .dot {
@@ -62,13 +72,13 @@
 }
 
 .btn-circle {
-    width: 64px;
-    height: 64px;
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
     border: none;
     background: var(--text-primary);
     color: black;
-    font-size: 24px;
+    font-size: 20px;
     cursor: pointer;
     transition: transform 0.2s;
     display: flex;
@@ -77,8 +87,8 @@
 }
 
 .btn-circle.secondary {
-    width: 50px;
-    height: 50px;
+    width: 42px;
+    height: 42px;
     background: rgba(255, 255, 255, 0.1);
     color: white;
     align-self: center;
@@ -103,7 +113,7 @@
 .input-group {
     display: flex;
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 12px;
+    border-radius: var(--radius-sm);
     padding: 4px;
     border: 1px solid var(--card-border);
     transition: border-color 0.2s, box-shadow 0.2s;
@@ -144,7 +154,7 @@
     border: none;
     color: white;
     width: 40px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 16px;
     transition: background 0.2s, transform 0.1s;
@@ -162,7 +172,7 @@
     background: rgba(255, 255, 255, 0.1);
     font-size: 10px;
     padding: 4px 8px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     text-transform: uppercase;
     letter-spacing: 1px;
 }
@@ -201,7 +211,7 @@ details[open] summary {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--card-border);
     padding: 10px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     color: white;
     margin-bottom: 8px;
     outline: none;
@@ -216,8 +226,8 @@ details[open] summary {
 .file-drop-zone {
     border: 2px dashed rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.02);
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: var(--radius-sm);
+    padding: 18px;
     text-align: center;
     cursor: pointer;
     transition: all 0.2s;
@@ -250,10 +260,10 @@ details[open] summary {
 
 .btn-small {
     background: rgba(255, 255, 255, 0.1);
-    border: none;
+    border: 1px solid transparent;
     color: white;
     padding: 8px 16px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 12px;
     width: 100%;
@@ -261,6 +271,11 @@ details[open] summary {
 
 .btn-small:hover {
     background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-small.secondary {
+    background: rgba(255, 255, 255, 0.055);
+    border-color: rgba(255, 255, 255, 0.08);
 }
 
 .btn-small.danger {
@@ -307,7 +322,7 @@ details[open] summary {
     padding: 10px 12px;
     margin-bottom: 6px;
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     font-size: 13px;
     transition: background 0.2s, transform 0.1s;
     cursor: pointer;
@@ -334,8 +349,7 @@ details[open] summary {
     text-align: center;
     color: var(--text-secondary);
     font-size: 13px;
-    padding: 20px;
-    font-style: italic;
+    padding: 18px;
 }
 
 .playlist-history-section {
@@ -351,8 +365,8 @@ details[open] summary {
 
 /* --- Radio Components --- */
 .card-radios {
-    min-height: 300px;
-    max-height: 400px;
+    min-height: 260px;
+    max-height: 360px;
 }
 
 .card-radios .card-header {
@@ -376,7 +390,7 @@ details[open] summary {
     padding: 12px;
     margin-bottom: 8px;
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
     transition: background 0.2s, transform 0.1s;
 }
 
@@ -434,13 +448,26 @@ details[open] summary {
     margin-left: 12px;
 }
 
+.radio-actions .btn-small {
+    align-items: center;
+    display: flex;
+    height: 32px;
+    justify-content: center;
+    padding: 0;
+    width: 32px;
+}
+
+#radios-list {
+    overflow-y: auto;
+}
+
 .btn-icon {
     background: rgba(255, 255, 255, 0.1);
     border: none;
     color: white;
     width: 32px;
     height: 32px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 14px;
     transition: all 0.2s;
@@ -484,11 +511,11 @@ details[open] summary {
 .modal-content {
     background: var(--card-bg);
     border-radius: var(--radius);
-    padding: 24px;
+    padding: 22px;
     width: 90%;
     max-width: 500px;
     border: 1px solid var(--card-border);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.42);
     animation: modalSlideIn 0.3s ease-out;
 }
 
@@ -543,7 +570,7 @@ details[open] summary {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--card-border);
     padding: 10px 12px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     color: white;
     font-size: 14px;
     outline: none;

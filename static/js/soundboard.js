@@ -12,6 +12,8 @@ export class SoundboardManager {
         this.tm = translationManager;
         this.soundboard = [];
         this.currentGuildId = null;
+        this.searchTerm = '';
+        this.filter = 'all';
     }
 
     /**
@@ -35,19 +37,38 @@ export class SoundboardManager {
             this.soundboard = data.soundboard || [];
             this.render();
         } catch (error) {
-            console.error('Erro ao carregar soundboard:', error);
-            const errMsg = error?.message || 'Erro ao carregar soundboard';
-            this.ui.showToast(errMsg, 'error');
+            console.warn('Erro ao carregar soundboard:', error);
+            this.soundboard = [];
+            this.render(error);
         }
     }
 
-    render() {
+    render(error = null) {
         const grid = document.getElementById('soundboard-grid');
         if (!grid) return;
 
         grid.innerHTML = '';
 
-        if (this.soundboard.length === 0) {
+        const normalizedSearch = this.searchTerm.trim().toLowerCase();
+        const items = this.soundboard.filter(sfx => {
+            const matchesSearch = !normalizedSearch
+                || String(sfx.name ?? '').toLowerCase().includes(normalizedSearch)
+                || String(sfx.id ?? '').toLowerCase().includes(normalizedSearch);
+            const matchesFilter = this.filter !== 'favorites' || !!sfx.favorite;
+            return matchesSearch && matchesFilter;
+        });
+
+        if (error || items.length === 0) {
+            const hasFilters = normalizedSearch || this.filter !== 'all';
+            if (error || hasFilters) {
+                const empty = document.createElement('p');
+                empty.className = 'empty-state';
+                empty.textContent = error
+                    ? (error.message || 'Erro ao carregar soundboard')
+                    : (this.tm ? this.tm.get('sfx_empty_filtered') : 'Nenhum efeito encontrado.');
+                grid.appendChild(empty);
+                return;
+            }
             const emptyText = this.tm ? this.tm.get('no_sfx') : 'Nenhum efeito sonoro. Faça upload!';
             const empty = document.createElement('p');
             empty.className = 'empty-state';
@@ -56,7 +77,7 @@ export class SoundboardManager {
             return;
         }
 
-        this.soundboard.forEach(sfx => {
+        items.forEach(sfx => {
             const card = document.createElement('div');
             card.className = `sfx-card${sfx.favorite ? ' favorite' : ''}`;
             const volume = typeof sfx.volume === 'number' ? sfx.volume : 1.0;
@@ -180,6 +201,24 @@ export class SoundboardManager {
                 await this.uploadSFX();
             });
         }
+
+        const searchInput = document.getElementById('sfx-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                this.searchTerm = e.target.value || '';
+                this.render();
+            });
+        }
+
+        document.querySelectorAll('.sfx-filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.filter = btn.dataset.filter || 'all';
+                document.querySelectorAll('.sfx-filter-btn').forEach(item => {
+                    item.classList.toggle('active', item === btn);
+                });
+                this.render();
+            });
+        });
 
         // Event delegation para botões do grid
         const grid = document.getElementById('soundboard-grid');

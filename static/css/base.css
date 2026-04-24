@@ -13,7 +13,7 @@ body {
     min-height: 100vh;
     display: flex;
     justify-content: center;
-    padding: 20px;
+    padding: clamp(12px, 2vw, 24px);
     overflow-x: hidden;
 }
 
@@ -24,7 +24,10 @@ body {
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(circle at center, rgba(28, 46, 74, 0.4) 0%, rgba(0, 0, 0, 0.8) 60%);
+    background:
+        radial-gradient(circle at 18% 8%, rgba(48, 209, 88, 0.12) 0%, transparent 24%),
+        radial-gradient(circle at 80% 18%, rgba(10, 132, 255, 0.16) 0%, transparent 28%),
+        radial-gradient(circle at center, rgba(39, 39, 42, 0.55) 0%, rgba(0, 0, 0, 0.86) 62%);
     z-index: -1;
     opacity: 0.7;
     pointer-events: none;
@@ -41,4 +44,30 @@ body {
     z-index: -2;
     display: block;
     filter: contrast(1.05) brightness(0.95);
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
 }
