@@ -71,6 +71,12 @@
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
+body.sidebar-open #sidebar-toggle {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-8px);
+}
+
 .btn-circle {
     width: 52px;
     height: 52px;

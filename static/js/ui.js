@@ -101,14 +101,11 @@ export const UI = {
     toggleSidebar() {
         if (!this.elements.sidebar) return;
         const isOpen = this.elements.sidebar.classList.contains('open');
+        const shouldOpen = !isOpen;
 
-        if (isOpen) {
-            this.elements.sidebar.classList.remove('open');
-            this.elements.sidebarOverlay?.classList.remove('active');
-        } else {
-            this.elements.sidebar.classList.add('open');
-            this.elements.sidebarOverlay?.classList.add('active');
-        }
+        this.elements.sidebar.classList.toggle('open', shouldOpen);
+        this.elements.sidebarOverlay?.classList.toggle('active', shouldOpen);
+        document.body.classList.toggle('sidebar-open', shouldOpen);
     },
 
     formatTime(seconds) {
