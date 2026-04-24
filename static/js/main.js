@@ -1,12 +1,12 @@
 // Modulo: orquestra o app web integrando API, UI e modulos auxiliares.
 
-import { API } from './api.js';
-import { UI } from './ui.js';
-import { AudioReactiveBackground } from './visualizer.js';
-import { RadioManager } from './radios.js';
-import { SoundboardManager } from './soundboard.js';
-import { CONFIG } from './config.js';
-import { TranslationManager } from './translations.js';
+import { API } from './api.js?v=5';
+import { UI } from './ui.js?v=5';
+import { AudioReactiveBackground } from './visualizer.js?v=5';
+import { RadioManager } from './radios.js?v=5';
+import { SoundboardManager } from './soundboard.js?v=5';
+import { CONFIG } from './config.js?v=5';
+import { TranslationManager } from './translations.js?v=5';
 
 // Estado
 let isPaused = false;

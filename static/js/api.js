@@ -1,6 +1,6 @@
 // Modulo: encapsula chamadas HTTP da interface para a API do bot.
 
-import { CONFIG } from './config.js';
+import { CONFIG } from './config.js?v=5';
 
 let apiKeyInitPromise = null;
 
@@ -14,13 +14,23 @@ async function initApiKey() {
 
     apiKeyInitPromise = (async () => {
         try {
-            const res = await fetch('/api/get_api_key');
+            const res = await fetch('/api/get_api_key', {
+                credentials: 'same-origin'
+            });
             if (res.ok) {
                 const data = await res.json();
-                CONFIG.API_KEY = data.api_key;
+                CONFIG.API_KEY = data.api_key || null;
+            } else {
+                console.warn('Nao foi possivel obter a API Key.', res.status);
+                if (res.status === 401 || res.status === 403) {
+                    window.location.href = '/login';
+                }
             }
         } catch (e) {
             console.warn('Não foi possível obter a API Key. Rotas protegidas podem falhar.', e);
+        }
+        if (!CONFIG.API_KEY) {
+            apiKeyInitPromise = null;
         }
         return CONFIG.API_KEY;
     })();
@@ -28,7 +38,15 @@ async function initApiKey() {
     return apiKeyInitPromise;
 }
 
-const apiKeyReady = initApiKey();
+initApiKey().catch(() => { });
+
+async function ensureApiKey() {
+    const apiKey = await initApiKey();
+    if (!apiKey) {
+        throw new Error('Sessao do painel sem API Key. Recarregue a pagina e faca login novamente.');
+    }
+    return apiKey;
+}
 
 /**
  * Monta headers HTTP padrao incluindo autenticacao quando disponivel.
@@ -54,9 +72,23 @@ function buildAuthHeaders(extra = {}, options = {}) {
  * @returns {Promise<any>}
  */
 async function apiFetchProtected(path, opts = {}) {
-    await apiKeyReady;
+    await ensureApiKey();
     const headers = buildAuthHeaders(opts.headers || {});
-    return apiFetch(path, { ...opts, headers });
+    try {
+        return await apiFetch(path, { ...opts, headers });
+    } catch (err) {
+        const canRetry = err.status === 401 && CONFIG.API_KEY;
+        if (!canRetry) {
+            throw err;
+        }
+        CONFIG.API_KEY = null;
+        apiKeyInitPromise = null;
+        await ensureApiKey();
+        return apiFetch(path, {
+            ...opts,
+            headers: buildAuthHeaders(opts.headers || {})
+        });
+    }
 }
 
 /**
@@ -67,14 +99,19 @@ async function apiFetchProtected(path, opts = {}) {
  */
 export async function apiFetch(path, opts = {}) {
     try {
-        const res = await fetch(path, opts);
+        const res = await fetch(path, {
+            credentials: 'same-origin',
+            ...opts
+        });
         if (!res.ok) {
             let errorMsg = res.statusText;
             try {
                 const errJson = await res.json();
                 if (errJson.detail) errorMsg = errJson.detail;
             } catch (e) { }
-            throw new Error(errorMsg);
+            const error = new Error(errorMsg);
+            error.status = res.status;
+            throw error;
         }
         return await res.json().catch(() => ({}));
     } catch (err) {
@@ -118,7 +155,7 @@ export const API = {
 
     // Protected routes (require X-API-Key)
     setToken: async (token) => {
-        await apiKeyReady;
+        await ensureApiKey();
         return apiFetch(`${CONFIG.API_BASE}/set_token`, {
             method: 'POST',
             headers: buildAuthHeaders({}, { json: true }),
@@ -126,7 +163,7 @@ export const API = {
         });
     },
     startup: async (token) => {
-        await apiKeyReady;
+        await ensureApiKey();
         return apiFetch(`${CONFIG.API_BASE}/startup`, {
             method: 'POST',
             headers: buildAuthHeaders({}, { json: true }),
@@ -134,21 +171,21 @@ export const API = {
         });
     },
     restart: async () => {
-        await apiKeyReady;
+        await ensureApiKey();
         return apiFetch(`${CONFIG.API_BASE}/restart`, {
             method: 'POST',
             headers: buildAuthHeaders()
         });
     },
     shutdown: async () => {
-        await apiKeyReady;
+        await ensureApiKey();
         return apiFetch(`${CONFIG.API_BASE}/shutdown`, {
             method: 'POST',
             headers: buildAuthHeaders()
         });
     },
     setLanguage: async (language) => {
-        await apiKeyReady;
+        await ensureApiKey();
         return apiFetch(`${CONFIG.API_BASE}/settings/language`, {
             method: 'POST',
             headers: buildAuthHeaders({}, { json: true }),
