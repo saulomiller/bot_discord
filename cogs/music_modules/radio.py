@@ -105,6 +105,7 @@ class MusicRadioMixin:
 
         guild_id = ctx_or_interaction.guild.id
         player = self.get_player(guild_id)
+        player.voice_channel_id = vc.channel.id
 
         try:
             # Trocar a fila atual para tocar a radio imediatamente.

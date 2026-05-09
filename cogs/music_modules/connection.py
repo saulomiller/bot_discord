@@ -24,6 +24,9 @@ class MusicConnectionMixin:
 
         vc = await ensure_voice(ctx_or_interaction)
         if vc:
+            player = self.get_player(ctx_or_interaction.guild.id)
+            player.voice_channel_id = vc.channel.id
+
             embed = discord.Embed(
                 title=t("connected"),
                 description=t("joined_channel", channel=vc.channel.name),

@@ -38,3 +38,8 @@ services:
     dns:
       - 9.9.9.9
       - 1.1.1.1
+      - 8.8.8.8
+    dns_opt:
+      - timeout:2
+      - attempts:3
+      - rotate

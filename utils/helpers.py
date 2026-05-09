@@ -82,7 +82,39 @@ async def ensure_voice(
         vc = None
 
     if vc is None:
-        vc = await channel.connect()
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                vc = await channel.connect(timeout=20.0, reconnect=True)
+                break
+            except Exception as e:
+                last_error = e
+                logging.warning(
+                    "Falha ao conectar ao canal de voz %s "
+                    "(tentativa %s/3): %s",
+                    getattr(channel, "id", "desconhecido"),
+                    attempt,
+                    e,
+                )
+                stale_vc = guild.voice_client
+                if stale_vc and stale_vc.is_connected():
+                    vc = stale_vc
+                    break
+                if stale_vc and not stale_vc.is_connected():
+                    try:
+                        await stale_vc.disconnect(force=True)
+                    except Exception as cleanup_error:
+                        logging.debug(
+                            "Falha ao limpar voice client apos erro: %s",
+                            cleanup_error,
+                        )
+                if attempt < 3:
+                    await asyncio.sleep(2 * attempt)
+        if vc is None:
+            raise VoiceConnectionError(
+                "Nao foi possivel conectar ao canal de voz apos tentativas. "
+                f"Ultimo erro: {last_error}"
+            )
     elif vc.channel != channel:
         await vc.move_to(channel)
 

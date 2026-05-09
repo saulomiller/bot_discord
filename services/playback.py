@@ -39,6 +39,9 @@ async def enqueue_search(
     player: Any, search: str, user: Any, voice_client: Any = None
 ) -> dict:
     """Enfileira search."""
+    if voice_client and getattr(voice_client, "channel", None):
+        player.voice_channel_id = voice_client.channel.id
+
     is_playlist = is_playlist_query(search)
     if is_playlist:
         song = await player.add_playlist_async(search, user)

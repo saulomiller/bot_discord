@@ -62,7 +62,7 @@ class PlaybackMixin:
         for k, v in headers.items():
             if v:
                 header_lines.append(f"{k}: {v}")
-        headers_str = "\\r\\n".join(header_lines) + "\\r\\n"
+        headers_str = "\r\n".join(header_lines) + "\r\n"
 
         if header_lines:  # evita passar -headers vazio
             options.append(f'-headers "{self._ffmpeg_escape(headers_str)}"')
@@ -81,6 +81,96 @@ class PlaybackMixin:
             options.append(f'-referer "{self._ffmpeg_escape(origin)}"')
 
         return " ".join(options)
+
+    def _queue_interrupted_current_song(self) -> bool:
+        """Recoloca a faixa atual na frente da fila se caiu no meio."""
+        if not isinstance(self.current_song, dict):
+            return False
+
+        progress = self.get_progress()
+        current = int(progress.get("current", 0) or 0)
+        duration = int(progress.get("duration", 0) or 0)
+        if duration > 0 and current >= max(0, duration - 8):
+            return False
+
+        song = dict(self.current_song)
+        if current > 0:
+            song["seek"] = current
+        song["is_lazy"] = True
+        self.queue.appendleft(song)
+        self.current_song = None
+        logging.warning(
+            "[voice] Queda detectada durante a faixa; refileirando em %ss: %s",
+            current,
+            song.get("title"),
+        )
+        return True
+
+    async def _recover_voice_client(self):
+        """Tenta recuperar a conexao de voz sem destruir a fila."""
+        guild = self.guild
+        if not guild:
+            return None
+
+        async with self._voice_reconnect_lock:
+            vc = guild.voice_client
+            if vc and vc.is_connected():
+                return vc
+
+            channel = None
+            channel_id = getattr(self, "voice_channel_id", None)
+            if channel_id:
+                channel = guild.get_channel(channel_id)
+            if channel is None and vc is not None:
+                channel = getattr(vc, "channel", None)
+
+            if channel is None:
+                logging.warning(
+                    "[voice] Sem canal conhecido para reconectar; fila preservada."
+                )
+                return None
+
+            if vc:
+                try:
+                    await vc.disconnect(force=True)
+                except Exception as e:
+                    logging.debug("[voice] Falha ao limpar voice client: %s", e)
+
+            last_error = None
+            for attempt in range(1, 4):
+                try:
+                    logging.info(
+                        "[voice] Tentando reconectar ao canal %s (%s/3)",
+                        getattr(channel, "id", "desconhecido"),
+                        attempt,
+                    )
+                    vc = await channel.connect(timeout=20.0, reconnect=True)
+                    self.voice_channel_id = channel.id
+                    logging.info("[voice] Reconexao de voz concluida.")
+                    return vc
+                except Exception as e:
+                    last_error = e
+                    logging.warning(
+                        "[voice] Reconnect falhou (%s/3): %s",
+                        attempt,
+                        e,
+                    )
+                    vc = guild.voice_client
+                    if vc and vc.is_connected():
+                        self.voice_channel_id = getattr(vc.channel, "id", None)
+                        logging.info(
+                            "[voice] Voice client recuperado apos erro de retry."
+                        )
+                        return vc
+                    if attempt < 3:
+                        await asyncio.sleep(2 * attempt)
+
+            logging.error(
+                "[voice] Nao foi possivel reconectar; fila preservada. "
+                "Ultimo erro: %s",
+                last_error,
+            )
+            return None
 
     def _resolve_stream_url(self, source_url: str) -> tuple[str, dict]:
         """Resolve a URL de stream com fallback automático de player_clients.
@@ -158,10 +248,13 @@ class PlaybackMixin:
         # 1. Verificar conexão de voz
         if not self.voice_client or not self.voice_client.is_connected():
             logging.warning(
-                "[play_next] Bot desconectado do canal de voz. Limpando fila."
+                "[play_next] Bot desconectado do canal de voz. "
+                "Tentando recuperar sem limpar fila."
             )
-            self.stop()  # Limpa fila e para tudo
-            return
+            self._queue_interrupted_current_song()
+            recovered_vc = await self._recover_voice_client()
+            if not recovered_vc:
+                return
 
         # Evita corrida: não inicia outra faixa se o client já estiver ocupado.
         if self.is_voice_busy:

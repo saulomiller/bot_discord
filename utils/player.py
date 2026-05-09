@@ -45,6 +45,8 @@ class MusicPlayer(
 
         # Cache de Streams
         self.stream_cache = StreamCache()
+        self.voice_channel_id = None
+        self._voice_reconnect_lock = asyncio.Lock()
 
         # Cache de vídeos que falharam com UNPLAYABLE — evita re-tentativas
         # redundantes na mesma sessão. Resetado quando o player é recriado.
