@@ -118,14 +118,17 @@ async def require_api_key(
     x_api_key: str = Header(None),
     bot_admin_session: str | None = Cookie(None, alias=ADMIN_SESSION_COOKIE),
 ):
-    """Valida X-API-Key e a sessao admin para rotas protegidas."""
-    if x_api_key != API_KEY:
-        raise HTTPException(
-            status_code=401,
-            detail="API Key invalida ou ausente. Inclua o header X-API-Key.",
-        )
-    await require_admin_session(request, bot_admin_session)
-    return x_api_key
+    """Valida se ha X-API-Key ou sessao admin valida para rotas protegidas."""
+    if x_api_key and x_api_key == API_KEY:
+        return x_api_key
+
+    if _is_session_valid(request, bot_admin_session):
+        return API_KEY
+
+    raise HTTPException(
+        status_code=401,
+        detail="Acesso nao autorizado. Chave de API invalida ou login do painel necessario.",
+    )
 
 
 @router.post("/api/auth/login")
@@ -195,9 +198,7 @@ async def get_api_key(
     request: Request,
     bot_admin_session: str | None = Cookie(None, alias=ADMIN_SESSION_COOKIE),
 ):
-    """Return API key for local clients or authenticated admins."""
-    client_host = request.client.host if request.client else ""
-    is_local = client_host in ("127.0.0.1", "::1", "localhost")
-    if not is_local and not _is_session_valid(request, bot_admin_session):
+    """Retorna chave de API apenas para administradores autenticados."""
+    if not _is_session_valid(request, bot_admin_session):
         raise HTTPException(status_code=403, detail="Acesso negado.")
     return {"api_key": API_KEY}

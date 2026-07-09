@@ -1,5 +1,7 @@
 """define configuracoes globais, paths e persistencia de credenciais."""
 
+from __future__ import annotations
+
 import os
 import json
 import logging
@@ -74,12 +76,32 @@ def load_token_from_json():
     return None
 
 
-def save_token_to_json(token: str):
-    """Salva o token no arquivo data/token.json."""
+def _secure_write_json(file_path: str, data: dict):
+    """Salva um arquivo JSON com permissoes estritas 0600 (leitura/escrita apenas dono)."""
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
-    with open(TOKEN_FILE, "w") as f:
-        json.dump({"DISCORD_TOKEN": token}, f, indent=2)
+
+    if os.path.exists(file_path):
+        try:
+            os.chmod(file_path, 0o600)
+        except Exception as e:
+            logging.warning(f"Nao foi possivel ajustar permissoes de {file_path}: {e}")
+
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    mode = 0o600
+
+    try:
+        fd = os.open(file_path, flags, mode)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logging.error(f"Erro ao salvar arquivo seguro {file_path}: {e}")
+        raise
+
+
+def save_token_to_json(token: str):
+    """Salva o token no arquivo data/token.json de forma segura."""
+    _secure_write_json(TOKEN_FILE, {"DISCORD_TOKEN": token})
 
 
 def is_valid_token_value(token: str | None) -> bool:
@@ -133,13 +155,10 @@ def _load_admin_auth() -> dict | None:
 
 
 def save_admin_password(password: str) -> None:
-    """Salva a senha admin do painel como hash."""
+    """Salva a senha admin do painel como hash de forma segura."""
     if not password or len(password) < 8:
         raise ValueError("A senha do painel deve ter pelo menos 8 caracteres.")
-    if not os.path.exists(DATA_DIR):
-        os.makedirs(DATA_DIR)
-    with open(ADMIN_AUTH_FILE, "w") as f:
-        json.dump(_hash_password(password), f, indent=2)
+    _secure_write_json(ADMIN_AUTH_FILE, _hash_password(password))
 
 
 def is_admin_password_configured() -> bool:
@@ -191,10 +210,9 @@ def _load_or_generate_api_key() -> str:
     # Gerar nova key
     new_key = str(uuid.uuid4())
     try:
-        with open(API_KEY_FILE, "w") as f:
-            json.dump({"api_key": new_key}, f)
+        _secure_write_json(API_KEY_FILE, {"api_key": new_key})
         logging.info(f"Nova API Key gerada e salva em {API_KEY_FILE}")
-    except IOError as e:
+    except Exception as e:
         logging.error(f"Erro ao salvar API Key: {e}")
     return new_key
 
