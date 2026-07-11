@@ -17,6 +17,7 @@ class SoundboardMixin:
         if not self.voice_client:
             return
 
+        self._cancel_idle_disconnect()
         self.sfx_playing = True
         self.stopped_for_sfx = False
 
@@ -87,6 +88,10 @@ class SoundboardMixin:
             finally:
                 # Garantir que sfx_playing é resetado mesmo em caso de erro
                 self.sfx_playing = False
+                if not self.stopped_for_sfx and not self.queue:
+                    self.loop.call_soon_threadsafe(
+                        self._schedule_idle_disconnect
+                    )
 
         try:
             executable = "ffmpeg"

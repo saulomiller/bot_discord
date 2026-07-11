@@ -60,6 +60,10 @@ class MusicConnectionMixin:
                 await ctx_or_interaction.response.defer(ephemeral=False)
 
         if vc:
+            player = self.bot.players.get(guild.id)
+            if player:
+                player._cancel_idle_disconnect()
+                player.cancel_alone_disconnect()
             await vc.disconnect()
             embed = discord.Embed(
                 title=t("disconnected"),

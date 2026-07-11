@@ -37,9 +37,7 @@ RUN pip3 install --upgrade pip
 # instala dependências do projeto
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# 🔥 GARANTE yt-dlp sempre atualizado + yt-dlp-ejs (JS challenge solver)
-RUN pip3 install --no-cache-dir -U "yt-dlp[default]"
-
+# yt-dlp fica fixado no requirements.txt para builds reproduziveis.
 # Pré-baixa os scripts EJS para resolver desafios JS do YouTube (no cache da app)
 RUN yt-dlp --cache-dir /app/.cache --remote-components ejs:github -o /dev/null --no-download "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>/dev/null || true
 

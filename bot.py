@@ -31,6 +31,12 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
+@app.get("/health", include_in_schema=False)
+async def health():
+    """Healthcheck local sem expor configuracoes ou credenciais."""
+    return {"status": "ok"}
+
 # Servir arquivos estáticos
 if not os.path.exists("static"):
     os.makedirs("static")
@@ -123,6 +129,20 @@ class MusicBot(commands.Bot):
             pass
         else:
             logging.error(f"Erro em comando: {error}")
+
+    async def close(self):
+        """Encerra players e conexoes de voz antes do cliente Discord."""
+        for player in list(self.players.values()):
+            player._cancel_idle_disconnect()
+            player.cancel_alone_disconnect()
+            player._cancel_queue_empty_cleanup()
+            vc = player.voice_client
+            if vc and vc.is_connected():
+                try:
+                    await vc.disconnect(force=True)
+                except Exception as exc:
+                    logging.warning("Falha ao desconectar voz no shutdown: %s", exc)
+        await super().close()
 
 
 # Inicializar o bot
@@ -294,6 +314,8 @@ async def run_bot_and_api():
         asyncio.create_task(run_bot_safe())
         # Apenas aguardarmos a API rodar - o bot roda independentemente
         await api_task
+        if not bot.is_closed():
+            await bot.close()
     else:
         logging.warning(
             "⏳ Nenhum token válido do Discord encontrado. A API web está "
@@ -303,6 +325,8 @@ async def run_bot_and_api():
             "✨ Acesse a interface web (http://localhost:8000) para configurar o token."
         )
         await api_task
+        if not bot.is_closed():
+            await bot.close()
 
 
 if __name__ == "__main__":

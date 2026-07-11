@@ -76,6 +76,81 @@ class DashboardMixin:
         if task and not task.done():
             task.cancel()
         self._queue_empty_cleanup_task = None
+        self._cancel_idle_disconnect()
+
+    def _cancel_idle_disconnect(self):
+        task = self._idle_disconnect_task
+        if task and not task.done():
+            task.cancel()
+        self._idle_disconnect_task = None
+
+    def cancel_alone_disconnect(self):
+        task = self._alone_disconnect_task
+        if task and not task.done():
+            task.cancel()
+        self._alone_disconnect_task = None
+
+    async def _disconnect_voice(self, reason: str):
+        """Limpa o player e encerra a conexao de voz com seguranca."""
+        vc = self.voice_client
+        if not vc or not vc.is_connected():
+            return
+
+        logging.info("[voice] Desconectando guild %s: %s", self.guild_id, reason)
+        self.queue.clear()
+        self.current_song = None
+        self.is_paused = False
+        self.sfx_playing = False
+        await self.clear_music_dashboard()
+        await vc.disconnect(force=True)
+
+    async def _disconnect_after_idle(self):
+        try:
+            await asyncio.sleep(self._voice_idle_timeout_seconds)
+            if (
+                self.queue
+                or self.current_song
+                or self.is_voice_busy
+                or self.sfx_playing
+                or self._play_lock.locked()
+            ):
+                return
+            await self._disconnect_voice("10 minutos sem reproducao")
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._idle_disconnect_task = None
+
+    def _schedule_idle_disconnect(self):
+        task = self._idle_disconnect_task
+        if task and not task.done():
+            return
+        self._idle_disconnect_task = self.loop.create_task(
+            self._disconnect_after_idle()
+        )
+
+    async def _disconnect_after_alone(self):
+        try:
+            await asyncio.sleep(self._voice_idle_timeout_seconds)
+            vc = self.voice_client
+            if not vc or not vc.is_connected() or not vc.channel:
+                return
+            humans = [member for member in vc.channel.members if not member.bot]
+            if humans:
+                return
+            await self._disconnect_voice("10 minutos sozinho no canal")
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._alone_disconnect_task = None
+
+    def schedule_alone_disconnect(self):
+        task = self._alone_disconnect_task
+        if task and not task.done():
+            return
+        self._alone_disconnect_task = self.loop.create_task(
+            self._disconnect_after_alone()
+        )
 
     async def _clear_dashboard_after_grace(self):
         """Executa a rotina de clear da hboard after grace."""
@@ -106,10 +181,12 @@ class DashboardMixin:
             self._queue_empty_cleanup_task
             and not self._queue_empty_cleanup_task.done()
         ):
+            self._schedule_idle_disconnect()
             return
         self._queue_empty_cleanup_task = self.loop.create_task(
             self._clear_dashboard_after_grace()
         )
+        self._schedule_idle_disconnect()
 
     async def update_dashboard_loop(self):
         """Atualiza a barra de progresso do embed em intervalos inteligentes.

@@ -78,6 +78,9 @@ class MusicPlayer(
         )  # Rastreador para smart updates (evita recria desnecessária)
         self._queue_empty_cleanup_task = None
         self._queue_empty_grace_seconds = 8
+        self._idle_disconnect_task = None
+        self._alone_disconnect_task = None
+        self._voice_idle_timeout_seconds = 10 * 60
 
     @property
     def is_voice_busy(self) -> bool:
