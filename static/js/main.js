@@ -1,7 +1,7 @@
 // Modulo: orquestra o app web integrando API, UI e modulos auxiliares.
 
 import { API } from './api.js?v=5';
-import { UI } from './ui.js?v=5';
+import { UI } from './ui.js?v=6';
 import { AudioReactiveBackground } from './visualizer.js?v=5';
 import { RadioManager } from './radios.js?v=5';
 import { SoundboardManager } from './soundboard.js?v=5';

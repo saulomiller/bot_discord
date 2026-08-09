@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from api.endpoints.models import LanguageRequest
 from api.endpoints.security import require_api_key
 from config import is_valid_token_value, load_token_from_json, save_token_to_json
+from utils.bot_startup import run_with_retry
 from utils.i18n import I18n
 
 router = APIRouter()
@@ -46,7 +47,13 @@ def _queue_bot_start(
             if restart_first and (bot.is_ready() or not bot.is_closed()):
                 await bot.close()
                 await asyncio.sleep(1)
-            await bot.start(token)
+            await run_with_retry(
+                lambda: bot.start(token),
+                fatal_exceptions=(
+                    discord.errors.LoginFailure,
+                    discord.errors.PrivilegedIntentsRequired,
+                ),
+            )
         except discord.errors.LoginFailure as exc:
             logging.error(f"Falha de autenticação do Discord: {exc}")
         except discord.errors.PrivilegedIntentsRequired as exc:

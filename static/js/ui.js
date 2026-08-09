@@ -77,8 +77,42 @@ export const UI = {
      * @param {'info'|'success'|'error'} [type='info']
      */
     showToast(message, type = 'info') {
+        const container = this.elements.toastContainer;
+        if (!container) return;
+
+        const normalizedMessage = String(message ?? '');
+        const duplicate = Array.from(container.children).find(toast =>
+            toast.dataset.message === normalizedMessage &&
+            toast.dataset.type === type &&
+            !toast.classList.contains('hide')
+        );
+
+        const scheduleDismiss = (toast) => {
+            if (toast._dismissTimer) clearTimeout(toast._dismissTimer);
+            toast._dismissTimer = setTimeout(() => {
+                toast.classList.add('hide');
+                toast.addEventListener(
+                    'animationend',
+                    () => toast.remove(),
+                    { once: true }
+                );
+                setTimeout(() => toast.remove(), 600);
+            }, 4000);
+        };
+
+        if (duplicate) {
+            scheduleDismiss(duplicate);
+            return;
+        }
+
+        while (container.children.length >= 4) {
+            container.firstElementChild?.remove();
+        }
+
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
+        toast.dataset.message = normalizedMessage;
+        toast.dataset.type = type;
 
         let icon = 'fa-info-circle';
         if (type === 'success') icon = 'fa-check-circle';
@@ -87,15 +121,11 @@ export const UI = {
         const iconEl = document.createElement('i');
         iconEl.className = `fa-solid ${icon}`;
         const textEl = document.createElement('span');
-        textEl.textContent = String(message ?? '');
+        textEl.textContent = normalizedMessage;
         toast.appendChild(iconEl);
         toast.appendChild(textEl);
-        this.elements.toastContainer?.appendChild(toast);
-
-        setTimeout(() => {
-            toast.classList.add('hide');
-            toast.addEventListener('animationend', () => toast.remove());
-        }, 4000);
+        container.appendChild(toast);
+        scheduleDismiss(toast);
     },
 
     toggleSidebar() {

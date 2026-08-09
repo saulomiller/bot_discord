@@ -23,6 +23,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi import Cookie, Request
+from utils.bot_startup import run_with_retry
 
 # Inicializar FastAPI
 app = FastAPI(
@@ -286,7 +287,13 @@ async def run_bot_and_api():
             try:
                 logging.info("Token do Discord encontrado. Iniciando o bot...")
                 # Remover token do log para segurança
-                await bot.start(token)
+                await run_with_retry(
+                    lambda: bot.start(token),
+                    fatal_exceptions=(
+                        discord.errors.LoginFailure,
+                        discord.errors.PrivilegedIntentsRequired,
+                    ),
+                )
             except discord.errors.LoginFailure as e:
                 logging.error(f"❌ Falha de autenticação do Discord: {e}")
                 logging.warning(
