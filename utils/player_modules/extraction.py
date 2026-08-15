@@ -26,7 +26,9 @@ class ExtractionMixin:
 
             if search.startswith(("http://", "https://")):
                 # URL direta - pode ser música única ou playlist
-                info = self.ydl.extract_info(search, download=False)
+                info = self.ydl.extract_info(
+                    search, download=False, process=False
+                )
                 if not info:
                     raise ValueError(
                         "yt-dlp retornou None para a URL fornecida."
@@ -39,12 +41,14 @@ class ExtractionMixin:
 
             elif search.startswith(("scsearch:", "ytsearch:")):
                 # Pesquisa explícita
-                info = self.ydl.extract_info(search, download=False)
+                info = self.ydl.extract_info(
+                    search, download=False, process=False
+                )
                 entries = info.get("entries", [])
             else:
                 # Padrão: Pesquisa do YouTube (apenas primeiro resultado)
                 info = self.ydl.extract_info(
-                    f"ytsearch:{search}", download=False
+                    f"ytsearch:{search}", download=False, process=False
                 )
                 entries = info.get("entries", [])
 

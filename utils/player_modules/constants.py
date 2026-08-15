@@ -18,17 +18,16 @@ YDL_OPTIONS = {
     "remote_components": {"ejs:github"},
     "extractor_args": {
         "youtube": {
-            # O cliente web comum expõe apenas SABR sem um PO Token e as URLs
-            # resultantes podem responder 403 no FFmpeg. O web_safari ainda
-            # oferece HLS, que não exige PO Token para GVS.
-            "player_client": ["web_safari"],
+            # web/web_safari podem expor apenas SABR ou até somente imagens
+            # sem PO Token. web_embedded oferece formatos HTTP reproduzíveis
+            # para vídeos que permitem incorporação.
+            "player_client": ["web_embedded"],
         }
     },
 }
 
 YDL_FALLBACK_CLIENTS = [
     ["android_vr"],
-    ["web_embedded"],
     ["tv"],
 ]
 

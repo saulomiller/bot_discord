@@ -1,15 +1,21 @@
-# Usa a branch master do discord.py para receber correcoes de voz e recursos novos rapidamente.
-discord.py @ git+https://github.com/Rapptz/discord.py.git@master
+# Versoes fixas para builds Docker reproduziveis (Python 3.10).
+# Commit oficial posterior ao 2.7.1, com suporte a PyNaCl 1.6.x.
+discord.py[voice] @ git+https://github.com/Rapptz/discord.py.git@1add8a0b40577186431cdb5f63f97affadab285b
+PyNaCl==1.6.2
+davey==0.1.6
 
-# Usa uma versao atual do yt-dlp para evitar bloqueios e mudancas recentes no YouTube (403/PO Tokens).
-yt-dlp>=2024.1.0
-python-dotenv>=1.0.0
-cachetools>=5.3,<6
-psutil>=5.9.0
-fastapi>=0.100.0,<1.0.0
-uvicorn>=0.23.0
-PyNaCl>=1.5.0
-python-multipart>=0.0.6
-Pillow>=10.2.0
-requests>=2.31.0
-davey>=0.1.0
+# Fixado por causa das mudancas frequentes do YouTube/PO Tokens.
+yt-dlp==2026.8.12
+
+python-dotenv==1.2.2
+cachetools==7.1.6
+psutil==7.2.2
+
+fastapi==0.139.2
+uvicorn==0.51.0
+pydantic==2.13.4
+python-multipart==0.0.32
+
+Pillow==12.3.0
+requests==2.34.2
+urllib3==2.7.0
