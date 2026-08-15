@@ -18,16 +18,18 @@ YDL_OPTIONS = {
     "remote_components": {"ejs:github"},
     "extractor_args": {
         "youtube": {
-            "player_client": ["web", "default"],
+            # O cliente web comum expõe apenas SABR sem um PO Token e as URLs
+            # resultantes podem responder 403 no FFmpeg. O web_safari ainda
+            # oferece HLS, que não exige PO Token para GVS.
+            "player_client": ["web_safari"],
         }
     },
 }
 
 YDL_FALLBACK_CLIENTS = [
-    ["ios", "tv_embedded"],
-    ["android", "tv_embedded"],
-    ["tv_embedded"],
-    ["web_creator"],
+    ["android_vr"],
+    ["web_embedded"],
+    ["tv"],
 ]
 
 MAX_PLAYLIST_SIZE = 100  # Limite rígido (Check 4 - User Feedback)

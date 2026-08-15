@@ -6,6 +6,7 @@ import random
 import time
 import yt_dlp
 from collections import deque
+from urllib.request import Request, urlopen
 
 from .constants import YDL_FALLBACK_CLIENTS, YDL_OPTIONS
 from .core import SafeFFmpegPCMAudio, SafeFFmpegOpusAudio, build_ffmpeg_options
@@ -81,6 +82,25 @@ class PlaybackMixin:
             options.append(f'-referer "{self._ffmpeg_escape(origin)}"')
 
         return " ".join(options)
+
+    @staticmethod
+    def _probe_stream_url(
+        stream_url: str, headers: dict | None, timeout: float = 10
+    ) -> None:
+        """Confirma que a URL de mídia aceita leitura antes de iniciar FFmpeg.
+
+        Uma leitura de apenas um byte detecta URLs googlevideo que o yt-dlp
+        conseguiu extrair, mas que o GVS rejeita com HTTP 403.
+        """
+        request_headers = {
+            str(key): str(value)
+            for key, value in (headers or {}).items()
+            if value is not None
+        }
+        request_headers["Range"] = "bytes=0-0"
+        request = Request(stream_url, headers=request_headers, method="GET")
+        with urlopen(request, timeout=timeout) as response:
+            response.read(1)
 
     def _queue_interrupted_current_song(self) -> bool:
         """Recoloca a faixa atual na frente da fila se caiu no meio."""
@@ -172,7 +192,9 @@ class PlaybackMixin:
             )
             return None
 
-    def _resolve_stream_url(self, source_url: str) -> tuple[str, dict]:
+    def _resolve_stream_url(
+        self, source_url: str, strategy_offset: int = 0
+    ) -> tuple[str, dict, dict]:
         """Resolve a URL de stream com fallback automático de player_clients.
 
         Estratégia:
@@ -186,9 +208,13 @@ class PlaybackMixin:
 
         # --- Tentativa 1: cliente primário (self.ydl já configurado) ---
         try:
+            if strategy_offset > 0:
+                raise RuntimeError("primary strategy skipped after retry")
             info = self.ydl.extract_info(source_url, download=False)
             if info and info.get("url"):
-                return info["url"], dict(info.get("http_headers") or {}), info
+                headers = dict(info.get("http_headers") or {})
+                self._probe_stream_url(info["url"], headers)
+                return info["url"], headers, info
         except Exception as e:
             last_error = e
             logging.warning(
@@ -200,7 +226,10 @@ class PlaybackMixin:
         # Remover chaves que causam conflito ao criar instância temporária
         base_params.pop("logger", None)
 
-        for idx, clients in enumerate(YDL_FALLBACK_CLIENTS):
+        fallback_start = max(0, strategy_offset - 1)
+        for idx, clients in enumerate(
+            YDL_FALLBACK_CLIENTS[fallback_start:], start=fallback_start
+        ):
             try:
                 logging.info(
                     "[resolve] Fallback %s/%s com clientes: %s",
@@ -212,12 +241,14 @@ class PlaybackMixin:
                     base_params, source_url, clients
                 )
                 if info and info.get("url"):
+                    headers = dict(info.get("http_headers") or {})
+                    self._probe_stream_url(info["url"], headers)
                     logging.info(
                         f"[resolve] ✓ Sucesso com clientes: {clients}"
                     )
                     return (
                         info["url"],
-                        dict(info.get("http_headers") or {}),
+                        headers,
                         info,
                     )
             except Exception as e:
@@ -350,7 +381,11 @@ class PlaybackMixin:
                         stream_headers,
                         info,
                     ) = await self.loop.run_in_executor(
-                        None, lambda: self._resolve_stream_url(source_url)
+                        None,
+                        lambda: self._resolve_stream_url(
+                            source_url,
+                            int(self.current_song.get("_playback_retries", 0)),
+                        ),
                     )
 
                     extractor_name = str(info.get("extractor", "")).lower()
@@ -481,12 +516,33 @@ class PlaybackMixin:
                     )
                     return
 
-                if self.is_looping and self.current_song:
+                retried = False
+                if err and self.current_song:
+                    retry_count = int(
+                        self.current_song.get("_playback_retries", 0)
+                    )
+                    self.stream_cache.delete(self.current_song.get("url"))
+                    if retry_count < 1:
+                        retry_song = dict(self.current_song)
+                        retry_song["_playback_retries"] = retry_count + 1
+                        retry_song["is_lazy"] = True
+                        retry_song.pop("stream_url", None)
+                        retry_song.pop("stream_headers", None)
+                        self.queue.appendleft(retry_song)
+                        retried = True
+                        logging.warning(
+                            "[playback] Stream falhou; invalidando cache e "
+                            "tentando outra estratégia para: %s",
+                            retry_song.get("title"),
+                        )
+
+                if not retried and self.is_looping and self.current_song:
                     if "seek" in self.current_song:
                         del self.current_song["seek"]
                     self.current_song["is_lazy"] = (
                         True  # Re-resolve no próximo loop para link fresco.
                     )
+                    self.current_song.pop("_playback_retries", None)
                     self.queue.appendleft(self.current_song)
 
                 # Agendar próxima música

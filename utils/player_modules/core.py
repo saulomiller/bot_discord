@@ -61,6 +61,10 @@ class StreamCache:
         if len(self.cache) > self.max_size:
             self.cache.popitem(last=False)
 
+    def delete(self, key):
+        """Remove uma URL resolvida que falhou durante a reprodução."""
+        self.cache.pop(key, None)
+
     def _sweep(self):
         """Remove itens expirados do cache (usando monotonic)."""
         now = time.monotonic()
