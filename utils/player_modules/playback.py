@@ -198,7 +198,7 @@ class PlaybackMixin:
         """Resolve a URL de stream com fallback automático de player_clients.
 
         Estratégia:
-        1. Tenta com self.ydl (clientes primários: ios, android, tv_embedded).
+        1. Tenta com self.ydl (cliente primário: visionos).
         2. Se falhar, itera pelos YDL_FALLBACK_CLIENTS em ordem.
         3. Se todos falharem, lança exceção.
 

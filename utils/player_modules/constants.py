@@ -14,21 +14,21 @@ YDL_OPTIONS = {
     "cachedir": "/app/.cache",
     "ignoreerrors": True,  # Não abortar em entradas inválidas de playlist
     "extract_flat": False,  # Resolver URLs completas por padrão
-    # Permite baixar scripts EJS necessários para web_embedded/web.
+    # Permite baixar scripts EJS necessários para clientes web.
     "remote_components": {"ejs:github"},
     "extractor_args": {
         "youtube": {
-            # web/web_safari podem expor apenas SABR ou até somente imagens
-            # sem PO Token. web_embedded oferece formatos HTTP reproduzíveis
-            # para vídeos que permitem incorporação.
-            "player_client": ["web_embedded"],
+            # visionos é o cliente primário: no ambiente de produção ele
+            # fornece streams de áudio sem exigir PO Token.
+            "player_client": ["visionos"],
         }
     },
 }
 
 YDL_FALLBACK_CLIENTS = [
-    ["android_vr"],
     ["tv"],
+    ["android_vr"],
+    ["web_embedded"],
 ]
 
 MAX_PLAYLIST_SIZE = 100  # Limite rígido (Check 4 - User Feedback)
