@@ -316,5 +316,17 @@ class QueueMixin:
                 "à fila"
             )
 
+            # A primeira faixa pode ter iniciado e falhado enquanto esta
+            # extração rodava em segundo plano (por exemplo, um 403 do
+            # YouTube). Nesse caso ``playback_already_started`` continua
+            # verdadeiro, mas o player está ocioso e a nova fila nunca é
+            # consumida. Reavalie o estado ao terminar de enfileirar.
+            if added_count and not self.is_playback_busy:
+                logging.info(
+                    "[playlist] Player ocioso após carregar a fila; "
+                    "iniciando reprodução."
+                )
+                self.loop.create_task(self.play_next())
+
         except Exception as e:
             logging.error(f"Erro ao processar playlist: {e}")
